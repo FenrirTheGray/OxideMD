@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OxideMD</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+
+  <!-- ── Toolbar (draggable title bar + tabs + actions) ────────────── -->
+  <div id="toolbar" role="toolbar" aria-label="Application toolbar">
+
+    <!-- Tabs -->
+    <div id="tab-area" role="tablist" aria-label="Open files"></div>
+
+    <!-- Action buttons -->
+    <div id="toolbar-buttons">
+      <button id="btn-open" title="Open file (Ctrl+O)" aria-label="Open file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        </svg>
+        Open
+      </button>
+
+      <button id="btn-reload" title="Reload file (Ctrl+R)" aria-label="Reload current file" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Reload
+      </button>
+
+      <button id="btn-close" title="Close tab (Ctrl+W)" aria-label="Close current tab" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+        Close
+      </button>
+
+      <button id="btn-search" title="Search (Ctrl+F)" aria-label="Search in document" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Search
+      </button>
+
+      <button id="btn-settings" title="Settings" aria-label="Open settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
+
+    </div>
+
+    <!-- Window controls -->
+    <div id="window-controls">
+      <button id="btn-minimize" title="Minimize" aria-label="Minimize window">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="4" y1="12" x2="20" y2="12"/>
+        </svg>
+      </button>
+      <button id="btn-maximize" title="Maximize" aria-label="Maximize window">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" rx="1"/>
+        </svg>
+      </button>
+      <button id="btn-winclose" title="Close window" aria-label="Close window">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Search bar ─────────────────────────────────────────────────── -->
+  <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
+    <input type="text" id="search-input"
+           placeholder="Search…"
+           autocomplete="off"
+           spellcheck="false"
+           aria-label="Search query"
+           aria-autocomplete="none">
+    <div class="search-btn-group">
+      <button id="search-case" title="Match case" aria-label="Toggle case sensitivity" aria-pressed="false">Aa</button>
+      <button id="search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <button id="search-next" title="Next match (Enter)" aria-label="Next match">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
+    <span id="search-count" aria-live="polite" aria-atomic="true"></span>
+    <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
+  </div>
+
+  <!-- ── Content area ───────────────────────────────────────────────── -->
+  <div id="content-scroll">
+    <main id="content">
+      <div id="welcome">
+        <div class="welcome-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <p class="welcome-title">No file open</p>
+        <p class="welcome-sub">Open a Markdown file to start reading.</p>
+        <p class="welcome-hint">
+          <kbd>Ctrl+O</kbd>
+          to open &nbsp;&middot;&nbsp; or drag a
+          <kbd>.md</kbd>
+          file here
+        </p>
+      </div>
+    </main>
+  </div>
+
+  <!-- ── Status bar ─────────────────────────────────────────────────── -->
+  <div id="status-bar" role="status">
+    <div id="status-left">
+      <span id="status-indicator" class="hidden" aria-live="polite">
+        <span class="status-label" aria-hidden="true">Status:</span>
+        <span id="status-dot" aria-hidden="true"></span>
+        <span id="status-spinner" aria-hidden="true"></span>
+        <span id="status-text"></span>
+        <span class="status-sep" aria-hidden="true"></span>
+      </span>
+      <span id="file-path" title="" aria-label="Current file path"></span>
+    </div>
+
+    <div id="zoom-controls" role="group" aria-label="Zoom controls">
+      <button id="btn-zoom-out" title="Zoom out (Ctrl+-)" aria-label="Zoom out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+      <button id="zoom-label" title="Reset zoom (Ctrl+0)" aria-label="Reset zoom to 100%">100%</button>
+      <button id="btn-zoom-in"  title="Zoom in (Ctrl++)"  aria-label="Zoom in">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Settings modal ─────────────────────────────────────────────── -->
+  <div id="settings-overlay" class="hidden"
+       role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+    <div id="settings-dialog">
+
+      <div id="settings-header">
+        <span id="settings-dialog-title">Appearance</span>
+        <button id="settings-close" aria-label="Close settings">&#x2715;</button>
+      </div>
+
+      <div id="settings-body">
+
+        <!-- Interface section -->
+        <div class="settings-section">Interface</div>
+
+        <div class="settings-row">
+          <label for="setting-theme">Theme</label>
+          <select id="setting-theme" aria-label="Color theme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="system">System</option>
+          </select>
+        </div>
+
+        <div class="settings-row">
+          <label for="setting-font">Font</label>
+          <select id="setting-font" aria-label="Font family">
+            <option value="Segoe UI">Segoe UI</option>
+            <option value="Calibri">Calibri</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Consolas">Consolas</option>
+            <option value="Arial">Arial</option>
+            <option value="Verdana">Verdana</option>
+          </select>
+        </div>
+
+        <div class="settings-row">
+          <label for="setting-size">Font size</label>
+          <input type="number" id="setting-size" min="8" max="48" step="1" aria-label="Font size in pixels">
+        </div>
+
+        <!-- Colors section -->
+        <div class="settings-section">Heading Colors</div>
+
+        <div class="settings-row color-row">
+          <label for="setting-h1">H1</label>
+          <input type="color" id="setting-h1" aria-label="Heading 1 color">
+        </div>
+
+        <div class="settings-row color-row">
+          <label for="setting-h2">H2</label>
+          <input type="color" id="setting-h2" aria-label="Heading 2 color">
+        </div>
+
+        <div class="settings-row color-row">
+          <label for="setting-h3">H3</label>
+          <input type="color" id="setting-h3" aria-label="Heading 3 color">
+        </div>
+
+        <div class="settings-row color-row">
+          <label for="setting-bullet">Bullets</label>
+          <input type="color" id="setting-bullet" aria-label="Bullet and list marker color">
+        </div>
+
+      </div><!-- /settings-body -->
+
+      <div id="settings-footer">
+        <button id="settings-cancel">Cancel</button>
+        <button id="settings-save">Save</button>
+      </div>
+
+    </div><!-- /settings-dialog -->
+  </div><!-- /settings-overlay -->
+
+  <script src="app.js"></script>
+</body>
+</html>
