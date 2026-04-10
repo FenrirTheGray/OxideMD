@@ -4,6 +4,17 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-04-10
+
+### Added
+
+- Ctrl+Tab keyboard shortcut for switching to the next tab
+- Ctrl+Shift+Arrow keyboard shortcuts now also handled in the frontend for tab reordering
+
+### Changed
+
+- Refactored GTK key interception to handle Ctrl and Ctrl+Shift combos separately
+
 ## [1.3.0] - 2026-04-10
 
 ### Added
