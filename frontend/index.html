@@ -9,10 +9,13 @@
 <body class="theme-dark">
 
   <!-- ── Toolbar (draggable title bar + tabs + actions) ────────────── -->
-  <div id="toolbar" role="toolbar" aria-label="Application toolbar">
+  <div id="toolbar" role="toolbar" aria-label="Application toolbar" data-tauri-drag-region>
 
     <!-- Tabs -->
     <div id="tab-area" role="tablist" aria-label="Open files"></div>
+
+    <!-- Drag spacer between tabs and buttons -->
+    <div id="toolbar-spacer" data-tauri-drag-region></div>
 
     <!-- Action buttons -->
     <div id="toolbar-buttons">
@@ -166,29 +169,39 @@
         <div class="settings-section">Interface</div>
 
         <div class="settings-row">
-          <label for="setting-theme">Theme</label>
-          <select id="setting-theme" aria-label="Color theme">
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="system">System</option>
-          </select>
+          <label>Theme</label>
+          <div class="custom-select" id="setting-theme" aria-label="Color theme">
+            <div class="custom-select-trigger"></div>
+            <div class="custom-select-options">
+              <div class="custom-select-option" data-value="dark">Dark</div>
+              <div class="custom-select-option" data-value="light">Light</div>
+              <div class="custom-select-option" data-value="system">System</div>
+            </div>
+          </div>
         </div>
 
         <div class="settings-row">
-          <label for="setting-font">Font</label>
-          <select id="setting-font" aria-label="Font family">
-            <option value="system-ui">System Default</option>
-            <option value="Georgia">Georgia</option>
-            <option value="Consolas, monospace">Consolas</option>
-            <option value="Arial">Arial</option>
-            <option value="Verdana">Verdana</option>
-            <option value="Times New Roman, serif">Times New Roman</option>
-          </select>
+          <label>Font</label>
+          <div class="custom-select" id="setting-font" aria-label="Font family">
+            <div class="custom-select-trigger"></div>
+            <div class="custom-select-options">
+              <div class="custom-select-option" data-value="system-ui">System Default</div>
+              <div class="custom-select-option" data-value="Georgia">Georgia</div>
+              <div class="custom-select-option" data-value="Consolas, monospace">Consolas</div>
+              <div class="custom-select-option" data-value="Arial">Arial</div>
+              <div class="custom-select-option" data-value="Verdana">Verdana</div>
+              <div class="custom-select-option" data-value="Times New Roman, serif">Times New Roman</div>
+            </div>
+          </div>
         </div>
 
         <div class="settings-row">
-          <label for="setting-size">Font size</label>
-          <input type="number" id="setting-size" min="8" max="48" step="1" aria-label="Font size in pixels">
+          <label>Font size</label>
+          <div class="custom-number" id="setting-size" aria-label="Font size in pixels">
+            <button class="custom-number-btn decrement" aria-label="Decrease font size">&#x2212;</button>
+            <span class="custom-number-value"></span>
+            <button class="custom-number-btn increment" aria-label="Increase font size">&#x2B;</button>
+          </div>
         </div>
 
         <!-- Colors section -->
