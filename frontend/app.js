@@ -1,5 +1,6 @@
 // Tauri v2 API (available via withGlobalTauri: true)
 const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
 const { getCurrentWindow } = window.__TAURI__.window;
 const appWindow = getCurrentWindow();
 
@@ -46,6 +47,7 @@ const searchNext      = document.getElementById('search-next');
 const searchClose     = document.getElementById('search-close');
 const searchCount     = document.getElementById('search-count');
 const settingsOverlay = document.getElementById('settings-overlay');
+const pickerBackdrop  = document.getElementById('picker-backdrop');
 
 const ZOOM_MIN  = 0.5;
 const ZOOM_MAX  = 2.0;
@@ -365,23 +367,42 @@ async function handleLinkClick(e) {
   }
 }
 
+// ── Overlay exclusivity ────────────────────────────────────────────────────
+// Only one overlay (file picker, search, settings) can be open at a time.
+let filePickerOpen = false;
+function hasActiveOverlay() {
+  return filePickerOpen
+    || !searchBar.classList.contains('hidden')
+    || !settingsOverlay.classList.contains('hidden');
+}
+
 // ── Open dialog ────────────────────────────────────────────────────────────
 async function openFilePicker() {
+  if (hasActiveOverlay()) return;
+  filePickerOpen = true;
+  pickerBackdrop.classList.remove('hidden');
   try {
     const paths = await invoke('pick_file');
     for (const path of paths) await loadFile(path);
-  } catch {}
+  } catch {} finally {
+    pickerBackdrop.classList.add('hidden');
+    filePickerOpen = false;
+  }
 }
 
 // ── Search ─────────────────────────────────────────────────────────────────
-function openSearch() {
+function toggleSearch() {
+  if (!searchBar.classList.contains('hidden')) { closeSearch(); return; }
+  if (hasActiveOverlay()) return;
   searchBar.classList.remove('hidden');
+  btnSearch.classList.add('active');
   searchInput.focus();
   searchInput.select();
 }
 
 function closeSearch() {
   searchBar.classList.add('hidden');
+  btnSearch.classList.remove('active');
   clearSearch();
   searchInput.value = '';
   searchCaseSensitive = false;
@@ -528,6 +549,7 @@ document.querySelectorAll('.custom-number').forEach(num => {
 
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
+  if (hasActiveOverlay()) return;
   document.getElementById('setting-theme').value  = config.theme;
   document.getElementById('setting-font').value   = config.font_family;
   document.getElementById('setting-size').value   = config.font_size;
@@ -583,7 +605,7 @@ appWindow.onResized(syncMaximizeIcon);
 btnOpen.addEventListener('click', openFilePicker);
 btnClose.addEventListener('click', () => { if (activeTabId !== null) closeTab(activeTabId); });
 btnReload.addEventListener('click', reloadFile);
-btnSearch.addEventListener('click', openSearch);
+btnSearch.addEventListener('click', toggleSearch);
 btnSettings.addEventListener('click', openSettings);
 btnZoomOut.addEventListener('click', zoomOut);
 btnZoomIn.addEventListener('click', zoomIn);
@@ -619,7 +641,7 @@ settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOver
 function hasMod(e) { return e.ctrlKey || e.metaKey; }
 
 document.addEventListener('keydown', (e) => {
-  if (hasMod(e) && e.key === 'f') { e.preventDefault(); openSearch(); return; }
+  if (hasMod(e) && e.key === 'f') { e.preventDefault(); toggleSearch(); return; }
   if (hasMod(e) && e.key === 'o') { e.preventDefault(); openFilePicker(); return; }
   if (hasMod(e) && e.key === 'r') { e.preventDefault(); reloadFile(); return; }
   if (hasMod(e) && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn();    return; }
@@ -647,6 +669,34 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Home' && document.activeElement === document.body) {
     contentScroll.scrollTop = 0;
+  }
+});
+
+// Some key combos are intercepted by WebKitGTK before JS sees them,
+// so the Rust side registers hidden menu accelerators and emits events.
+listen('prev-tab', () => {
+  if (tabs.length > 1) {
+    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const prev = (idx - 1 + tabs.length) % tabs.length;
+    switchToTab(tabs[prev].id);
+  }
+});
+
+listen('move-tab-left', () => {
+  if (tabs.length > 1) {
+    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const target = (idx - 1 + tabs.length) % tabs.length;
+    [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
+    renderTabBar();
+  }
+});
+
+listen('move-tab-right', () => {
+  if (tabs.length > 1) {
+    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const target = (idx + 1) % tabs.length;
+    [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
+    renderTabBar();
   }
 });
 
