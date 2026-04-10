@@ -5,17 +5,21 @@ use std::path::PathBuf;
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
-pub fn open_file(path: String) -> Result<OpenResult, String> {
-    let path = PathBuf::from(&path);
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let base_dir = path.parent();
-    let html = markdown::render(&content, base_dir);
-    let title = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("OxideMD")
-        .to_string();
-    Ok(OpenResult { html, title })
+pub async fn open_file(path: String) -> Result<OpenResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(&path);
+        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let base_dir = path.parent();
+        let html = markdown::render(&content, base_dir);
+        let title = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("OxideMD")
+            .to_string();
+        Ok(OpenResult { html, title })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Returns the first CLI argument (i.e. a file path to open), if provided.
@@ -25,19 +29,20 @@ pub fn get_cli_file() -> Option<String> {
 }
 
 #[tauri::command]
-pub fn pick_file(app: tauri::AppHandle) -> Vec<String> {
-    app.dialog()
-        .file()
-        .add_filter(
-            "Markdown",
-            &["md", "markdown", "mdown", "mkd"],
-        )
-        .add_filter("All Files", &["*"])
-        .blocking_pick_files()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|p| p.to_string())
-        .collect()
+pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
+            .add_filter("All Files", &["*"])
+            .blocking_pick_files()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.to_string())
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -60,8 +65,12 @@ pub fn save_window_geometry(width: u32, height: u32, maximized: bool) -> Result<
 }
 
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
-    open::that(&url).map_err(|e| e.to_string())
+pub async fn open_url(url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        open::that(&url).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[derive(serde::Serialize)]
