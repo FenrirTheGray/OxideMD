@@ -12,13 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - macOS support: `.dmg` bundle target
 - Keyboard shortcuts now work with `Cmd` on macOS
 - Platform-aware tooltip labels (show `Cmd` on macOS, `Ctrl` elsewhere)
+- GitHub Actions workflow for automated multi-platform releases
 
 ### Changed
 
 - Default font changed from Segoe UI to system default for cross-platform compatibility
 - Font dropdown now uses cross-platform fonts (System Default, Georgia, Consolas, Arial, Verdana, Times New Roman)
-- README updated to reflect cross-platform support with per-platform build prerequisites
-- App description updated to "cross-platform"
 
 ## [1.0.0] - 2026-04-09
 
