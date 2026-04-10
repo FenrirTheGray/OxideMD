@@ -4,6 +4,21 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.2.0] - 2026-04-10
+
+### Added
+
+- Custom select dropdown and number stepper controls in settings (replaces native form elements)
+- Dedicated toolbar drag region spacer for reliable window dragging
+- Window border for better visual definition
+
+### Changed
+
+- Tauri commands (`open_file`, `pick_file`, `open_url`) are now async with `spawn_blocking` to avoid blocking the main thread
+- Minimum window size increased to 600×400
+- GitHub Actions bumped to v6 (`actions/checkout`, `actions/setup-node`)
+- Added `color-scheme` CSS property to dark/light themes for native scrollbar styling
+
 ## [1.1.0] - 2026-04-10
 
 ### Added
