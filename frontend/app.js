@@ -471,6 +471,61 @@ function updateSearchCount() {
     : (searchInput.value ? 'No matches' : '');
 }
 
+// ── Custom selects ─────────────────────────────────────────────────────────
+document.querySelectorAll('.custom-select').forEach(sel => {
+  const trigger = sel.querySelector('.custom-select-trigger');
+  const options = sel.querySelectorAll('.custom-select-option');
+
+  // Expose .value getter/setter so existing code works unchanged
+  Object.defineProperty(sel, 'value', {
+    get() { return sel.dataset.value || ''; },
+    set(v) {
+      sel.dataset.value = v;
+      const match = sel.querySelector(`.custom-select-option[data-value="${CSS.escape(v)}"]`);
+      trigger.textContent = match ? match.textContent : v;
+      options.forEach(o => o.classList.toggle('selected', o.dataset.value === v));
+    }
+  });
+
+  trigger.addEventListener('click', () => {
+    // Close any other open selects
+    document.querySelectorAll('.custom-select.open').forEach(s => { if (s !== sel) s.classList.remove('open'); });
+    sel.classList.toggle('open');
+  });
+
+  options.forEach(opt => {
+    opt.addEventListener('click', () => {
+      sel.value = opt.dataset.value;
+      sel.classList.remove('open');
+    });
+  });
+});
+
+// Close custom selects when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.custom-select')) {
+    document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
+  }
+});
+
+// ── Custom number inputs ───────────────────────────────────────────────────
+document.querySelectorAll('.custom-number').forEach(num => {
+  const display = num.querySelector('.custom-number-value');
+  const min = 8, max = 48, step = 1;
+
+  Object.defineProperty(num, 'value', {
+    get() { return parseInt(num.dataset.value, 10) || min; },
+    set(v) {
+      const clamped = Math.min(max, Math.max(min, parseInt(v, 10) || min));
+      num.dataset.value = clamped;
+      display.textContent = clamped;
+    }
+  });
+
+  num.querySelector('.decrement').addEventListener('click', () => { num.value = num.value - step; });
+  num.querySelector('.increment').addEventListener('click', () => { num.value = num.value + step; });
+});
+
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
   document.getElementById('setting-theme').value  = config.theme;

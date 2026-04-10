@@ -22,6 +22,7 @@
 
 /* ── Dark theme — Atom One Dark ───────────────────────────────────── */
 body.theme-dark {
+  color-scheme: dark;
   --bg:                #282c34;
   --bg-toolbar:        #21252b;
   --bg-elevated:       #2c313c;
@@ -75,6 +76,7 @@ body.theme-dark {
 
 /* ── Light theme — Atom One Light ─────────────────────────────────── */
 body.theme-light {
+  color-scheme: light;
   --bg:                #fafafa;
   --bg-toolbar:        #f0f0f0;
   --bg-elevated:       #ffffff;
@@ -139,6 +141,7 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  border: 1px solid var(--border);
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -158,11 +161,15 @@ body {
 /* ── Tab area ─────────────────────────────────────────────────────── */
 #tab-area {
   display: flex;
-  flex: 1;
   overflow-x: auto;
   min-width: 0;
   -webkit-app-region: no-drag;
   scrollbar-width: none;
+}
+#toolbar-spacer {
+  flex: 1;
+  min-width: 8px;
+  -webkit-app-region: drag;
 }
 #tab-area::-webkit-scrollbar { display: none; }
 
@@ -985,25 +992,99 @@ mark.search-match.current {
   letter-spacing: 0.01em;
 }
 
-.settings-row select,
-.settings-row input[type="number"] {
+/* Custom number input */
+.custom-number {
   flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.custom-number-value {
+  flex: 1;
+  text-align: center;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  padding: 6px 0;
+  user-select: none;
+}
+.custom-number-btn {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  font-size: 14px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease),
+              color var(--dur-xs) var(--ease);
+  line-height: 1;
+  border-radius: 6px;
+  margin: 2px;
+}
+.custom-number-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+
+/* Custom select dropdown */
+.custom-select {
+  flex: 1;
+  position: relative;
+  user-select: none;
+}
+.custom-select-trigger {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--fg);
   font-size: 12.5px;
   font-family: var(--font-family);
-  padding: 6px 10px;
-  outline: none;
+  padding: 6px 28px 6px 10px;
+  cursor: pointer;
   transition: border-color var(--dur-sm) var(--ease),
               box-shadow var(--dur-sm) var(--ease);
-  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23abb2bf'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
 }
-.settings-row select:focus,
-.settings-row input[type="number"]:focus {
+.custom-select.open .custom-select-trigger {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.custom-select-options {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 0;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.custom-select.open .custom-select-options {
+  display: block;
+}
+.custom-select-option {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease);
+}
+.custom-select-option:hover {
+  background: var(--bg-btn-hover);
+}
+.custom-select-option.selected {
+  color: var(--accent);
 }
 
 /* Color swatch rows */
