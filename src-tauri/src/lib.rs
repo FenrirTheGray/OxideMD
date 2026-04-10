@@ -52,20 +52,25 @@ pub fn run() {
                                     let ctrl = state.contains(gdk::ModifierType::CONTROL_MASK);
                                     let shift = state.contains(gdk::ModifierType::SHIFT_MASK);
 
-                                    if ctrl && shift {
+                                    if ctrl {
                                         let keyval = event.keyval();
-                                        if keyval == constants::ISO_Left_Tab
-                                            || keyval == constants::Tab
-                                        {
-                                            let _ = handle.emit("prev-tab", ());
-                                            return gtk::glib::Propagation::Stop;
-                                        }
-                                        if keyval == constants::Left {
-                                            let _ = handle.emit("move-tab-left", ());
-                                            return gtk::glib::Propagation::Stop;
-                                        }
-                                        if keyval == constants::Right {
-                                            let _ = handle.emit("move-tab-right", ());
+                                        if shift {
+                                            if keyval == constants::ISO_Left_Tab
+                                                || keyval == constants::Tab
+                                            {
+                                                let _ = handle.emit("prev-tab", ());
+                                                return gtk::glib::Propagation::Stop;
+                                            }
+                                            if keyval == constants::Left {
+                                                let _ = handle.emit("move-tab-left", ());
+                                                return gtk::glib::Propagation::Stop;
+                                            }
+                                            if keyval == constants::Right {
+                                                let _ = handle.emit("move-tab-right", ());
+                                                return gtk::glib::Propagation::Stop;
+                                            }
+                                        } else if keyval == constants::Tab {
+                                            let _ = handle.emit("next-tab", ());
                                             return gtk::glib::Propagation::Stop;
                                         }
                                     }

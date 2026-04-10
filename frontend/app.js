@@ -658,6 +658,26 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
+  if (hasMod(e) && e.shiftKey && e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (tabs.length > 1) {
+      const idx = tabs.findIndex(t => t.id === activeTabId);
+      const target = (idx - 1 + tabs.length) % tabs.length;
+      [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
+      renderTabBar();
+    }
+    return;
+  }
+  if (hasMod(e) && e.shiftKey && e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (tabs.length > 1) {
+      const idx = tabs.findIndex(t => t.id === activeTabId);
+      const target = (idx + 1) % tabs.length;
+      [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
+      renderTabBar();
+    }
+    return;
+  }
   if (hasMod(e) && e.key === 'w') {
     e.preventDefault();
     if (activeTabId !== null) closeTab(activeTabId);
@@ -679,6 +699,14 @@ listen('prev-tab', () => {
     const idx = tabs.findIndex(t => t.id === activeTabId);
     const prev = (idx - 1 + tabs.length) % tabs.length;
     switchToTab(tabs[prev].id);
+  }
+});
+
+listen('next-tab', () => {
+  if (tabs.length > 1) {
+    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const next = (idx + 1) % tabs.length;
+    switchToTab(tabs[next].id);
   }
 });
 
