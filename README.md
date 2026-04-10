@@ -1,6 +1,6 @@
 # OxideMD
 
-A lightweight, read-only Markdown viewer for Windows, written in Rust using [Tauri v2](https://tauri.app/). Inspired by [ViewMD](https://github.com/rabfulton/ViewMD).
+A lightweight, cross-platform, read-only Markdown viewer written in Rust using [Tauri v2](https://tauri.app/). Runs on Windows, Linux, and macOS. Inspired by [ViewMD](https://github.com/rabfulton/ViewMD).
 
 ![OxideMD screenshot](media/oxidemd.png)
 
@@ -11,15 +11,17 @@ A lightweight, read-only Markdown viewer for Windows, written in Rust using [Tau
 - **Tabs** — open multiple files in parallel; each tab has independent scroll and zoom state
 - **Search** — `Ctrl+F` with match highlighting, next/previous navigation, match counter, and case-sensitive toggle
 - **Theming** — dark, light, and system themes (Atom One Dark / Atom One Light) with configurable accent colors for H1/H2/H3 headings and list bullets
-- **Settings** — persistent configuration (font family, font size, colors, theme) saved to `%APPDATA%\OxideMD\config.toml`
+- **Settings** — persistent configuration (font family, font size, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
 - **Multi-file open** — select multiple files at once from the open dialog
-- **CLI support** — pass a file path as an argument: `oxidemd.exe path\to\file.md`
+- **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
 - **Custom title bar** — frameless window with integrated minimize/maximize/close controls
 - **Window geometry** — size and maximized state are restored between sessions
-- **Tiny footprint** — no Electron, no bundled browser; uses the Edge WebView2 runtime already present on Windows 10/11
+- **Tiny footprint** — no Electron, no bundled browser; uses the native webview on each platform (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS)
 
 ## Keyboard Shortcuts
+
+> On macOS, use `Cmd` instead of `Ctrl`.
 
 | Shortcut         | Action                        |
 | ---------------- | ----------------------------- |
@@ -41,9 +43,20 @@ A lightweight, read-only Markdown viewer for Windows, written in Rust using [Tau
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (stable, MSVC toolchain)
+- [Rust](https://rustup.rs/) (stable)
+
+**Windows:**
+- MSVC toolchain
 - Microsoft C++ Build Tools
 - Edge WebView2 (included with Windows 10 1803+ / Windows 11)
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+**macOS:**
+- Xcode Command Line Tools: `xcode-select --install`
 
 ### Install Tauri CLI
 
@@ -65,12 +78,13 @@ cd src-tauri
 cargo tauri build
 ```
 
-Installers are output to:
+Installers are output to `src-tauri/target/release/bundle/`:
 
-```
-src-tauri\target\release\bundle\msi\OxideMD_x.x.x_x64_en-US.msi
-src-tauri\target\release\bundle\nsis\OxideMD_x.x.x_x64-setup.exe
-```
+| Platform | Formats                      |
+| -------- | ---------------------------- |
+| Windows  | `.msi`, `.exe` (NSIS)        |
+| Linux    | `.deb`, `.rpm`, `.AppImage`   |
+| macOS    | `.dmg`                       |
 
 ## Project Structure
 
