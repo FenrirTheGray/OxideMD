@@ -8,8 +8,8 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 
 - **Full Markdown rendering** — headings, bold, italic, strikethrough, inline code, code blocks, blockquotes, ordered and unordered lists, tables, horizontal rules, links, and local images
 - **Syntax highlighting** — powered by [syntect](https://github.com/trishume/syntect) with support for hundreds of languages
-- **Tabs** — open multiple files in parallel; each tab has independent scroll and zoom state
-- **Search** — `Ctrl+F` with match highlighting, next/previous navigation, match counter, and case-sensitive toggle
+- **Tabs** — open multiple files in parallel; each tab has independent scroll and zoom state; reorder tabs with keyboard shortcuts
+- **Search** — `Ctrl+F` toggles search with match highlighting, next/previous navigation, match counter, and case-sensitive toggle
 - **Theming** — dark, light, and system themes (Atom One Dark / Atom One Light) with configurable accent colors for H1/H2/H3 headings and list bullets
 - **Settings** — persistent configuration (font family, font size, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
@@ -30,7 +30,9 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 | `Ctrl+Tab`       | Switch to next tab            |
 | `Ctrl+Shift+Tab` | Switch to previous tab        |
 | `Ctrl+R`         | Reload current file           |
-| `Ctrl+F`         | Open search                   |
+| `Ctrl+Shift+Left`  | Move tab left                 |
+| `Ctrl+Shift+Right` | Move tab right                |
+| `Ctrl+F`         | Toggle search                 |
 | `Enter`          | Next search match             |
 | `Shift+Enter`    | Previous search match         |
 | `Esc`            | Close search / close settings |
@@ -120,19 +122,6 @@ OxideMD/
 | Syntax highlighting | [syntect](https://github.com/trishume/syntect)                     |
 | Configuration       | [serde](https://serde.rs/) + [toml](https://crates.io/crates/toml) |
 | Config paths        | [directories](https://crates.io/crates/directories)                |
-
-## Updating the Icon
-
-To regenerate all icon sizes from a new source image:
-
-```powershell
-# Install the SVG renderer (first time only)
-npm install
-
-# Convert your icon.svg → icon.png using a tool of your choice, then:
-cd src-tauri
-cargo tauri icon ..\icon.png
-```
 
 ## License
 
