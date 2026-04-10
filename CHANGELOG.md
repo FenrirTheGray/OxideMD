@@ -4,6 +4,21 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] - 2026-04-10
+
+### Added
+
+- Ctrl+Shift+Tab keyboard shortcut for switching to the previous tab (Linux: intercepted at GTK layer to bypass WebKitGTK)
+- Ctrl+Shift+Left/Right keyboard shortcuts for reordering tabs
+- Backdrop blur overlay when native file picker is open (matches settings overlay style)
+- Overlay exclusivity: only one overlay (file picker, search, settings) can be open at a time
+- Search button now toggles (click or Ctrl+F again to close), with active state styling
+
+### Changed
+
+- File dialog is now modal (attached to parent window via `set_parent`)
+- Added `gtk` and `gdk` as Linux-specific dependencies for native key event interception
+
 ## [1.2.0] - 2026-04-10
 
 ### Added
