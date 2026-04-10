@@ -282,7 +282,8 @@ body {
   white-space: nowrap;
 }
 
-#toolbar-buttons button:hover:not(:disabled) {
+#toolbar-buttons button:hover:not(:disabled),
+#toolbar-buttons button.active {
   background: var(--bg-btn-hover);
   color: var(--accent);
 }
@@ -882,18 +883,22 @@ mark.search-match.current {
    SETTINGS MODAL
    ═══════════════════════════════════════════════════════════════════ */
 
+#picker-backdrop,
 #settings-overlay {
   position: fixed;
   inset: 0;
   background: var(--bg-overlay);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 200;
   animation: overlay-fade var(--dur) var(--ease);
 }
+#settings-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#picker-backdrop.hidden,
 #settings-overlay.hidden { display: none; }
 
 @keyframes overlay-fade {

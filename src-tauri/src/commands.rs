@@ -2,6 +2,7 @@ use crate::config::{load_config, save_config, Config};
 use crate::markdown;
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
@@ -30,9 +31,11 @@ pub fn get_cli_file() -> Option<String> {
 
 #[tauri::command]
 pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
+    let window = app.get_webview_window("main").unwrap();
     tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
+            .set_parent(&window)
             .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
             .add_filter("All Files", &["*"])
             .blocking_pick_files()
