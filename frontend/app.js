@@ -3,6 +3,10 @@ const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
 const appWindow = getCurrentWindow();
 
+// ── Platform detection ────────────────────────────────────────────────────
+const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+const modKey = isMac ? 'Cmd' : 'Ctrl';
+
 // ── Tab state ──────────────────────────────────────────────────────────────
 // Each tab: { id, path, title, html, scrollTop }
 let tabs = [];
@@ -203,6 +207,12 @@ function applyActiveTab() {
 
 function showWelcome() {
   contentEl.innerHTML = WELCOME_HTML;
+  // Re-patch the welcome hint for the correct modifier key (WELCOME_HTML
+  // was captured before applyPlatformLabels ran, so it always says "Ctrl").
+  const hintEl = contentEl.querySelector('.welcome-hint');
+  if (hintEl) {
+    hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
+  }
   contentEl.style.fontSize = '';
   originalContent = '';
   appWindow.setTitle('OxideMD');
@@ -262,7 +272,7 @@ function renderTabBar() {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'tab-close';
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
-    closeBtn.title = 'Close (Ctrl+W)';
+    closeBtn.title = `Close (${modKey}+W)`;
 
     el.appendChild(titleSpan);
     el.appendChild(closeBtn);
@@ -550,14 +560,17 @@ document.getElementById('settings-save').addEventListener('click', saveSettings)
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
 // ── Global keyboard shortcuts ──────────────────────────────────────────────
+// Accept both Ctrl and Cmd (metaKey) so shortcuts work on macOS
+function hasMod(e) { return e.ctrlKey || e.metaKey; }
+
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); return; }
-  if (e.ctrlKey && e.key === 'o') { e.preventDefault(); openFilePicker(); return; }
-  if (e.ctrlKey && e.key === 'r') { e.preventDefault(); reloadFile(); return; }
-  if (e.ctrlKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn();    return; }
-  if (e.ctrlKey && e.key === '-')                    { e.preventDefault(); zoomOut();   return; }
-  if (e.ctrlKey && e.key === '0')                    { e.preventDefault(); resetZoom(); return; }
-  if (e.ctrlKey && e.key === 'Tab') {
+  if (hasMod(e) && e.key === 'f') { e.preventDefault(); openSearch(); return; }
+  if (hasMod(e) && e.key === 'o') { e.preventDefault(); openFilePicker(); return; }
+  if (hasMod(e) && e.key === 'r') { e.preventDefault(); reloadFile(); return; }
+  if (hasMod(e) && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn();    return; }
+  if (hasMod(e) && e.key === '-')                    { e.preventDefault(); zoomOut();   return; }
+  if (hasMod(e) && e.key === '0')                    { e.preventDefault(); resetZoom(); return; }
+  if (hasMod(e) && e.key === 'Tab') {
     e.preventDefault();
     if (tabs.length > 1) {
       const idx = tabs.findIndex(t => t.id === activeTabId);
@@ -568,7 +581,7 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (e.ctrlKey && e.key === 'w') {
+  if (hasMod(e) && e.key === 'w') {
     e.preventDefault();
     if (activeTabId !== null) closeTab(activeTabId);
     return;
@@ -585,6 +598,30 @@ document.addEventListener('keydown', (e) => {
 // Prevent browser default drag-drop navigation
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
+
+// ── Platform-aware UI labels ──────────────────────────────────────────────
+// Update tooltips and hints to show Cmd on macOS, Ctrl elsewhere
+function applyPlatformLabels() {
+  btnOpen.title       = `Open file (${modKey}+O)`;
+  btnReload.title     = `Reload file (${modKey}+R)`;
+  btnClose.title      = `Close tab (${modKey}+W)`;
+  btnSearch.title     = `Search (${modKey}+F)`;
+  btnZoomOut.title    = `Zoom out (${modKey}+-)`;
+  btnZoomIn.title     = `Zoom in (${modKey}++)`;
+  zoomLabel.title     = `Reset zoom (${modKey}+0)`;
+
+  // Tab close buttons
+  const tabCloses = tabBarEl.querySelectorAll('.tab-close');
+  tabCloses.forEach(b => b.title = `Close (${modKey}+W)`);
+
+  // Welcome hint
+  const hintEl = document.querySelector('.welcome-hint');
+  if (hintEl) {
+    hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
+  }
+}
+
+applyPlatformLabels();
 
 // ── Start ──────────────────────────────────────────────────────────────────
 init();

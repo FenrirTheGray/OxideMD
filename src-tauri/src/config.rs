@@ -21,7 +21,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             theme: "dark".into(),
-            font_family: "Segoe UI".into(),
+            font_family: "system-ui".into(),
             font_size: 16,
             h1_color: "#c084fc".into(),
             h2_color: "#67e8f9".into(),
