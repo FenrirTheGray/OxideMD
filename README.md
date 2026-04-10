@@ -90,6 +90,7 @@ Installers are output to `src-tauri/target/release/bundle/`:
 
 ```
 OxideMD/
+├── .github/workflows/      # CI/CD (GitHub Actions release workflow)
 ├── frontend/               # WebView frontend (HTML/CSS/JS)
 │   ├── index.html          # App shell: toolbar, search bar, content area, settings modal
 │   ├── style.css           # Dark/light/system themes, markdown element styles
@@ -106,6 +107,7 @@ OxideMD/
 │   ├── icons/              # App icons (all sizes)
 │   └── tauri.conf.json     # Tauri configuration (window, bundle, file associations)
 ├── media/                  # Screenshots and assets for documentation
+├── CHANGELOG.md            # Version history
 └── package.json            # Node dependencies for icon generation (@resvg/resvg-js)
 ```
 
