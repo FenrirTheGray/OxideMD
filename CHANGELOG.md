@@ -6,21 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [1.3.1] - 2026-04-10
 
-### Added
+### Fixed
 
-- Ctrl+Tab keyboard shortcut for switching to the next tab
-- Ctrl+Shift+Arrow keyboard shortcuts now also handled in the frontend for tab reordering
-
-### Changed
-
-- Refactored GTK key interception to handle Ctrl and Ctrl+Shift combos separately
+- Ctrl+Tab (next tab) now works on Linux via GTK key interception
+- Ctrl+Shift+Left/Right (tab reordering) now works on Windows and macOS via frontend key handlers
 
 ## [1.3.0] - 2026-04-10
 
 ### Added
 
-- Ctrl+Shift+Tab keyboard shortcut for switching to the previous tab (Linux: intercepted at GTK layer to bypass WebKitGTK)
-- Ctrl+Shift+Left/Right keyboard shortcuts for reordering tabs
+- Ctrl+Tab / Ctrl+Shift+Tab keyboard shortcuts for switching between tabs
+- Ctrl+Shift+Left/Right keyboard shortcuts for reordering tabs (Linux: intercepted at GTK layer to bypass WebKitGTK)
 - Backdrop blur overlay when native file picker is open (matches settings overlay style)
 - Overlay exclusivity: only one overlay (file picker, search, settings) can be open at a time
 - Search button now toggles (click or Ctrl+F again to close), with active state styling
