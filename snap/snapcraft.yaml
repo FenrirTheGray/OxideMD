@@ -1,0 +1,49 @@
+name: oxidemd
+base: core22
+version: '1.3.2'
+summary: A lightweight, cross-platform Markdown viewer
+description: |
+  OxideMD is a fast, lightweight Markdown viewer built with Tauri and Rust.
+  Features syntax highlighting, multiple tabs, dark/light themes, and
+  native file associations for Markdown files.
+grade: stable
+confinement: strict
+
+apps:
+  oxidemd:
+    command: usr/bin/oxidemd
+    extensions: [gnome]
+    plugs:
+      - home
+      - removable-media
+      - browser-support
+
+plugs:
+  browser-support:
+    allow-sandbox: true
+
+parts:
+  oxidemd:
+    plugin: nil
+    source: .
+    build-snaps:
+      - rustup
+    build-packages:
+      - libwebkit2gtk-4.1-dev
+      - build-essential
+      - curl
+      - wget
+      - file
+      - libxdo-dev
+      - libssl-dev
+      - libayatana-appindicator3-dev
+      - librsvg2-dev
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+    override-build: |
+      set -eu
+      rustup default stable
+      cd src-tauri
+      cargo build --release
+      install -Dm755 target/release/oxidemd "$CRAFT_PART_INSTALL/usr/bin/oxidemd"
+      install -Dm644 icons/128x128@2x.png "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/256x256/apps/oxidemd.png"
