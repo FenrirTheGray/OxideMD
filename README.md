@@ -107,6 +107,7 @@ OxideMD/
 │   │   ├── config.rs       # Settings struct, TOML load/save
 │   │   └── util.rs         # HTML escaping helpers
 │   ├── icons/              # App icons (all sizes)
+│   ├── oxidemd.desktop     # Desktop template for Linux deb/rpm (MIME types, categories)
 │   └── tauri.conf.json     # Tauri configuration (window, bundle, file associations)
 ├── media/                  # Screenshots and assets for documentation
 ├── CHANGELOG.md            # Version history
