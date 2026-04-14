@@ -4,6 +4,18 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.2] - 2026-04-14
+
+### Fixed
+
+- `.deb` package now registers MIME type (`text/markdown`) so Ubuntu shows OxideMD in "Open with..." for Markdown files
+- Added custom desktop template with proper `MimeType`, `Exec %F`, and `Categories` fields for deb builds
+
+### Changed
+
+- Renamed binary from generic `app` to `oxidemd` to avoid package conflicts and improve process identification
+- Icons in deb/rpm packages now install as `oxidemd.png` instead of `app.png`
+
 ## [1.3.1] - 2026-04-10
 
 ### Fixed
