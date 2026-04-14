@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=OxideMD
+GenericName=Markdown Viewer
+Comment=A lightweight, cross-platform Markdown viewer
+Exec=oxidemd %F
+Icon=oxidemd
+Terminal=false
+Type=Application
+Categories=Utility;TextEditor;Office;
+MimeType=text/markdown;text/x-markdown;
+StartupWMClass=OxideMD
