@@ -174,11 +174,11 @@
         <div class="settings-row">
           <label>Theme</label>
           <div class="custom-select" id="setting-theme" aria-label="Color theme">
-            <div class="custom-select-trigger"></div>
-            <div class="custom-select-options">
-              <div class="custom-select-option" data-value="dark">Dark</div>
-              <div class="custom-select-option" data-value="light">Light</div>
-              <div class="custom-select-option" data-value="system">System</div>
+            <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+            <div class="custom-select-options" role="listbox">
+              <div class="custom-select-option" data-value="dark" role="option">Dark</div>
+              <div class="custom-select-option" data-value="light" role="option">Light</div>
+              <div class="custom-select-option" data-value="system" role="option">System</div>
             </div>
           </div>
         </div>
@@ -186,15 +186,8 @@
         <div class="settings-row">
           <label>Font</label>
           <div class="custom-select" id="setting-font" aria-label="Font family">
-            <div class="custom-select-trigger"></div>
-            <div class="custom-select-options">
-              <div class="custom-select-option" data-value="system-ui">System Default</div>
-              <div class="custom-select-option" data-value="Georgia">Georgia</div>
-              <div class="custom-select-option" data-value="Consolas, monospace">Consolas</div>
-              <div class="custom-select-option" data-value="Arial">Arial</div>
-              <div class="custom-select-option" data-value="Verdana">Verdana</div>
-              <div class="custom-select-option" data-value="Times New Roman, serif">Times New Roman</div>
-            </div>
+            <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+            <div class="custom-select-options" role="listbox"></div>
           </div>
         </div>
 
@@ -233,6 +226,7 @@
       </div><!-- /settings-body -->
 
       <div id="settings-footer">
+        <button id="settings-reset">Reset defaults</button>
         <button id="settings-cancel">Cancel</button>
         <button id="settings-save">Save</button>
       </div>

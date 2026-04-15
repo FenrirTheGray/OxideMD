@@ -40,7 +40,7 @@ body.theme-dark {
 
   --fg:                #abb2bf;
   --fg-dim:            #7a8799;
-  --fg-muted:          #636d83;
+  --fg-muted:          #8994a5;
   --fg-toolbar:        #9da5b4;
 
   --border:            #3b4048;
@@ -94,7 +94,7 @@ body.theme-light {
 
   --fg:                #383a42;
   --fg-dim:            #696c77;
-  --fg-muted:          #939aaa;
+  --fg-muted:          #6a7387;
   --fg-toolbar:        #4a4a4f;
 
   --border:            #d8d8d8;
@@ -172,6 +172,20 @@ body {
   -webkit-app-region: drag;
 }
 #tab-area::-webkit-scrollbar { display: none; }
+
+/* Tab overflow fade indicators */
+#tab-area.has-overflow-right {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+}
+#tab-area.has-overflow-left {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 32px, black 100%);
+  mask-image: linear-gradient(to right, transparent, black 32px, black 100%);
+}
+#tab-area.has-overflow-left.has-overflow-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
+}
 
 /* ── Tabs ─────────────────────────────────────────────────────────── */
 .tab {
@@ -299,7 +313,7 @@ body {
 }
 
 #toolbar-buttons button:disabled {
-  opacity: 0.65;
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -707,8 +721,8 @@ body {
 #content h2 { font-size: 1.5em;  color: var(--h2-color); }
 #content h3 { font-size: 1.2em;  color: var(--h3-color); }
 #content h4 { font-size: 1em;    color: var(--fg); }
-#content h5 { font-size: 0.9em;  color: var(--fg-toolbar); }
-#content h6 { font-size: 0.85em; color: var(--fg-dim); }
+#content h5 { font-size: 1em;    color: var(--fg-toolbar); }
+#content h6 { font-size: 1em;    color: var(--fg-dim); }
 
 /* H1 — accent underline */
 #content h1 {
@@ -901,6 +915,22 @@ mark.search-match.current {
 #picker-backdrop.hidden,
 #settings-overlay.hidden { display: none; }
 
+/* Settings exit animation */
+@keyframes overlay-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes dialog-disappear {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.94) translateY(-12px); }
+}
+#settings-overlay.closing {
+  animation: overlay-fade-out var(--dur) var(--ease) forwards;
+}
+#settings-overlay.closing #settings-dialog {
+  animation: dialog-disappear var(--dur) var(--ease) forwards;
+}
+
 @keyframes overlay-fade {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -976,7 +1006,7 @@ mark.search-match.current {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--fg-muted);
+  color: var(--fg-dim);
   padding-top: 12px;
   margin-bottom: 2px;
 }
@@ -1091,6 +1121,74 @@ mark.search-match.current {
 .custom-select-option.selected {
   color: var(--accent);
 }
+.custom-select-option.focused {
+  background: var(--bg-btn-hover);
+}
+
+/* ── Custom font options (dynamic) ────────────────────────────────── */
+.font-options-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
+}
+
+.custom-font-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-font-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-font-remove {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity var(--dur-xs) var(--ease),
+              background var(--dur-xs) var(--ease),
+              color var(--dur-xs) var(--ease);
+}
+.custom-font-option:hover .custom-font-remove { opacity: 0.65; }
+.custom-font-remove:hover {
+  opacity: 1 !important;
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+}
+
+.font-empty-hint {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  font-style: italic;
+}
+
+.font-add-option {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Keyboard focus for custom select trigger */
+.custom-select-trigger:focus-visible {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  outline: none;
+}
 
 /* Color swatch rows */
 .settings-row.color-row {
@@ -1124,7 +1222,6 @@ mark.search-match.current {
 
 #settings-footer {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
   gap: 8px;
   padding: 14px 20px;
@@ -1155,6 +1252,17 @@ mark.search-match.current {
 #settings-footer button:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
+}
+
+#settings-footer #settings-reset {
+  margin-right: auto;
+  border-color: transparent;
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+#settings-footer #settings-reset:hover {
+  color: var(--accent);
+  background: var(--bg-btn-hover);
 }
 
 #settings-footer #settings-save {

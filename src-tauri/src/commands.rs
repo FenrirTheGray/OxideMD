@@ -1,5 +1,6 @@
-use crate::config::{load_config, save_config, Config};
+use crate::config::{fonts_dir, load_config, save_config, Config};
 use crate::markdown;
+use base64::Engine;
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
@@ -54,6 +55,11 @@ pub fn get_config() -> Config {
 }
 
 #[tauri::command]
+pub fn get_default_config() -> Config {
+    Config::default()
+}
+
+#[tauri::command]
 pub fn save_config_cmd(config: Config) -> Result<(), String> {
     save_config(&config)
 }
@@ -71,6 +77,108 @@ pub fn save_window_geometry(width: u32, height: u32, maximized: bool) -> Result<
 pub async fn open_url(url: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         open::that(&url).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+pub struct FontInfo {
+    pub name: String,
+    pub filename: String,
+}
+
+#[tauri::command]
+pub async fn install_font(app: tauri::AppHandle) -> Result<Option<FontInfo>, String> {
+    let window = app.get_webview_window("main").unwrap();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Font Files", &["ttf", "otf", "woff", "woff2"])
+            .blocking_pick_file()
+            .map(|p| p.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let src_path = match picked {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let src = PathBuf::from(&src_path);
+    let filename = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid font filename")?
+        .to_string();
+    let dest = dir.join(&filename);
+    fs::copy(&src, &dest).map_err(|e| format!("Failed to copy font: {e}"))?;
+
+    let name = src
+        .file_stem()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&filename)
+        .to_string();
+
+    Ok(Some(FontInfo { name, filename }))
+}
+
+#[tauri::command]
+pub fn remove_font(filename: String) -> Result<(), String> {
+    let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
+    let path = dir.join(&filename);
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| format!("Failed to remove font: {e}"))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_custom_fonts() -> Vec<FontInfo> {
+    let dir = match fonts_dir() {
+        Some(d) => d,
+        None => return vec![],
+    };
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    let extensions = ["ttf", "otf", "woff", "woff2"];
+    let mut fonts = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            if extensions.contains(&ext.to_lowercase().as_str()) {
+                let filename = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let name = path
+                    .file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&filename)
+                    .to_string();
+                fonts.push(FontInfo { name, filename });
+            }
+        }
+    }
+    fonts.sort_by(|a, b| a.name.cmp(&b.name));
+    fonts
+}
+
+#[tauri::command]
+pub async fn get_font_data(filename: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
+        let path = dir.join(&filename);
+        let bytes = fs::read(&path).map_err(|e| format!("Failed to read font: {e}"))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
     })
     .await
     .map_err(|e| e.to_string())?

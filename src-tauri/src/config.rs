@@ -4,6 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub theme: String,
     pub font_family: String,
@@ -37,6 +38,11 @@ impl Default for Config {
 fn config_path() -> Option<PathBuf> {
     ProjectDirs::from("com", "oxidemd", "OxideMD")
         .map(|dirs| dirs.config_dir().join("config.toml"))
+}
+
+pub fn fonts_dir() -> Option<PathBuf> {
+    ProjectDirs::from("com", "oxidemd", "OxideMD")
+        .map(|dirs| dirs.config_dir().join("fonts"))
 }
 
 pub fn load_config() -> Config {
