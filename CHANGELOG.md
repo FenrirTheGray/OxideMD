@@ -4,6 +4,25 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-04-16
+
+### Added
+
+- Custom font management: install `.ttf`, `.otf`, `.woff`, and `.woff2` font files via the settings font dropdown
+- Fonts are stored in the OxideMD config folder (`fonts/` subdirectory) and persist across sessions
+- Multiple custom fonts can be added and individually removed from the dropdown
+- Confirmation dialog before removing a custom font (destructive action deletes the file from disk)
+- Empty state hint ("No custom fonts installed") in the font dropdown for first-time discoverability
+- Error feedback in the status bar when a custom font fails to load
+
+### Changed
+
+- Font dropdown is now fully dynamic: rebuilt on each settings open to reflect installed custom fonts
+- Font select is excluded from the generic custom-select initializer and managed independently with event delegation
+- Config struct uses `#[serde(default)]` for backward-compatible deserialization of existing config files
+- Remove button for custom fonts sized to 22×22px minimum click target
+- `base64` crate added as a dependency for encoding font data
+
 ## [1.3.2] - 2026-04-14
 
 ### Fixed
