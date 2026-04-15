@@ -21,6 +21,11 @@ let searchCurrent = -1;
 let searchCaseSensitive = false;
 let originalContent = '';
 
+// ── Custom font state ─────────────────────────────────────────────────────
+let customFonts = [];          // cached list: [{ name, filename }, …]
+let fontStyleEl = null;        // <style> element for the active @font-face
+let activeFontFilename = null; // filename of the currently loaded custom font
+
 // ── DOM refs ───────────────────────────────────────────────────────────────
 const tabBarEl        = document.getElementById('tab-area');
 const contentEl       = document.getElementById('content');
@@ -61,6 +66,10 @@ const WELCOME_HTML = contentEl.innerHTML;
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
   config = await invoke('get_config');
+  customFonts = await invoke('list_custom_fonts');
+  if (config.font_family.startsWith('custom:')) {
+    await loadCustomFont(config.font_family.slice(7));
+  }
   applyConfig(config);
 
   // Open a file passed as a CLI argument (no timing hack needed)
@@ -70,7 +79,7 @@ async function init() {
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(saveGeometry, 600);
+    resizeTimer = setTimeout(() => { saveGeometry(); updateTabOverflow(); }, 600);
   });
 
   await appWindow.onDragDropEvent((e) => {
@@ -91,9 +100,35 @@ function resolvedTheme(theme) {
   return systemDarkMQ.matches ? 'dark' : 'light';
 }
 
+async function loadCustomFont(filename) {
+  if (activeFontFilename === filename) return;
+  try {
+    const b64 = await invoke('get_font_data', { filename });
+    const ext = filename.split('.').pop().toLowerCase();
+    const format = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' }[ext] || 'truetype';
+    if (!fontStyleEl) {
+      fontStyleEl = document.createElement('style');
+      document.head.appendChild(fontStyleEl);
+    }
+    fontStyleEl.textContent = `@font-face { font-family: "OxideMD-Custom"; src: url("data:font/${ext};base64,${b64}") format("${format}"); }`;
+    activeFontFilename = filename;
+  } catch (err) {
+    activeFontFilename = null;
+    statusText.textContent = `Font error: ${err}`;
+    statusIndicator.classList.remove('hidden', 'status-loading');
+    setTimeout(clearStatus, 4000);
+  }
+}
+
 function applyConfig(cfg) {
   document.body.className = `theme-${resolvedTheme(cfg.theme)}`;
-  document.body.style.setProperty('--font-family', `"${cfg.font_family}", sans-serif`);
+  if (cfg.font_family.startsWith('custom:')) {
+    const filename = cfg.font_family.slice(7);
+    if (activeFontFilename !== filename) loadCustomFont(filename);
+    document.body.style.setProperty('--font-family', '"OxideMD-Custom", sans-serif');
+  } else {
+    document.body.style.setProperty('--font-family', `"${cfg.font_family}", sans-serif`);
+  }
   document.body.style.setProperty('--font-size', `${cfg.font_size}px`);
   document.body.style.setProperty('--h1-color', cfg.h1_color);
   document.body.style.setProperty('--h2-color', cfg.h2_color);
@@ -273,6 +308,7 @@ function renderTabBar() {
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'tab-close';
+    closeBtn.setAttribute('aria-label', `Close ${tab.title}`);
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
     closeBtn.title = `Close (${modKey}+W)`;
 
@@ -292,7 +328,23 @@ function renderTabBar() {
   // Scroll active tab into view
   const activeEl = tabBarEl.querySelector('.tab.active');
   if (activeEl) activeEl.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+
+  updateTabOverflow();
 }
+
+function updateTabOverflow() {
+  const hasOverflow = tabBarEl.scrollWidth > tabBarEl.clientWidth;
+  if (!hasOverflow) {
+    tabBarEl.classList.remove('has-overflow-left', 'has-overflow-right');
+    return;
+  }
+  const scrollLeft = tabBarEl.scrollLeft;
+  const maxScroll = tabBarEl.scrollWidth - tabBarEl.clientWidth;
+  tabBarEl.classList.toggle('has-overflow-left', scrollLeft > 2);
+  tabBarEl.classList.toggle('has-overflow-right', scrollLeft < maxScroll - 2);
+}
+
+tabBarEl.addEventListener('scroll', updateTabOverflow);
 
 // ── File loading ───────────────────────────────────────────────────────────
 async function loadFile(path) {
@@ -435,7 +487,7 @@ function runSearch(query) {
   const textNodes = [];
   let node;
   while ((node = walker.nextNode())) {
-    if (!node.parentElement.closest('pre')) textNodes.push(node);
+    textNodes.push(node);
   }
 
   for (const tn of textNodes) {
@@ -493,9 +545,12 @@ function updateSearchCount() {
 }
 
 // ── Custom selects ─────────────────────────────────────────────────────────
+// The font select is managed separately (dynamic options), so skip it here.
 document.querySelectorAll('.custom-select').forEach(sel => {
+  if (sel.id === 'setting-font') return;
   const trigger = sel.querySelector('.custom-select-trigger');
   const options = sel.querySelectorAll('.custom-select-option');
+  let focusedIndex = -1;
 
   // Expose .value getter/setter so existing code works unchanged
   Object.defineProperty(sel, 'value', {
@@ -508,24 +563,285 @@ document.querySelectorAll('.custom-select').forEach(sel => {
     }
   });
 
+  function openSelect() {
+    document.querySelectorAll('.custom-select.open').forEach(s => { if (s !== sel) closeSelect(s); });
+    sel.classList.add('open');
+    trigger.setAttribute('aria-expanded', 'true');
+    // Focus the currently selected option
+    focusedIndex = Array.from(options).findIndex(o => o.classList.contains('selected'));
+    if (focusedIndex === -1) focusedIndex = 0;
+    updateOptionFocus();
+  }
+
+  function closeSelect(s) {
+    s = s || sel;
+    s.classList.remove('open');
+    s.querySelector('.custom-select-trigger').setAttribute('aria-expanded', 'false');
+    s.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('focused'));
+  }
+
+  function updateOptionFocus() {
+    options.forEach((o, i) => o.classList.toggle('focused', i === focusedIndex));
+    if (focusedIndex >= 0) options[focusedIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  function selectFocused() {
+    if (focusedIndex >= 0 && options[focusedIndex]) {
+      sel.value = options[focusedIndex].dataset.value;
+    }
+    closeSelect();
+    trigger.focus();
+  }
+
   trigger.addEventListener('click', () => {
-    // Close any other open selects
-    document.querySelectorAll('.custom-select.open').forEach(s => { if (s !== sel) s.classList.remove('open'); });
-    sel.classList.toggle('open');
+    if (sel.classList.contains('open')) closeSelect();
+    else openSelect();
+  });
+
+  // Keyboard support
+  trigger.addEventListener('keydown', (e) => {
+    switch (e.key) {
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (sel.classList.contains('open')) selectFocused();
+        else openSelect();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        if (!sel.classList.contains('open')) { openSelect(); break; }
+        focusedIndex = Math.min(focusedIndex + 1, options.length - 1);
+        updateOptionFocus();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (!sel.classList.contains('open')) { openSelect(); break; }
+        focusedIndex = Math.max(focusedIndex - 1, 0);
+        updateOptionFocus();
+        break;
+      case 'Escape':
+        if (sel.classList.contains('open')) { e.preventDefault(); e.stopPropagation(); closeSelect(); trigger.focus(); }
+        break;
+      case 'Tab':
+        if (sel.classList.contains('open')) closeSelect();
+        break;
+    }
   });
 
   options.forEach(opt => {
     opt.addEventListener('click', () => {
       sel.value = opt.dataset.value;
-      sel.classList.remove('open');
+      closeSelect();
+      trigger.focus();
     });
   });
+});
+
+// ── Font dropdown (dynamic) ───────────────────────────────────────────────
+const fontSelect = document.getElementById('setting-font');
+const fontTrigger = fontSelect.querySelector('.custom-select-trigger');
+const fontOptionsContainer = fontSelect.querySelector('.custom-select-options');
+
+// ── Font select open/close/keyboard ───────────────────────────────────────
+function openFontSelect() {
+  document.querySelectorAll('.custom-select.open').forEach(s => {
+    s.classList.remove('open');
+    s.querySelector('.custom-select-trigger').setAttribute('aria-expanded', 'false');
+  });
+  fontSelect.classList.add('open');
+  fontTrigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeFontSelect() {
+  fontSelect.classList.remove('open');
+  fontTrigger.setAttribute('aria-expanded', 'false');
+  fontOptionsContainer.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('focused'));
+}
+
+fontTrigger.addEventListener('click', () => {
+  if (fontSelect.classList.contains('open')) closeFontSelect();
+  else openFontSelect();
+});
+
+fontTrigger.addEventListener('keydown', (e) => {
+  const opts = Array.from(fontOptionsContainer.querySelectorAll('.custom-select-option'));
+  let focusedIdx = opts.findIndex(o => o.classList.contains('focused'));
+
+  switch (e.key) {
+    case 'Enter': case ' ':
+      e.preventDefault();
+      if (fontSelect.classList.contains('open') && focusedIdx >= 0) {
+        opts[focusedIdx].click();
+      } else {
+        openFontSelect();
+      }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (!fontSelect.classList.contains('open')) { openFontSelect(); break; }
+      focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
+      opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+      if (opts[focusedIdx]) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (!fontSelect.classList.contains('open')) { openFontSelect(); break; }
+      focusedIdx = Math.max(focusedIdx - 1, 0);
+      opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+      if (opts[focusedIdx]) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
+      break;
+    case 'Escape':
+      if (fontSelect.classList.contains('open')) { e.preventDefault(); e.stopPropagation(); closeFontSelect(); fontTrigger.focus(); }
+      break;
+    case 'Tab':
+      if (fontSelect.classList.contains('open')) closeFontSelect();
+      break;
+  }
+});
+
+// Override the value getter/setter for the font select to work with dynamic options
+Object.defineProperty(fontSelect, 'value', {
+  get() { return fontSelect.dataset.value || ''; },
+  set(v) {
+    fontSelect.dataset.value = v;
+    const opts = fontSelect.querySelectorAll('.custom-select-option');
+    const match = fontSelect.querySelector(`.custom-select-option[data-value="${CSS.escape(v)}"]`);
+    if (match) {
+      // Use the label span text for custom fonts, or full text for built-in
+      const label = match.querySelector('.custom-font-label');
+      fontTrigger.textContent = label ? label.textContent : match.textContent;
+    } else {
+      fontTrigger.textContent = v;
+    }
+    opts.forEach(o => o.classList.toggle('selected', o.dataset.value === v));
+  }
+});
+
+const BUILTIN_FONTS = [
+  { value: 'system-ui',                label: 'System Default' },
+  { value: 'Georgia',                  label: 'Georgia' },
+  { value: 'Consolas, monospace',      label: 'Consolas' },
+  { value: 'Arial',                    label: 'Arial' },
+  { value: 'Verdana',                  label: 'Verdana' },
+  { value: 'Times New Roman, serif',   label: 'Times New Roman' },
+];
+
+function rebuildFontDropdown() {
+  fontOptionsContainer.innerHTML = '';
+
+  // Built-in fonts
+  for (const f of BUILTIN_FONTS) {
+    const opt = document.createElement('div');
+    opt.className = 'custom-select-option';
+    opt.dataset.value = f.value;
+    opt.setAttribute('role', 'option');
+    opt.textContent = f.label;
+    fontOptionsContainer.appendChild(opt);
+  }
+
+  // Custom fonts
+  const sep = document.createElement('div');
+  sep.className = 'font-options-sep';
+  fontOptionsContainer.appendChild(sep);
+
+  if (customFonts.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'font-empty-hint';
+    hint.textContent = 'No custom fonts installed';
+    fontOptionsContainer.appendChild(hint);
+  } else {
+    for (const f of customFonts) {
+      const opt = document.createElement('div');
+      opt.className = 'custom-select-option custom-font-option';
+      opt.dataset.value = `custom:${f.filename}`;
+      opt.setAttribute('role', 'option');
+
+      const label = document.createElement('span');
+      label.className = 'custom-font-label';
+      label.textContent = f.name;
+      opt.appendChild(label);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'custom-font-remove';
+      removeBtn.setAttribute('aria-label', `Remove ${f.name}`);
+      removeBtn.title = `Remove ${f.name}`;
+      removeBtn.innerHTML = '&#x2715;';
+      opt.appendChild(removeBtn);
+
+      fontOptionsContainer.appendChild(opt);
+    }
+  }
+
+  // "Add font…" action
+  const sep2 = document.createElement('div');
+  sep2.className = 'font-options-sep';
+  fontOptionsContainer.appendChild(sep2);
+
+  const addOpt = document.createElement('div');
+  addOpt.className = 'custom-select-option font-add-option';
+  addOpt.dataset.value = '__add_font__';
+  addOpt.setAttribute('role', 'option');
+  addOpt.textContent = 'Add font\u2026';
+  fontOptionsContainer.appendChild(addOpt);
+
+  // Re-highlight current selection
+  const current = fontSelect.dataset.value || '';
+  fontOptionsContainer.querySelectorAll('.custom-select-option').forEach(o => {
+    o.classList.toggle('selected', o.dataset.value === current);
+  });
+}
+
+// Event delegation for font dropdown clicks
+fontOptionsContainer.addEventListener('click', async (e) => {
+  const removeBtn = e.target.closest('.custom-font-remove');
+  if (removeBtn) {
+    e.stopPropagation();
+    const opt = removeBtn.closest('.custom-select-option');
+    const label = opt.querySelector('.custom-font-label');
+    const fontName = label ? label.textContent : 'this font';
+    if (!confirm(`Remove "${fontName}"? The font file will be deleted.`)) return;
+    const filename = opt.dataset.value.slice(7); // strip "custom:"
+    await invoke('remove_font', { filename });
+    customFonts = await invoke('list_custom_fonts');
+    // If the removed font was selected, fall back to system-ui
+    if (fontSelect.dataset.value === opt.dataset.value) {
+      fontSelect.value = 'system-ui';
+    }
+    if (activeFontFilename === filename) activeFontFilename = null;
+    rebuildFontDropdown();
+    return;
+  }
+
+  const opt = e.target.closest('.custom-select-option');
+  if (!opt) return;
+
+  if (opt.dataset.value === '__add_font__') {
+    e.stopPropagation();
+    // Close dropdown, open file picker
+    fontSelect.classList.remove('open');
+    fontTrigger.setAttribute('aria-expanded', 'false');
+    const result = await invoke('install_font');
+    if (result) {
+      customFonts = await invoke('list_custom_fonts');
+      rebuildFontDropdown();
+      fontSelect.value = `custom:${result.filename}`;
+    }
+    return;
+  }
+
+  // Normal font selection
+  fontSelect.value = opt.dataset.value;
+  fontSelect.classList.remove('open');
+  fontTrigger.setAttribute('aria-expanded', 'false');
 });
 
 // Close custom selects when clicking outside
 document.addEventListener('click', e => {
   if (!e.target.closest('.custom-select')) {
-    document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
+    document.querySelectorAll('.custom-select.open').forEach(s => {
+      s.classList.remove('open');
+      s.querySelector('.custom-select-trigger').setAttribute('aria-expanded', 'false');
+    });
   }
 });
 
@@ -547,26 +863,63 @@ document.querySelectorAll('.custom-number').forEach(num => {
   num.querySelector('.increment').addEventListener('click', () => { num.value = num.value + step; });
 });
 
+// ── Focus trap ─────────────────────────────────────────────────────────────
+let releaseFocusTrap = null;
+
+function trapFocus(container) {
+  const focusableSelector = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+  function handler(e) {
+    if (e.key !== 'Tab') return;
+    const focusable = Array.from(container.querySelectorAll(focusableSelector)).filter(el => el.offsetParent !== null);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  container.addEventListener('keydown', handler);
+  // Focus first focusable element
+  const first = container.querySelector(focusableSelector);
+  if (first) first.focus();
+
+  return () => container.removeEventListener('keydown', handler);
+}
+
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings() {
   if (hasActiveOverlay()) return;
   document.getElementById('setting-theme').value  = config.theme;
-  document.getElementById('setting-font').value   = config.font_family;
+  rebuildFontDropdown();
+  fontSelect.value = config.font_family;
   document.getElementById('setting-size').value   = config.font_size;
   document.getElementById('setting-h1').value     = config.h1_color;
   document.getElementById('setting-h2').value     = config.h2_color;
   document.getElementById('setting-h3').value     = config.h3_color;
   document.getElementById('setting-bullet').value = config.bullet_color;
   settingsOverlay.classList.remove('hidden');
+  releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
 }
 
-function closeSettings() { settingsOverlay.classList.add('hidden'); }
+function closeSettings() {
+  if (releaseFocusTrap) { releaseFocusTrap(); releaseFocusTrap = null; }
+  if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
+  settingsOverlay.classList.add('closing');
+  settingsOverlay.addEventListener('animationend', () => {
+    settingsOverlay.classList.add('hidden');
+    settingsOverlay.classList.remove('closing');
+  }, { once: true });
+}
 
 async function saveSettings() {
   const newConfig = {
     ...config,
     theme:        document.getElementById('setting-theme').value,
-    font_family:  document.getElementById('setting-font').value,
+    font_family:  fontSelect.value,
     font_size:    parseInt(document.getElementById('setting-size').value, 10),
     h1_color:     document.getElementById('setting-h1').value,
     h2_color:     document.getElementById('setting-h2').value,
@@ -576,6 +929,9 @@ async function saveSettings() {
   setLoading();
   try {
     await invoke('save_config_cmd', { config: newConfig });
+    if (newConfig.font_family.startsWith('custom:')) {
+      await loadCustomFont(newConfig.font_family.slice(7));
+    }
     config = newConfig;
     applyConfig(config);
     closeSettings();
@@ -584,6 +940,18 @@ async function saveSettings() {
   } finally {
     clearStatus();
   }
+}
+
+async function resetSettings() {
+  const defaults = await invoke('get_default_config');
+  document.getElementById('setting-theme').value  = defaults.theme;
+  rebuildFontDropdown();
+  fontSelect.value = defaults.font_family;
+  document.getElementById('setting-size').value   = defaults.font_size;
+  document.getElementById('setting-h1').value     = defaults.h1_color;
+  document.getElementById('setting-h2').value     = defaults.h2_color;
+  document.getElementById('setting-h3').value     = defaults.h3_color;
+  document.getElementById('setting-bullet').value = defaults.bullet_color;
 }
 
 // ── Event wiring ───────────────────────────────────────────────────────────
@@ -633,6 +1001,7 @@ searchClose.addEventListener('click', closeSearch);
 
 document.getElementById('settings-close').addEventListener('click', closeSettings);
 document.getElementById('settings-cancel').addEventListener('click', closeSettings);
+document.getElementById('settings-reset').addEventListener('click', resetSettings);
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 

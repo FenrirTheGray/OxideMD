@@ -4,7 +4,9 @@ mod highlight;
 mod markdown;
 mod util;
 
-use tauri::{Emitter, Manager};
+#[cfg(target_os = "linux")]
+use tauri::Emitter;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -16,9 +18,14 @@ pub fn run() {
             commands::get_cli_file,
             commands::pick_file,
             commands::get_config,
+            commands::get_default_config,
             commands::save_config_cmd,
             commands::save_window_geometry,
             commands::open_url,
+            commands::install_font,
+            commands::remove_font,
+            commands::list_custom_fonts,
+            commands::get_font_data,
         ])
         .setup(|app| {
             // Restore saved window geometry
