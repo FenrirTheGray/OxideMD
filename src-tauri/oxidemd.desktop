@@ -8,4 +8,4 @@ Terminal=false
 Type=Application
 Categories=Utility;TextEditor;Office;
 MimeType=text/markdown;text/x-markdown;
-StartupWMClass=OxideMD
+StartupWMClass=oxidemd
