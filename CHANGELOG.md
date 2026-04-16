@@ -4,7 +4,18 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [1.4.1] - 2026-04-16
+## [1.5.0] - 2026-04-16
+
+### Added
+
+- In-app update checker: "Check for updates" button in settings queries the GitHub releases endpoint and prompts to download when a new version is available
+- Current version label displayed in the settings panel
+- Tauri updater plugin (`tauri-plugin-updater`) integrated with a public signing key for verified update payloads
+
+### Changed
+
+- GitHub Actions release workflow now passes `APPLE_SIGNING_IDENTITY`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to the Tauri build step for update artifact signing
+- `updater:default` capability added to the default permissions set
 
 ### Fixed
 

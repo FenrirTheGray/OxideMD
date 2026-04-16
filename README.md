@@ -18,6 +18,7 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 - **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
 - **Custom title bar** — frameless window with integrated minimize/maximize/close controls
 - **Window geometry** — size and maximized state are restored between sessions
+- **Update checker** — check for new releases from the settings panel; prompts to download when an update is available
 - **Tiny footprint** — no Electron, no bundled browser; uses the native webview on each platform (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS)
 
 ## Keyboard Shortcuts
