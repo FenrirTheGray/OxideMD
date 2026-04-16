@@ -13,6 +13,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
             commands::get_cli_file,
@@ -26,6 +27,7 @@ pub fn run() {
             commands::remove_font,
             commands::list_custom_fonts,
             commands::get_font_data,
+            commands::check_for_updates,
         ])
         .setup(|app| {
             // Restore saved window geometry

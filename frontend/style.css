@@ -1285,6 +1285,50 @@ mark.search-match.current {
   opacity: 1;
 }
 
+/* ── Settings: update section ─────────────────────────────────────── */
+.settings-value {
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#btn-check-updates {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 16px;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+#btn-check-updates:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#btn-check-updates:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#btn-check-updates:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#btn-check-updates svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
 /* ── Accessibility: reduced motion ────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
