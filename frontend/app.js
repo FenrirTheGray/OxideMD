@@ -891,8 +891,34 @@ function trapFocus(container) {
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
+async function checkForUpdates() {
+  const btn = document.getElementById('btn-check-updates');
+  const origHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><polyline points="21 3 21 9 15 9"/></svg>Checking\u2026';
+  try {
+    const result = await invoke('check_for_updates');
+    if (result.available) {
+      const install = confirm(`Update available: v${result.version}\n\n${result.body || 'A new version is available.'}\n\nWould you like to download it?`);
+      if (install) {
+        await invoke('open_url', { url: 'https://github.com/FenrirTheGray/OxideMD/releases/latest' });
+      }
+    } else {
+      alert('You are running the latest version.');
+    }
+  } catch (e) {
+    alert('Failed to check for updates: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHTML;
+  }
+}
+
 function openSettings() {
   if (hasActiveOverlay()) return;
+  window.__TAURI__.app.getVersion().then(v => {
+    document.getElementById('settings-version').textContent = 'v' + v;
+  });
   document.getElementById('setting-theme').value  = config.theme;
   rebuildFontDropdown();
   fontSelect.value = config.font_family;
@@ -1003,6 +1029,7 @@ document.getElementById('settings-close').addEventListener('click', closeSetting
 document.getElementById('settings-cancel').addEventListener('click', closeSettings);
 document.getElementById('settings-reset').addEventListener('click', resetSettings);
 document.getElementById('settings-save').addEventListener('click', saveSettings);
+document.getElementById('btn-check-updates').addEventListener('click', checkForUpdates);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
 // ── Global keyboard shortcuts ──────────────────────────────────────────────
