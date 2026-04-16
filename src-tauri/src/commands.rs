@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_updater::UpdaterExt;
 
 #[tauri::command]
 pub async fn open_file(path: String) -> Result<OpenResult, String> {
@@ -188,4 +189,32 @@ pub async fn get_font_data(filename: String) -> Result<String, String> {
 pub struct OpenResult {
     pub html: String,
     pub title: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct UpdateResult {
+    pub available: bool,
+    pub version: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateResult, String> {
+    let updater = app
+        .updater_builder()
+        .build()
+        .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(UpdateResult {
+            available: true,
+            version: update.version.clone(),
+            body: update.body.clone().unwrap_or_default(),
+        }),
+        Ok(None) => Ok(UpdateResult {
+            available: false,
+            version: String::new(),
+            body: String::new(),
+        }),
+        Err(e) => Err(format!("{e}")),
+    }
 }
