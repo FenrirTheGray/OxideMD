@@ -1082,7 +1082,10 @@ btnWinClose.addEventListener('click', () => appWindow.close());
 appWindow.onResized(syncMaximizeIcon);
 
 btnOpen.addEventListener('click', openFilePicker);
-document.getElementById('welcome-open')?.addEventListener('click', openFilePicker);
+// Delegated: the welcome button is re-created each time showWelcome() rewrites innerHTML.
+contentEl.addEventListener('click', (e) => {
+  if (e.target.closest('#welcome-open')) openFilePicker();
+});
 btnClose.addEventListener('click', () => { if (activeTabId !== null) closeTab(activeTabId); });
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
