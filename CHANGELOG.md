@@ -4,6 +4,25 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] - 2026-04-18
+
+### Added
+
+- Line height setting: adjustable from 1.0 to 2.4 in 0.1 increments (default 1.8)
+- Reading width setting: adjustable content column width from 480 to 1400 pixels in 20 pixel steps (default 800), scales with zoom
+- Tabbed settings dialog with three categories: Reading (font, size, line height, reading width), Colors (theme, heading colors, bullets), and About (version, update check, repository link)
+- Arrow key navigation between settings tabs
+- Color picker cards with live hex value display and a preview card that reflects heading and bullet color choices in real time
+- Redesigned welcome screen with OxideMD wordmark, hero "Open a Markdown file" button, and a full keyboard shortcut reference
+- Inline update status panel in the About tab with distinct states for "update available" (with Download button), "up to date", and "error", replacing the previous browser confirm/alert dialogs
+
+### Changed
+
+- Minimum window size increased from 600x400 to 640x480 to accommodate the new settings layout
+- Zoom controls are now disabled when no tab is open, matching the other toolbar buttons
+- Custom number inputs now support configurable min/max/step, decimal precision, and unit suffix via `data-*` attributes
+- "Reset to defaults" in settings now only resets fields on the currently active tab, leaving other tabs untouched
+
 ## [1.5.0] - 2026-04-16
 
 ### Added
