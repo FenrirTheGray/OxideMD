@@ -7,7 +7,7 @@ src-tauri/gen/
 # Icon generation
 node_modules/
 package-lock.json
-icon.png
+/icon.png
 
 # OS
 .DS_Store
