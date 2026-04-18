@@ -12,7 +12,8 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 - **Search** — `Ctrl+F` toggles search with match highlighting, next/previous navigation, match counter, and case-sensitive toggle
 - **Theming** — dark, light, and system themes (Atom One Dark / Atom One Light) with configurable accent colors for H1/H2/H3 headings and list bullets
 - **Custom fonts** — install `.ttf`/`.otf`/`.woff`/`.woff2` font files from the settings font dropdown; fonts are stored in the OxideMD config folder and persist across sessions
-- **Settings** — persistent configuration (font family, font size, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
+- **Settings** — tabbed settings dialog (Reading / Colors / About) with persistent configuration (font family, font size, line height, reading width, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
+- **Reading layout** — configurable line height (1.0–2.4) and reading width (480–1400 px) that scales with zoom
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
 - **Multi-file open** — select multiple files at once from the open dialog
 - **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
