@@ -4,6 +4,14 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] - 2026-04-18
+
+### Fixed
+
+- Welcome screen "Browse" button became unresponsive after opening and closing a file (the button node was destroyed when the welcome view re-rendered, orphaning its click listener); now handled via event delegation
+- About tab icon failed to display in release bundles because `frontend/icon.png` was matched by a root-level `.gitignore` rule and excluded from version control
+- "Check for updates" never returned a result because release bundles did not include the updater manifest; enabled `createUpdaterArtifacts` so future releases publish `latest.json` and `.sig` files
+
 ## [1.6.0] - 2026-04-18
 
 ### Added
