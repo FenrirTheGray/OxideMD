@@ -1506,7 +1506,6 @@ mark.search-match.current {
 
 #settings-footer #settings-reset {
   margin-right: auto;
-  border-color: transparent;
   color: var(--fg-muted);
   font-weight: 500;
 }
