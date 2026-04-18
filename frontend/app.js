@@ -90,6 +90,8 @@ async function init() {
       }
     }
   });
+
+  syncMaximizeIcon();
 }
 
 // ── Config / theme ─────────────────────────────────────────────────────────
@@ -130,6 +132,8 @@ function applyConfig(cfg) {
     document.body.style.setProperty('--font-family', `"${cfg.font_family}", sans-serif`);
   }
   document.body.style.setProperty('--font-size', `${cfg.font_size}px`);
+  document.body.style.setProperty('--content-line-height', cfg.line_height);
+  document.body.style.setProperty('--reading-width', `${cfg.reading_width}px`);
   document.body.style.setProperty('--h1-color', cfg.h1_color);
   document.body.style.setProperty('--h2-color', cfg.h2_color);
   document.body.style.setProperty('--h3-color', cfg.h3_color);
@@ -160,6 +164,9 @@ function syncToolbar() {
   btnClose.disabled  = !hasTab;
   btnReload.disabled = !hasTab;
   btnSearch.disabled = !hasTab;
+  btnZoomIn.disabled  = !hasTab;
+  btnZoomOut.disabled = !hasTab;
+  zoomLabel.disabled  = !hasTab;
 }
 
 // ── Tab management ─────────────────────────────────────────────────────────
@@ -257,15 +264,13 @@ function showWelcome() {
   filePathEl.textContent = '';
   filePathEl.title = '';
   zoomLabel.textContent = '100%';
-  btnZoomIn.disabled = false;
-  btnZoomOut.disabled = false;
   clearStatus();
 }
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
 function applyZoom(zoom) {
   contentEl.style.fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
-  contentEl.style.maxWidth = `${Math.round(800 * zoom)}px`;
+  contentEl.style.maxWidth = `${Math.round((config?.reading_width ?? 800) * zoom)}px`;
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
   btnZoomOut.disabled = zoom <= ZOOM_MIN;
   btnZoomIn.disabled  = zoom >= ZOOM_MAX;
@@ -847,15 +852,27 @@ document.addEventListener('click', e => {
 
 // ── Custom number inputs ───────────────────────────────────────────────────
 document.querySelectorAll('.custom-number').forEach(num => {
-  const display = num.querySelector('.custom-number-value');
-  const min = 8, max = 48, step = 1;
+  const display  = num.querySelector('.custom-number-value');
+  const min      = parseFloat(num.dataset.min  ?? '8');
+  const max      = parseFloat(num.dataset.max  ?? '48');
+  const step     = parseFloat(num.dataset.step ?? '1');
+  const decimals = parseInt(num.dataset.decimals ?? '0', 10);
+  const suffix   = num.dataset.suffix ?? '';
+
+  const quantize = v => {
+    const steps = Math.round((v - min) / step);
+    return parseFloat((min + steps * step).toFixed(decimals + 6));
+  };
+  const format = v => v.toFixed(decimals) + suffix;
 
   Object.defineProperty(num, 'value', {
-    get() { return parseInt(num.dataset.value, 10) || min; },
+    get() { return parseFloat(num.dataset.value) || min; },
     set(v) {
-      const clamped = Math.min(max, Math.max(min, parseInt(v, 10) || min));
-      num.dataset.value = clamped;
-      display.textContent = clamped;
+      const parsed = parseFloat(v);
+      const clamped = Math.min(max, Math.max(min, Number.isFinite(parsed) ? parsed : min));
+      const snapped = quantize(clamped);
+      num.dataset.value = snapped;
+      display.textContent = format(snapped);
     }
   });
 
@@ -891,23 +908,46 @@ function trapFocus(container) {
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────
+const UPDATE_ICON_AVAILABLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>';
+const UPDATE_ICON_CURRENT   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+const UPDATE_ICON_ERROR     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+
+function showUpdateStatus(kind, html) {
+  const el = document.getElementById('update-status');
+  el.className = `update-status ${kind}`;
+  el.innerHTML = html;
+  void el.offsetWidth; // restart animation
+  el.classList.remove('hidden');
+}
+
+function hideUpdateStatus() {
+  const el = document.getElementById('update-status');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
+
 async function checkForUpdates() {
   const btn = document.getElementById('btn-check-updates');
   const origHTML = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><polyline points="21 3 21 9 15 9"/></svg>Checking\u2026';
+  hideUpdateStatus();
   try {
     const result = await invoke('check_for_updates');
     if (result.available) {
-      const install = confirm(`Update available: v${result.version}\n\n${result.body || 'A new version is available.'}\n\nWould you like to download it?`);
-      if (install) {
-        await invoke('open_url', { url: 'https://github.com/FenrirTheGray/OxideMD/releases/latest' });
-      }
+      showUpdateStatus('available', `
+        ${UPDATE_ICON_AVAILABLE}
+        <span class="update-message">Update available: <span class="update-version">v${result.version}</span></span>
+        <button type="button" class="update-download">Download</button>
+      `);
+      document.querySelector('#update-status .update-download').addEventListener('click', () => {
+        invoke('open_url', { url: 'https://github.com/FenrirTheGray/OxideMD/releases/latest' });
+      });
     } else {
-      alert('You are running the latest version.');
+      showUpdateStatus('current', `${UPDATE_ICON_CURRENT}<span class="update-message">You are running the latest version.</span>`);
     }
   } catch (e) {
-    alert('Failed to check for updates: ' + e);
+    showUpdateStatus('error', `${UPDATE_ICON_ERROR}<span class="update-message">Failed to check for updates: ${String(e).replace(/</g, '&lt;')}</span>`);
   } finally {
     btn.disabled = false;
     btn.innerHTML = origHTML;
@@ -916,19 +956,52 @@ async function checkForUpdates() {
 
 function openSettings() {
   if (hasActiveOverlay()) return;
+  hideUpdateStatus();
   window.__TAURI__.app.getVersion().then(v => {
     document.getElementById('settings-version').textContent = 'v' + v;
   });
-  document.getElementById('setting-theme').value  = config.theme;
+  document.getElementById('setting-theme').value         = config.theme;
   rebuildFontDropdown();
   fontSelect.value = config.font_family;
-  document.getElementById('setting-size').value   = config.font_size;
-  document.getElementById('setting-h1').value     = config.h1_color;
-  document.getElementById('setting-h2').value     = config.h2_color;
-  document.getElementById('setting-h3').value     = config.h3_color;
-  document.getElementById('setting-bullet').value = config.bullet_color;
+  document.getElementById('setting-size').value          = config.font_size;
+  document.getElementById('setting-line-height').value   = config.line_height;
+  document.getElementById('setting-reading-width').value = config.reading_width;
+  document.getElementById('setting-h1').value            = config.h1_color;
+  document.getElementById('setting-h2').value            = config.h2_color;
+  document.getElementById('setting-h3').value            = config.h3_color;
+  document.getElementById('setting-bullet').value        = config.bullet_color;
+  updatePreviewColors();
+  activateSettingsTab('reading');
   settingsOverlay.classList.remove('hidden');
   releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
+}
+
+function activateSettingsTab(name) {
+  const tabs = document.querySelectorAll('.settings-tab');
+  const panels = document.querySelectorAll('.settings-panel');
+  tabs.forEach(t => {
+    const on = t.dataset.tab === name;
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+    t.tabIndex = on ? 0 : -1;
+  });
+  panels.forEach(p => {
+    const on = p.id === `settings-panel-${name}`;
+    p.classList.toggle('active', on);
+    p.hidden = !on;
+  });
+  document.getElementById('settings-dialog').classList.toggle('on-about', name === 'about');
+}
+
+function updatePreviewColors() {
+  const body = document.body.style;
+  const keys = ['h1', 'h2', 'h3', 'bullet'];
+  keys.forEach(k => {
+    const v = document.getElementById(`setting-${k}`).value;
+    body.setProperty(`--preview-${k}`, v);
+    const hex = document.getElementById(`setting-${k}-hex`);
+    if (hex) hex.textContent = v.toLowerCase();
+  });
 }
 
 function closeSettings() {
@@ -944,13 +1017,15 @@ function closeSettings() {
 async function saveSettings() {
   const newConfig = {
     ...config,
-    theme:        document.getElementById('setting-theme').value,
-    font_family:  fontSelect.value,
-    font_size:    parseInt(document.getElementById('setting-size').value, 10),
-    h1_color:     document.getElementById('setting-h1').value,
-    h2_color:     document.getElementById('setting-h2').value,
-    h3_color:     document.getElementById('setting-h3').value,
-    bullet_color: document.getElementById('setting-bullet').value,
+    theme:          document.getElementById('setting-theme').value,
+    font_family:    fontSelect.value,
+    font_size:      parseInt(document.getElementById('setting-size').value, 10),
+    line_height:    parseFloat(document.getElementById('setting-line-height').value),
+    reading_width:  parseInt(document.getElementById('setting-reading-width').value, 10),
+    h1_color:       document.getElementById('setting-h1').value,
+    h2_color:       document.getElementById('setting-h2').value,
+    h3_color:       document.getElementById('setting-h3').value,
+    bullet_color:   document.getElementById('setting-bullet').value,
   };
   setLoading();
   try {
@@ -960,6 +1035,8 @@ async function saveSettings() {
     }
     config = newConfig;
     applyConfig(config);
+    const tab = activeTab();
+    if (tab) applyZoom(tab.zoom);
     closeSettings();
   } catch (e) {
     alert('Failed to save settings: ' + e);
@@ -970,14 +1047,21 @@ async function saveSettings() {
 
 async function resetSettings() {
   const defaults = await invoke('get_default_config');
-  document.getElementById('setting-theme').value  = defaults.theme;
-  rebuildFontDropdown();
-  fontSelect.value = defaults.font_family;
-  document.getElementById('setting-size').value   = defaults.font_size;
-  document.getElementById('setting-h1').value     = defaults.h1_color;
-  document.getElementById('setting-h2').value     = defaults.h2_color;
-  document.getElementById('setting-h3').value     = defaults.h3_color;
-  document.getElementById('setting-bullet').value = defaults.bullet_color;
+  const activeTabName = document.querySelector('.settings-tab.active')?.dataset.tab;
+  if (activeTabName === 'reading') {
+    rebuildFontDropdown();
+    fontSelect.value = defaults.font_family;
+    document.getElementById('setting-size').value          = defaults.font_size;
+    document.getElementById('setting-line-height').value   = defaults.line_height;
+    document.getElementById('setting-reading-width').value = defaults.reading_width;
+  } else if (activeTabName === 'colors') {
+    document.getElementById('setting-theme').value  = defaults.theme;
+    document.getElementById('setting-h1').value     = defaults.h1_color;
+    document.getElementById('setting-h2').value     = defaults.h2_color;
+    document.getElementById('setting-h3').value     = defaults.h3_color;
+    document.getElementById('setting-bullet').value = defaults.bullet_color;
+    updatePreviewColors();
+  }
 }
 
 // ── Event wiring ───────────────────────────────────────────────────────────
@@ -989,6 +1073,7 @@ async function syncMaximizeIcon() {
   const isMax = await appWindow.isMaximized();
   btnMaximize.querySelector('svg').innerHTML = isMax ? ICON_RESTORE : ICON_MAXIMIZE;
   btnMaximize.title = isMax ? 'Restore' : 'Maximize';
+  document.body.classList.toggle('maximized', isMax);
 }
 
 btnMinimize.addEventListener('click', () => appWindow.minimize());
@@ -997,6 +1082,7 @@ btnWinClose.addEventListener('click', () => appWindow.close());
 appWindow.onResized(syncMaximizeIcon);
 
 btnOpen.addEventListener('click', openFilePicker);
+document.getElementById('welcome-open')?.addEventListener('click', openFilePicker);
 btnClose.addEventListener('click', () => { if (activeTabId !== null) closeTab(activeTabId); });
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
@@ -1031,6 +1117,35 @@ document.getElementById('settings-reset').addEventListener('click', resetSetting
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 document.getElementById('btn-check-updates').addEventListener('click', checkForUpdates);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
+
+// Settings tab switching
+const settingsTabButtons = Array.from(document.querySelectorAll('.settings-tab'));
+settingsTabButtons.forEach(btn => {
+  btn.addEventListener('click', () => activateSettingsTab(btn.dataset.tab));
+});
+document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const idx = settingsTabButtons.findIndex(b => b.classList.contains('active'));
+  if (idx === -1) return;
+  e.preventDefault();
+  const delta = e.key === 'ArrowRight' ? 1 : -1;
+  const next = settingsTabButtons[(idx + delta + settingsTabButtons.length) % settingsTabButtons.length];
+  activateSettingsTab(next.dataset.tab);
+  next.focus();
+});
+
+// Live preview updates
+['setting-h1', 'setting-h2', 'setting-h3', 'setting-bullet'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updatePreviewColors);
+});
+
+// About panel external link
+document.querySelectorAll('.about-link[data-url]').forEach(a => {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    invoke('open_url', { url: a.dataset.url });
+  });
+});
 
 // ── Global keyboard shortcuts ──────────────────────────────────────────────
 // Accept both Ctrl and Cmd (metaKey) so shortcuts work on macOS
@@ -1143,11 +1258,10 @@ function applyPlatformLabels() {
   const tabCloses = tabBarEl.querySelectorAll('.tab-close');
   tabCloses.forEach(b => b.title = `Close (${modKey}+W)`);
 
-  // Welcome hint
-  const hintEl = document.querySelector('.welcome-hint');
-  if (hintEl) {
-    hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
-  }
+  // Welcome screen: swap Ctrl → Cmd on macOS
+  document.querySelectorAll('#welcome kbd.mod-key').forEach(k => {
+    k.textContent = modKey;
+  });
 }
 
 applyPlatformLabels();

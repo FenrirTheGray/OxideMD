@@ -104,23 +104,44 @@
   <div id="content-scroll">
     <main id="content">
       <div id="welcome">
-        <div class="welcome-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
-          </svg>
+        <div class="welcome-wordmark">
+          <h1 class="welcome-wordmark-name">OxideMD</h1>
+          <div class="welcome-wordmark-tag">A lightweight Markdown reader</div>
         </div>
-        <p class="welcome-title">No file open</p>
-        <p class="welcome-sub">Open a Markdown file to start reading.</p>
-        <p class="welcome-hint">
-          <kbd>Ctrl+O</kbd>
-          to open &nbsp;&middot;&nbsp; or drag a
-          <kbd>.md</kbd>
-          file here
-        </p>
+
+        <button class="welcome-hero" id="welcome-open" type="button">
+          <div class="welcome-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            </svg>
+          </div>
+          <div class="welcome-hero-copy">
+            <h2 class="welcome-hero-title">Open a Markdown file</h2>
+            <div class="welcome-hero-sub">
+              Press <kbd class="mod-key">Ctrl</kbd><kbd>O</kbd> or drag a <kbd>.md</kbd> file anywhere on this window.
+            </div>
+          </div>
+          <span class="welcome-hero-cta">Browse&hellip;</span>
+        </button>
+
+        <div class="welcome-shortcuts-section">
+          <div class="welcome-col-title">Keyboard shortcuts</div>
+          <div class="welcome-shortcuts">
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Open file</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>O</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Search in document</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>F</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Reload file</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>R</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Close tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>W</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Next tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Tab</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Previous tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>Tab</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Move tab left</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>&larr;</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Move tab right</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>&rarr;</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Zoom in</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>+</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Zoom out</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>&minus;</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Reset zoom</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>0</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Scroll to top</span><span class="welcome-shortcut-keys"><kbd>Home</kbd></span></div>
+            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Close dialog / search</span><span class="welcome-shortcut-keys"><kbd>Esc</kbd></span></div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -139,13 +160,13 @@
     </div>
 
     <div id="zoom-controls" role="group" aria-label="Zoom controls">
-      <button id="btn-zoom-out" title="Zoom out (Ctrl+-)" aria-label="Zoom out">
+      <button id="btn-zoom-out" title="Zoom out (Ctrl+-)" aria-label="Zoom out" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
       </button>
-      <button id="zoom-label" title="Reset zoom (Ctrl+0)" aria-label="Reset zoom to 100%">100%</button>
-      <button id="btn-zoom-in"  title="Zoom in (Ctrl++)"  aria-label="Zoom in">
+      <button id="zoom-label" title="Reset zoom (Ctrl+0)" aria-label="Reset zoom to 100%" disabled>100%</button>
+      <button id="btn-zoom-in"  title="Zoom in (Ctrl++)"  aria-label="Zoom in" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -162,83 +183,167 @@
     <div id="settings-dialog">
 
       <div id="settings-header">
-        <span id="settings-dialog-title">Appearance</span>
+        <span id="settings-dialog-title">Settings</span>
         <button id="settings-close" aria-label="Close settings">&#x2715;</button>
+      </div>
+
+      <div id="settings-tabs" role="tablist" aria-label="Settings categories">
+        <button class="settings-tab active" role="tab" data-tab="reading"
+                id="settings-tab-reading" aria-selected="true"
+                aria-controls="settings-panel-reading">Reading</button>
+        <button class="settings-tab" role="tab" data-tab="colors"
+                id="settings-tab-colors" aria-selected="false" tabindex="-1"
+                aria-controls="settings-panel-colors">Colors</button>
+        <button class="settings-tab" role="tab" data-tab="about"
+                id="settings-tab-about" aria-selected="false" tabindex="-1"
+                aria-controls="settings-panel-about">About</button>
       </div>
 
       <div id="settings-body">
 
-        <!-- Interface section -->
-        <div class="settings-section">Interface</div>
+        <!-- ── Reading panel ────────────────────────────────────────── -->
+        <div class="settings-panel active" id="settings-panel-reading"
+             role="tabpanel" aria-labelledby="settings-tab-reading">
 
-        <div class="settings-row">
-          <label>Theme</label>
-          <div class="custom-select" id="setting-theme" aria-label="Color theme">
-            <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
-            <div class="custom-select-options" role="listbox">
-              <div class="custom-select-option" data-value="dark" role="option">Dark</div>
-              <div class="custom-select-option" data-value="light" role="option">Light</div>
-              <div class="custom-select-option" data-value="system" role="option">System</div>
+          <div class="settings-row">
+            <label>Font</label>
+            <div class="custom-select" id="setting-font" aria-label="Font family">
+              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+              <div class="custom-select-options" role="listbox"></div>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Font size</label>
+            <div class="custom-number" id="setting-size"
+                 data-min="8" data-max="48" data-step="1" data-suffix=" px"
+                 aria-label="Font size in pixels">
+              <button class="custom-number-btn decrement" aria-label="Decrease font size">&#x2212;</button>
+              <span class="custom-number-value"></span>
+              <button class="custom-number-btn increment" aria-label="Increase font size">&#x2B;</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Line height</label>
+            <div class="custom-number" id="setting-line-height"
+                 data-min="1.0" data-max="2.4" data-step="0.1" data-decimals="1"
+                 aria-label="Line height">
+              <button class="custom-number-btn decrement" aria-label="Decrease line height">&#x2212;</button>
+              <span class="custom-number-value"></span>
+              <button class="custom-number-btn increment" aria-label="Increase line height">&#x2B;</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Reading width</label>
+            <div class="custom-number" id="setting-reading-width"
+                 data-min="480" data-max="1400" data-step="20" data-suffix=" px"
+                 aria-label="Reading width in pixels">
+              <button class="custom-number-btn decrement" aria-label="Decrease reading width">&#x2212;</button>
+              <span class="custom-number-value"></span>
+              <button class="custom-number-btn increment" aria-label="Increase reading width">&#x2B;</button>
             </div>
           </div>
         </div>
 
-        <div class="settings-row">
-          <label>Font</label>
-          <div class="custom-select" id="setting-font" aria-label="Font family">
-            <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
-            <div class="custom-select-options" role="listbox"></div>
+        <!-- ── Colors panel ─────────────────────────────────────────── -->
+        <div class="settings-panel" id="settings-panel-colors"
+             role="tabpanel" aria-labelledby="settings-tab-colors" hidden>
+
+          <div class="settings-row">
+            <label>Theme</label>
+            <div class="custom-select" id="setting-theme" aria-label="Color theme">
+              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+              <div class="custom-select-options" role="listbox">
+                <div class="custom-select-option" data-value="dark" role="option">Dark</div>
+                <div class="custom-select-option" data-value="light" role="option">Light</div>
+                <div class="custom-select-option" data-value="system" role="option">System</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="color-grid">
+            <label class="color-card" for="setting-h1">
+              <input type="color" id="setting-h1" class="color-swatch" aria-label="Heading 1 color">
+              <div class="color-info">
+                <span class="color-name">Heading 1</span>
+                <span class="color-hex" id="setting-h1-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-h2">
+              <input type="color" id="setting-h2" class="color-swatch" aria-label="Heading 2 color">
+              <div class="color-info">
+                <span class="color-name">Heading 2</span>
+                <span class="color-hex" id="setting-h2-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-h3">
+              <input type="color" id="setting-h3" class="color-swatch" aria-label="Heading 3 color">
+              <div class="color-info">
+                <span class="color-name">Heading 3</span>
+                <span class="color-hex" id="setting-h3-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bullet">
+              <input type="color" id="setting-bullet" class="color-swatch" aria-label="Bullet and list marker color">
+              <div class="color-info">
+                <span class="color-name">Bullets</span>
+                <span class="color-hex" id="setting-bullet-hex"></span>
+              </div>
+            </label>
+          </div>
+
+          <div class="settings-preview" aria-hidden="true">
+            <div class="settings-preview-label">Preview</div>
+            <div class="settings-preview-card">
+              <div class="preview-h1">Heading 1</div>
+              <div class="preview-h2">Heading 2</div>
+              <div class="preview-h3">Heading 3</div>
+              <ul class="preview-list">
+                <li>Example list item</li>
+                <li>Another list item</li>
+              </ul>
+            </div>
           </div>
         </div>
 
-        <div class="settings-row">
-          <label>Font size</label>
-          <div class="custom-number" id="setting-size" aria-label="Font size in pixels">
-            <button class="custom-number-btn decrement" aria-label="Decrease font size">&#x2212;</button>
-            <span class="custom-number-value"></span>
-            <button class="custom-number-btn increment" aria-label="Increase font size">&#x2B;</button>
+        <!-- ── About panel ──────────────────────────────────────────── -->
+        <div class="settings-panel" id="settings-panel-about"
+             role="tabpanel" aria-labelledby="settings-tab-about" hidden>
+
+          <div class="about-hero">
+            <img class="about-icon" src="icon.png" alt="OxideMD" draggable="false">
+            <div class="about-title">OxideMD</div>
+            <div class="about-tagline">A lightweight, cross-platform Markdown viewer</div>
           </div>
-        </div>
 
-        <!-- Colors section -->
-        <div class="settings-section">Heading Colors</div>
+          <div class="about-version-row">
+            <span id="settings-version" class="about-version" aria-label="Current version"></span>
+            <button id="btn-check-updates">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-6.22-8.56"/>
+                <polyline points="21 3 21 9 15 9"/>
+              </svg>
+              Check for updates
+            </button>
+          </div>
 
-        <div class="settings-row color-row">
-          <label for="setting-h1">H1</label>
-          <input type="color" id="setting-h1" aria-label="Heading 1 color">
-        </div>
+          <div id="update-status" class="update-status hidden" role="status" aria-live="polite"></div>
 
-        <div class="settings-row color-row">
-          <label for="setting-h2">H2</label>
-          <input type="color" id="setting-h2" aria-label="Heading 2 color">
-        </div>
-
-        <div class="settings-row color-row">
-          <label for="setting-h3">H3</label>
-          <input type="color" id="setting-h3" aria-label="Heading 3 color">
-        </div>
-
-        <div class="settings-row color-row">
-          <label for="setting-bullet">Bullets</label>
-          <input type="color" id="setting-bullet" aria-label="Bullet and list marker color">
-        </div>
-
-        <!-- Updates section -->
-        <div class="settings-section">Updates</div>
-
-        <div class="settings-row">
-          <label>Version</label>
-          <span id="settings-version" class="settings-value" aria-label="Current version"></span>
-        </div>
-
-        <div class="settings-row">
-          <button id="btn-check-updates">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M21 12a9 9 0 1 1-6.22-8.56"/>
-              <polyline points="21 3 21 9 15 9"/>
-            </svg>
-            Check for updates
-          </button>
+          <div class="about-meta">
+            <div class="about-meta-row">
+              <span class="about-meta-label">License</span>
+              <span class="about-meta-value">MIT</span>
+            </div>
+            <div class="about-meta-row">
+              <span class="about-meta-label">Repository</span>
+              <a href="#" class="about-link" data-url="https://github.com/FenrirTheGray/OxideMD">github.com/FenrirTheGray/OxideMD</a>
+            </div>
+          </div>
         </div>
 
       </div><!-- /settings-body -->
