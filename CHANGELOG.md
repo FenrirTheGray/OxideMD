@@ -4,6 +4,13 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] - 2026-04-19
+
+### Fixed
+
+- macOS clients can now receive updates: the `app` bundle target is now enabled so release builds produce `OxideMD.app.tar.gz` and its signature, populating `darwin-aarch64` and `darwin-x86_64` entries in `latest.json`
+- "Reset defaults" button in the settings footer now renders with a border, matching the visual style of the Cancel and Save buttons
+
 ## [1.6.1] - 2026-04-18
 
 ### Fixed
