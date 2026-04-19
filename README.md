@@ -14,6 +14,8 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 - **Custom fonts** — install `.ttf`/`.otf`/`.woff`/`.woff2` font files from the settings font dropdown; fonts are stored in the OxideMD config folder and persist across sessions
 - **Settings** — tabbed settings dialog (Reading / Colors / About) with persistent configuration (font family, font size, line height, reading width, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Reading layout** — configurable line height (1.0–2.4) and reading width (480–1400 px) that scales with zoom
+- **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs
+- **Live file watching** — opened files and folders are monitored for changes; tabs automatically reload when modified externally
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
 - **Multi-file open** — select multiple files at once from the open dialog
 - **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
@@ -125,6 +127,12 @@ OxideMD/
 | Markdown parser     | [pulldown-cmark](https://github.com/raphlinus/pulldown-cmark)      |
 | Syntax highlighting | [syntect](https://github.com/trishume/syntect)                     |
 | Configuration       | [serde](https://serde.rs/) + [toml](https://crates.io/crates/toml) |
+| Config paths        | [directories](https://crates.io/crates/directories)                |
+
+## License
+
+MIT
+ttps://serde.rs/) + [toml](https://crates.io/crates/toml) |
 | Config paths        | [directories](https://crates.io/crates/directories)                |
 
 ## License
