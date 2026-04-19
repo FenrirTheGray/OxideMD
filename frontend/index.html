@@ -12,7 +12,13 @@
   <div id="toolbar" role="toolbar" aria-label="Application toolbar" data-tauri-drag-region>
 
     <!-- Tabs -->
+    <button id="tab-scroll-left" class="tab-scroll-btn" title="Scroll tabs left" aria-label="Scroll tabs left" aria-controls="tab-area" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
     <div id="tab-area" role="tablist" aria-label="Open files"></div>
+    <button id="tab-scroll-right" class="tab-scroll-btn" title="Scroll tabs right" aria-label="Scroll tabs right" aria-controls="tab-area" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
 
     <!-- Drag spacer between tabs and buttons -->
     <div id="toolbar-spacer" data-tauri-drag-region></div>
@@ -115,7 +121,23 @@
     <aside id="sidebar" class="hidden" aria-label="File tree">
       <div id="sidebar-header">
         <span id="sidebar-folder-name" title=""></span>
-        <button id="sidebar-close" title="Close folder" aria-label="Close folder">&#x2715;</button>
+        <div class="sidebar-header-actions">
+          <button id="sidebar-expand-all" class="sidebar-header-btn" title="Expand all folders" aria-label="Expand all folders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 6 12 11 17 6"/><polyline points="7 13 12 18 17 13"/></svg>
+          </button>
+          <button id="sidebar-collapse-all" class="sidebar-header-btn" title="Collapse all folders" aria-label="Collapse all folders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 11 12 6 17 11"/><polyline points="7 18 12 13 17 18"/></svg>
+          </button>
+          <button id="sidebar-close" title="Close folder" aria-label="Close folder">&#x2715;</button>
+        </div>
+      </div>
+      <div id="sidebar-filter">
+        <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="sidebar-filter-input" placeholder="Filter files…" autocomplete="off" spellcheck="false" aria-label="Filter files by name">
+        <button id="sidebar-filter-clear" class="hidden" title="Clear filter" aria-label="Clear filter">&#x2715;</button>
       </div>
       <div id="sidebar-tree" role="tree"></div>
     </aside>

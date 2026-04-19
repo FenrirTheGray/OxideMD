@@ -4,7 +4,7 @@ import {
   tabs, state,
   ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
   supportsHighlights, matchHighlight, currentHighlight,
-  tabBarEl, contentEl, contentScroll,
+  tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
   btnClose, btnReload, btnSearch, btnZoomIn, btnZoomOut, zoomLabel,
   filePathEl, statusIndicator, statusText,
   pickerBackdrop, WELCOME_HTML,
@@ -276,15 +276,32 @@ export function updateTabOverflow() {
   const hasOverflow = tabBarEl.scrollWidth > tabBarEl.clientWidth;
   if (!hasOverflow) {
     tabBarEl.classList.remove('has-overflow-left', 'has-overflow-right');
+    tabScrollLeftEl.hidden = true;
+    tabScrollRightEl.hidden = true;
     return;
   }
   const scrollLeft = tabBarEl.scrollLeft;
   const maxScroll = tabBarEl.scrollWidth - tabBarEl.clientWidth;
-  tabBarEl.classList.toggle('has-overflow-left', scrollLeft > 2);
-  tabBarEl.classList.toggle('has-overflow-right', scrollLeft < maxScroll - 2);
+  const canScrollLeft  = scrollLeft > 2;
+  const canScrollRight = scrollLeft < maxScroll - 2;
+  tabBarEl.classList.toggle('has-overflow-left', canScrollLeft);
+  tabBarEl.classList.toggle('has-overflow-right', canScrollRight);
+  tabScrollLeftEl.hidden  = !canScrollLeft;
+  tabScrollRightEl.hidden = !canScrollRight;
 }
 
+function scrollTabsBy(direction) {
+  // Step ~80% of visible width so the user can see a new tab leading in
+  // without losing spatial context of where they were.
+  const step = Math.max(120, Math.round(tabBarEl.clientWidth * 0.8));
+  tabBarEl.scrollBy({ left: direction * step, behavior: 'smooth' });
+}
+
+tabScrollLeftEl.addEventListener('click', () => scrollTabsBy(-1));
+tabScrollRightEl.addEventListener('click', () => scrollTabsBy(1));
+
 tabBarEl.addEventListener('scroll', updateTabOverflow);
+window.addEventListener('resize', updateTabOverflow);
 
 export async function loadFile(path) {
   setLoading();

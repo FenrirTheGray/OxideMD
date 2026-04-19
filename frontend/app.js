@@ -9,12 +9,13 @@ import {
   btnZoomOut, btnZoomIn, zoomLabel,
   searchBar, searchInput, searchCase, searchPrev, searchNext, searchClose,
   settingsOverlay,
-  sidebarCloseBtn,
+  sidebarCloseBtn, sidebarExpandAllBtn, sidebarCollapseAllBtn,
+  sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
 } from './state.js';
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
 } from './search.js';
-import { openFolder, closeFolder, handleFsChange } from './folder.js';
+import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange } from './folder.js';
 import {
   switchToTab, closeTab,
   zoomIn, zoomOut, resetZoom,
@@ -105,6 +106,33 @@ appWindow.onResized(syncMaximizeIcon);
 btnOpen.addEventListener('click', openFilePicker);
 btnOpenFolder.addEventListener('click', openFolder);
 sidebarCloseBtn.addEventListener('click', closeFolder);
+sidebarExpandAllBtn.addEventListener('click', expandAllFolders);
+sidebarCollapseAllBtn.addEventListener('click', collapseAllFolders);
+
+let treeFilterTimer;
+sidebarFilterInput.addEventListener('input', () => {
+  clearTimeout(treeFilterTimer);
+  const value = sidebarFilterInput.value;
+  sidebarFilterClearBtn.classList.toggle('hidden', value === '');
+  treeFilterTimer = setTimeout(() => setTreeFilter(value), 80);
+});
+sidebarFilterInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (sidebarFilterInput.value) {
+      clearTreeFilter();
+    } else {
+      sidebarFilterInput.blur();
+    }
+  } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+    const firstRow = sidebarTreeEl.querySelector('.tree-row');
+    if (firstRow) { e.preventDefault(); firstRow.focus(); }
+  }
+});
+sidebarFilterClearBtn.addEventListener('click', () => {
+  clearTreeFilter();
+  sidebarFilterInput.focus();
+});
 
 // Click the file path in the status bar to copy it to the clipboard.
 filePathEl.addEventListener('click', async () => {
