@@ -1,5 +1,5 @@
 // Tauri v2 API (available via withGlobalTauri: true)
-const { invoke } = window.__TAURI__.core;
+const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 const { getCurrentWindow } = window.__TAURI__.window;
 const appWindow = getCurrentWindow();
@@ -8,18 +8,42 @@ const appWindow = getCurrentWindow();
 const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
 const modKey = isMac ? 'Cmd' : 'Ctrl';
 
+const MD_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
+function isMarkdownPath(p) { return typeof p === 'string' && MD_EXT_RE.test(p); }
+
 // ── Tab state ──────────────────────────────────────────────────────────────
 // Each tab: { id, path, title, html, scrollTop }
 let tabs = [];
 let activeTabId = null;
 let nextTabId = 1;
 
+// ── Folder/sidebar state ───────────────────────────────────────────────────
+let currentFolder = null; // { root, name, entries }
+const expandedFolders = new Set();
+
 // ── Global state ───────────────────────────────────────────────────────────
 let config = null;
-let searchMatches = [];
+let searchRanges = [];
 let searchCurrent = -1;
 let searchCaseSensitive = false;
 let originalContent = '';
+
+// CSS Custom Highlight API registry — painted via ::highlight() in style.css.
+// Avoids mutating the DOM on search, so images, links, and event bindings
+// survive a search untouched. `currentHighlight.priority` outranks the base
+// match highlight so the "current" styling wins where they overlap.
+const supportsHighlights =
+  typeof Highlight === 'function'
+  && typeof CSS !== 'undefined'
+  && CSS.highlights;
+const matchHighlight = supportsHighlights ? new Highlight() : null;
+const currentHighlight = supportsHighlights ? new Highlight() : null;
+if (supportsHighlights) {
+  matchHighlight.priority = 0;
+  currentHighlight.priority = 1;
+  CSS.highlights.set('oxide-match', matchHighlight);
+  CSS.highlights.set('oxide-current', currentHighlight);
+}
 
 // ── Custom font state ─────────────────────────────────────────────────────
 let customFonts = [];          // cached list: [{ name, filename }, …]
@@ -31,6 +55,7 @@ const tabBarEl        = document.getElementById('tab-area');
 const contentEl       = document.getElementById('content');
 const contentScroll   = document.getElementById('content-scroll');
 const btnOpen         = document.getElementById('btn-open');
+const btnOpenFolder   = document.getElementById('btn-open-folder');
 const btnClose        = document.getElementById('btn-close');
 const btnReload       = document.getElementById('btn-reload');
 const btnSearch       = document.getElementById('btn-search');
@@ -53,6 +78,10 @@ const searchClose     = document.getElementById('search-close');
 const searchCount     = document.getElementById('search-count');
 const settingsOverlay = document.getElementById('settings-overlay');
 const pickerBackdrop  = document.getElementById('picker-backdrop');
+const sidebarEl       = document.getElementById('sidebar');
+const sidebarFolderName = document.getElementById('sidebar-folder-name');
+const sidebarTreeEl   = document.getElementById('sidebar-tree');
+const sidebarCloseBtn = document.getElementById('sidebar-close');
 
 const ZOOM_MIN  = 0.5;
 const ZOOM_MAX  = 2.0;
@@ -63,6 +92,27 @@ const ZOOM_DEFAULT = 1.0;
 // any content is loaded, so showWelcome() can restore the full styled version.
 const WELCOME_HTML = contentEl.innerHTML;
 
+// Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
+// with an absolute path. The webview can't load a raw filesystem path, so we
+// rewrite it to an asset:// URL here. Remote images already carry a real `src`
+// and are untouched.
+function renderContent(html) {
+  // Any existing search highlights point to about-to-be-detached text nodes.
+  // Drop them so the registry doesn't hold refs to orphaned ranges.
+  if (searchRanges.length || (supportsHighlights && currentHighlight.size)) {
+    searchRanges = [];
+    searchCurrent = -1;
+    if (supportsHighlights) {
+      matchHighlight.clear();
+      currentHighlight.clear();
+    }
+  }
+  contentEl.innerHTML = html;
+  for (const img of contentEl.querySelectorAll('img[data-oxide-src]')) {
+    img.src = convertFileSrc(img.dataset.oxideSrc);
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
   config = await invoke('get_config');
@@ -72,9 +122,28 @@ async function init() {
   }
   applyConfig(config);
 
-  // Open a file passed as a CLI argument (no timing hack needed)
-  const cliFile = await invoke('get_cli_file');
-  if (cliFile) loadFile(cliFile);
+  // Open every file passed on the command line (Explorer "Open with…" can
+  // pass multiple paths in a single launch).
+  const cliFiles = await invoke('get_cli_files');
+  for (const path of cliFiles) {
+    if (isMarkdownPath(path)) await loadFile(path);
+  }
+
+  // A second instance of OxideMD was started (e.g. user double-clicked
+  // another .md file in the OS); the backend forwards those paths here.
+  await listen('open-files-from-instance', (e) => {
+    const paths = Array.isArray(e.payload) ? e.payload : [];
+    for (const path of paths) {
+      if (isMarkdownPath(path)) loadFile(path);
+    }
+  });
+
+  // Filesystem changes in any watched file/folder. The Rust watcher may
+  // fire several events per save (editors write+truncate+rename); coalesce
+  // them into a single reload per path.
+  await listen('fs-changed', (e) => {
+    if (typeof e.payload === 'string') handleFsChange(e.payload);
+  });
 
   let resizeTimer;
   window.addEventListener('resize', () => {
@@ -84,9 +153,8 @@ async function init() {
 
   await appWindow.onDragDropEvent((e) => {
     if (e.payload.type === 'drop') {
-      const mdExtensions = /\.(md|markdown|mdown|mkd)$/i;
       for (const path of e.payload.paths) {
-        if (mdExtensions.test(path)) loadFile(path);
+        if (isMarkdownPath(path)) loadFile(path);
       }
     }
   });
@@ -169,6 +237,69 @@ function syncToolbar() {
   zoomLabel.disabled  = !hasTab;
 }
 
+// ── File-system watcher sync ─────────────────────────────────────────────
+// Whenever the set of interesting paths changes (tab opened/closed or a
+// folder picked/closed), push the new set to the Rust-side watcher. The
+// backend replaces the previous watcher in one step, so this is safe to
+// call on every mutation.
+function syncWatcher() {
+  const paths = new Set();
+  for (const t of tabs) if (t.path) paths.add(t.path);
+  if (currentFolder?.root) paths.add(currentFolder.root);
+  invoke('watch_paths', { paths: [...paths] }).catch(() => {});
+}
+
+// Prefix-match with a trailing separator so `C:\docs` doesn't match
+// `C:\docs2\foo.md`. Handle both separator styles — notify can echo
+// either depending on how the path was registered.
+function isPathInside(child, parent) {
+  if (child === parent) return true;
+  return child.startsWith(parent + '\\') || child.startsWith(parent + '/');
+}
+
+const pendingFsChanges = new Set();
+let fsChangeTimer = null;
+function handleFsChange(path) {
+  pendingFsChanges.add(path);
+  if (fsChangeTimer) clearTimeout(fsChangeTimer);
+  fsChangeTimer = setTimeout(flushFsChanges, 200);
+}
+
+async function flushFsChanges() {
+  fsChangeTimer = null;
+  const paths = [...pendingFsChanges];
+  pendingFsChanges.clear();
+
+  let folderDirty = false;
+  const folderRoot = currentFolder?.root ?? null;
+
+  for (const p of paths) {
+    const tab = tabs.find(t => t.path === p);
+    if (tab) {
+      try {
+        const result = await invoke('open_file', { path: p });
+        tab.html = result.html;
+        tab.title = result.title;
+        if (tab.id === activeTabId) {
+          const scrollTop = contentScroll.scrollTop;
+          renderContent(result.html);
+          originalContent = result.html;
+          requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
+        }
+      } catch { /* file vanished; leave tab as-is */ }
+    }
+    if (folderRoot && isPathInside(p, folderRoot)) folderDirty = true;
+  }
+
+  if (folderDirty && folderRoot) {
+    try {
+      const tree = await invoke('read_folder_tree', { path: folderRoot });
+      currentFolder = tree;
+      renderFolderTree();
+    } catch { /* folder gone */ }
+  }
+}
+
 // ── Tab management ─────────────────────────────────────────────────────────
 function activeTab() {
   return tabs.find(t => t.id === activeTabId) ?? null;
@@ -189,6 +320,7 @@ function openInNewTab(path, title, html) {
   syncToolbar();
   renderTabBar();
   applyActiveTab();
+  syncWatcher();
 }
 
 function switchToTab(id) {
@@ -212,6 +344,7 @@ function closeTab(id) {
   }
 
   tabs.splice(idx, 1);
+  syncWatcher();
 
   if (tabs.length === 0) {
     activeTabId = null;
@@ -234,14 +367,13 @@ function applyActiveTab() {
   const tab = activeTab();
   if (!tab) { showWelcome(); return; }
 
-  contentEl.innerHTML = tab.html;
+  renderContent(tab.html);
   originalContent = tab.html;
-  wireLinks();
   appWindow.setTitle(tab.title);
   document.title = tab.title;
-  filePathEl.textContent = tab.path || '';
-  filePathEl.title = tab.path || '';
+  setStatusFilePath(tab.path || '');
   applyZoom(tab.zoom);
+  highlightActiveTreeItem();
 
   // Restore scroll position after layout
   requestAnimationFrame(() => {
@@ -261,10 +393,28 @@ function showWelcome() {
   originalContent = '';
   appWindow.setTitle('OxideMD');
   document.title = 'OxideMD';
-  filePathEl.textContent = '';
-  filePathEl.title = '';
+  setStatusFilePath('');
   zoomLabel.textContent = '100%';
+  highlightActiveTreeItem();
   clearStatus();
+}
+
+let copyResetTimer = null;
+function setStatusFilePath(path) {
+  if (copyResetTimer) { clearTimeout(copyResetTimer); copyResetTimer = null; }
+  filePathEl.textContent = path || '';
+  filePathEl.title = path || '';
+  filePathEl.classList.toggle('clickable', !!path);
+  filePathEl.classList.remove('copied');
+  if (path) {
+    filePathEl.setAttribute('role', 'button');
+    filePathEl.setAttribute('tabindex', '0');
+    filePathEl.setAttribute('aria-label', `Copy path to clipboard: ${path}`);
+  } else {
+    filePathEl.removeAttribute('role');
+    filePathEl.removeAttribute('tabindex');
+    filePathEl.removeAttribute('aria-label');
+  }
 }
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
@@ -303,8 +453,14 @@ function renderTabBar() {
   if (tabs.length === 0) return;
 
   for (const tab of tabs) {
+    const isActive = tab.id === activeTabId;
     const el = document.createElement('div');
-    el.className = 'tab' + (tab.id === activeTabId ? ' active' : '');
+    el.className = 'tab' + (isActive ? ' active' : '');
+    el.setAttribute('role', 'tab');
+    el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    el.setAttribute('aria-label', tab.title);
+    el.tabIndex = isActive ? 0 : -1;
+    el.dataset.tabId = String(tab.id);
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'tab-title';
@@ -314,6 +470,7 @@ function renderTabBar() {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'tab-close';
     closeBtn.setAttribute('aria-label', `Close ${tab.title}`);
+    closeBtn.tabIndex = -1;
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
     closeBtn.title = `Close (${modKey}+W)`;
 
@@ -337,6 +494,43 @@ function renderTabBar() {
   updateTabOverflow();
 }
 
+tabBarEl.addEventListener('keydown', (e) => {
+  const targetTab = e.target.closest('.tab');
+  if (!targetTab || !tabBarEl.contains(targetTab)) return;
+  const allTabs = Array.from(tabBarEl.querySelectorAll('.tab'));
+  const idx = allTabs.indexOf(targetTab);
+  if (idx === -1) return;
+
+  let nextIdx = -1;
+  if (e.key === 'ArrowLeft')      nextIdx = (idx - 1 + allTabs.length) % allTabs.length;
+  else if (e.key === 'ArrowRight') nextIdx = (idx + 1) % allTabs.length;
+  else if (e.key === 'Home')       nextIdx = 0;
+  else if (e.key === 'End')        nextIdx = allTabs.length - 1;
+  else if (e.key === 'Delete') {
+    e.preventDefault();
+    const id = Number(targetTab.dataset.tabId);
+    if (!Number.isNaN(id)) {
+      closeTab(id);
+      const newActive = tabBarEl.querySelector('.tab.active');
+      if (newActive) newActive.focus();
+    }
+    return;
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    const id = Number(targetTab.dataset.tabId);
+    if (!Number.isNaN(id)) switchToTab(id);
+    return;
+  } else {
+    return;
+  }
+
+  e.preventDefault();
+  const nextTab = allTabs[nextIdx];
+  const id = Number(nextTab.dataset.tabId);
+  if (!Number.isNaN(id)) switchToTab(id);
+  nextTab.focus();
+});
+
 function updateTabOverflow() {
   const hasOverflow = tabBarEl.scrollWidth > tabBarEl.clientWidth;
   if (!hasOverflow) {
@@ -351,12 +545,224 @@ function updateTabOverflow() {
 
 tabBarEl.addEventListener('scroll', updateTabOverflow);
 
+// ── Folder / sidebar ───────────────────────────────────────────────────────
+const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
+const SVG_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const SVG_FILE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+
+async function openFolder() {
+  if (hasActiveOverlay()) return;
+  filePickerOpen = true;
+  pickerBackdrop.classList.remove('hidden');
+  let tree = null;
+  try {
+    tree = await invoke('pick_folder');
+  } catch {} finally {
+    pickerBackdrop.classList.add('hidden');
+    filePickerOpen = false;
+  }
+  if (tree) setFolder(tree);
+}
+
+function setFolder(tree) {
+  currentFolder = tree;
+  expandedFolders.clear();
+  sidebarFolderName.textContent = tree.name || tree.root;
+  sidebarFolderName.title = tree.root;
+  sidebarEl.classList.remove('hidden');
+  renderFolderTree();
+  syncWatcher();
+}
+
+function closeFolder() {
+  currentFolder = null;
+  expandedFolders.clear();
+  sidebarTreeEl.innerHTML = '';
+  sidebarFolderName.textContent = '';
+  sidebarFolderName.title = '';
+  sidebarEl.classList.add('hidden');
+  syncWatcher();
+}
+
+function renderFolderTree() {
+  sidebarTreeEl.innerHTML = '';
+  if (!currentFolder) return;
+  if (!currentFolder.entries || currentFolder.entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tree-empty';
+    empty.textContent = 'No Markdown files in this folder.';
+    sidebarTreeEl.appendChild(empty);
+    return;
+  }
+  for (const entry of currentFolder.entries) {
+    sidebarTreeEl.appendChild(buildTreeNode(entry));
+  }
+  if (currentFolder.truncated) {
+    const hint = document.createElement('div');
+    hint.className = 'tree-truncated';
+    hint.textContent = 'Folder too large — some entries are not shown.';
+    sidebarTreeEl.appendChild(hint);
+  }
+  highlightActiveTreeItem();
+  // Roving tabindex: set the active row (or first) as the focus entry point
+  const active = sidebarTreeEl.querySelector('.tree-row.active');
+  const first = sidebarTreeEl.querySelector('.tree-row');
+  const entry = active || first;
+  if (entry) entry.tabIndex = 0;
+}
+
+function buildTreeNode(node) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tree-node' + (node.isDir ? ' tree-dir' : ' tree-file');
+  wrap.dataset.path = node.path;
+  if (node.isDir && expandedFolders.has(node.path)) wrap.classList.add('expanded');
+
+  const row = document.createElement('div');
+  row.className = 'tree-row';
+  row.setAttribute('role', 'treeitem');
+  row.tabIndex = -1;
+  if (node.isDir) {
+    row.setAttribute('aria-expanded', expandedFolders.has(node.path) ? 'true' : 'false');
+  }
+  row.title = node.path;
+
+  const twisty = document.createElement('span');
+  twisty.className = 'tree-twisty' + (node.isDir ? '' : ' empty');
+  twisty.innerHTML = node.isDir ? SVG_TWISTY : '';
+  row.appendChild(twisty);
+
+  const icon = document.createElement('span');
+  icon.className = 'tree-icon';
+  icon.innerHTML = node.isDir ? SVG_FOLDER : SVG_FILE;
+  row.appendChild(icon);
+
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  label.textContent = node.name;
+  row.appendChild(label);
+
+  wrap.appendChild(row);
+
+  if (node.isDir) {
+    const children = document.createElement('div');
+    children.className = 'tree-children';
+    for (const child of node.children || []) {
+      children.appendChild(buildTreeNode(child));
+    }
+    wrap.appendChild(children);
+
+    row.addEventListener('click', () => {
+      const isExpanded = wrap.classList.toggle('expanded');
+      if (isExpanded) expandedFolders.add(node.path);
+      else expandedFolders.delete(node.path);
+      row.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    });
+  } else {
+    row.addEventListener('click', () => loadFile(node.path));
+  }
+
+  return wrap;
+}
+
+function visibleTreeRows() {
+  return Array.from(sidebarTreeEl.querySelectorAll('.tree-row')).filter(r => r.offsetParent !== null);
+}
+
+function focusTreeRow(row) {
+  if (!row) return;
+  sidebarTreeEl.querySelectorAll('.tree-row[tabindex="0"]').forEach(r => { r.tabIndex = -1; });
+  row.tabIndex = 0;
+  row.focus();
+  row.scrollIntoView({ block: 'nearest' });
+}
+
+sidebarTreeEl.addEventListener('focusin', (e) => {
+  const row = e.target.closest('.tree-row');
+  if (!row) return;
+  sidebarTreeEl.querySelectorAll('.tree-row[tabindex="0"]').forEach(r => {
+    if (r !== row) r.tabIndex = -1;
+  });
+  row.tabIndex = 0;
+});
+
+sidebarTreeEl.addEventListener('keydown', (e) => {
+  const row = e.target.closest('.tree-row');
+  if (!row || !sidebarTreeEl.contains(row)) return;
+
+  const rows = visibleTreeRows();
+  const idx = rows.indexOf(row);
+  if (idx === -1) return;
+
+  const wrap = row.parentElement; // .tree-node
+  const isDir = wrap.classList.contains('tree-dir');
+  const isExpanded = wrap.classList.contains('expanded');
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (idx < rows.length - 1) focusTreeRow(rows[idx + 1]);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (idx > 0) focusTreeRow(rows[idx - 1]);
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    if (rows.length) focusTreeRow(rows[0]);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    if (rows.length) focusTreeRow(rows[rows.length - 1]);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (isDir && !isExpanded) {
+      row.click();
+    } else if (isDir && isExpanded) {
+      const nextRow = rows[idx + 1];
+      if (nextRow && wrap.contains(nextRow)) focusTreeRow(nextRow);
+    }
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (isDir && isExpanded) {
+      row.click();
+    } else {
+      // Move focus to parent folder
+      const parentWrap = wrap.parentElement?.closest('.tree-node');
+      const parentRow = parentWrap?.querySelector(':scope > .tree-row');
+      if (parentRow) focusTreeRow(parentRow);
+    }
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    row.click();
+  }
+});
+
+function highlightActiveTreeItem() {
+  if (!currentFolder) return;
+  const tab = activeTab();
+  const activePath = tab?.path || '';
+  sidebarTreeEl.querySelectorAll('.tree-row').forEach(r => r.classList.remove('active'));
+  if (!activePath) return;
+  const node = sidebarTreeEl.querySelector(`.tree-file[data-path="${CSS.escape(activePath)}"]`);
+  if (!node) return;
+  node.querySelector('.tree-row')?.classList.add('active');
+  // Expand ancestor folders so the active item is visible.
+  let parent = node.parentElement;
+  while (parent && parent !== sidebarTreeEl) {
+    if (parent.classList.contains('tree-children')) {
+      const folderNode = parent.parentElement;
+      if (folderNode?.classList.contains('tree-dir')) {
+        folderNode.classList.add('expanded');
+        if (folderNode.dataset.path) expandedFolders.add(folderNode.dataset.path);
+      }
+    }
+    parent = parent.parentElement;
+  }
+  node.querySelector('.tree-row')?.scrollIntoView({ block: 'nearest' });
+}
+
 // ── File loading ───────────────────────────────────────────────────────────
 async function loadFile(path) {
   setLoading();
   try {
     const result = await invoke('open_file', { path });
-    openInNewTab(path, result.title, result.html);
+    openInNewTab(result.path || path, result.title, result.html);
   } catch (e) {
     showError(String(e));
   } finally {
@@ -409,19 +815,45 @@ function clearStatus() {
 }
 
 // ── Link handling ──────────────────────────────────────────────────────────
-function wireLinks() {
-  contentEl.querySelectorAll('a').forEach(a => a.addEventListener('click', handleLinkClick));
-}
+// Links are handled via a single delegated listener on contentEl (installed
+// near the other contentEl delegation at the bottom of this file). That
+// means we don't attach a per-anchor listener after every innerHTML
+// rewrite, which used to both churn listeners and stop working when
+// search mutated the DOM.
+async function handleAnchorClick(anchor) {
+  const href = anchor.getAttribute('href') || '';
+  if (!href) return;
 
-async function handleLinkClick(e) {
-  e.preventDefault();
-  const href = e.currentTarget.getAttribute('href') || '';
+  // In-page anchor → smooth scroll
   if (href.startsWith('#')) {
     const target = document.getElementById(href.slice(1));
     if (target) target.scrollIntoView({ behavior: 'smooth' });
-  } else if (href) {
-    try { await invoke('open_url', { url: href }); } catch {}
+    return;
   }
+
+  // If this resolves to a local .md file, open it in a (new) tab.
+  const tab = activeTab();
+  if (tab?.path) {
+    try {
+      const resolved = await invoke('resolve_md_path', { base: tab.path, href });
+      if (resolved) {
+        // Strip fragment from href; we'll scroll to it after the tab loads.
+        const hashIdx = href.indexOf('#');
+        const fragment = hashIdx !== -1 ? href.slice(hashIdx + 1) : '';
+        await loadFile(resolved);
+        if (fragment) {
+          requestAnimationFrame(() => {
+            const target = document.getElementById(fragment);
+            if (target) target.scrollIntoView({ behavior: 'smooth' });
+          });
+        }
+        return;
+      }
+    } catch {}
+  }
+
+  // Fallback: open externally.
+  try { await invoke('open_url', { url: href }); } catch {}
 }
 
 // ── Overlay exclusivity ────────────────────────────────────────────────────
@@ -468,84 +900,82 @@ function closeSearch() {
 }
 
 function clearSearch() {
-  if (originalContent) {
-    contentEl.innerHTML = originalContent;
-    wireLinks();
-  }
-  searchMatches = [];
+  searchRanges = [];
   searchCurrent = -1;
+  if (supportsHighlights) {
+    matchHighlight.clear();
+    currentHighlight.clear();
+  }
   searchCount.textContent = '';
 }
 
 function runSearch(query) {
-  if (originalContent) {
-    contentEl.innerHTML = originalContent;
-    wireLinks();
-  }
-  searchMatches = [];
-  searchCurrent = -1;
-
-  if (!query) { searchCount.textContent = ''; return; }
+  clearSearch();
+  if (!query) return;
 
   const needle = searchCaseSensitive ? query : query.toLowerCase();
   const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-  const textNodes = [];
-  let node;
-  while ((node = walker.nextNode())) {
-    textNodes.push(node);
-  }
-
-  for (const tn of textNodes) {
+  let tn;
+  while ((tn = walker.nextNode())) {
     const text = tn.nodeValue;
     const haystack = searchCaseSensitive ? text : text.toLowerCase();
     let idx = 0;
-    let found = false;
-    const frag = document.createDocumentFragment();
-
     while (idx < text.length) {
       const pos = haystack.indexOf(needle, idx);
-      if (pos === -1) { frag.appendChild(document.createTextNode(text.slice(idx))); break; }
-      found = true;
-      if (pos > idx) frag.appendChild(document.createTextNode(text.slice(idx, pos)));
-      const mark = document.createElement('mark');
-      mark.className = 'search-match';
-      mark.textContent = text.slice(pos, pos + query.length);
-      searchMatches.push(mark);
-      frag.appendChild(mark);
+      if (pos === -1) break;
+      const range = document.createRange();
+      range.setStart(tn, pos);
+      range.setEnd(tn, pos + query.length);
+      searchRanges.push(range);
       idx = pos + query.length;
     }
-
-    if (found) tn.parentNode.replaceChild(frag, tn);
   }
 
-  if (searchMatches.length > 0) { searchCurrent = 0; highlightCurrent(); }
+  if (supportsHighlights) {
+    for (const r of searchRanges) matchHighlight.add(r);
+  }
+
+  if (searchRanges.length > 0) {
+    searchCurrent = 0;
+    highlightCurrent();
+  }
   updateSearchCount();
 }
 
 function highlightCurrent() {
-  searchMatches.forEach((m, i) => m.classList.toggle('current', i === searchCurrent));
-  if (searchCurrent >= 0 && searchMatches[searchCurrent]) {
-    searchMatches[searchCurrent].scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
+  if (!supportsHighlights) return;
+  currentHighlight.clear();
+  const range = searchRanges[searchCurrent];
+  if (!range) return;
+  currentHighlight.add(range);
+  const rect = range.getBoundingClientRect();
+  const scrollRect = contentScroll.getBoundingClientRect();
+  const target =
+    contentScroll.scrollTop
+    + rect.top
+    - scrollRect.top
+    - scrollRect.height / 2
+    + rect.height / 2;
+  contentScroll.scrollTo({ top: target, behavior: 'smooth' });
 }
 
 function nextMatch() {
-  if (!searchMatches.length) return;
-  searchCurrent = (searchCurrent + 1) % searchMatches.length;
+  if (!searchRanges.length) return;
+  searchCurrent = (searchCurrent + 1) % searchRanges.length;
   highlightCurrent();
   updateSearchCount();
 }
 
 function prevMatch() {
-  if (!searchMatches.length) return;
-  searchCurrent = (searchCurrent - 1 + searchMatches.length) % searchMatches.length;
+  if (!searchRanges.length) return;
+  searchCurrent = (searchCurrent - 1 + searchRanges.length) % searchRanges.length;
   highlightCurrent();
   updateSearchCount();
 }
 
 function updateSearchCount() {
-  searchCount.textContent = searchMatches.length
-    ? `${searchCurrent + 1} / ${searchMatches.length}`
+  searchCount.textContent = searchRanges.length
+    ? `${searchCurrent + 1} / ${searchRanges.length}`
     : (searchInput.value ? 'No matches' : '');
 }
 
@@ -1082,9 +1512,44 @@ btnWinClose.addEventListener('click', () => appWindow.close());
 appWindow.onResized(syncMaximizeIcon);
 
 btnOpen.addEventListener('click', openFilePicker);
-// Delegated: the welcome button is re-created each time showWelcome() rewrites innerHTML.
+btnOpenFolder.addEventListener('click', openFolder);
+sidebarCloseBtn.addEventListener('click', closeFolder);
+
+// Click the file path in the status bar to copy it to the clipboard.
+filePathEl.addEventListener('click', async () => {
+  const path = filePathEl.title;
+  if (!path) return;
+  try {
+    await navigator.clipboard.writeText(path);
+  } catch {
+    return;
+  }
+  filePathEl.classList.add('copied');
+  const originalText = path;
+  filePathEl.textContent = 'Copied!';
+  clearTimeout(copyResetTimer);
+  copyResetTimer = setTimeout(() => {
+    filePathEl.classList.remove('copied');
+    filePathEl.textContent = originalText;
+  }, 1200);
+});
+filePathEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (!filePathEl.classList.contains('clickable')) return;
+  e.preventDefault();
+  filePathEl.click();
+});
+// Delegated handler for clickable children of contentEl: the welcome button
+// (re-created every time showWelcome() rewrites innerHTML) and every rendered
+// anchor (re-created on every tab switch / search render). A single listener
+// survives all DOM replacements inside contentEl.
 contentEl.addEventListener('click', (e) => {
-  if (e.target.closest('#welcome-open')) openFilePicker();
+  if (e.target.closest('#welcome-open')) { openFilePicker(); return; }
+  const anchor = e.target.closest('a');
+  if (anchor && contentEl.contains(anchor)) {
+    e.preventDefault();
+    handleAnchorClick(anchor);
+  }
 });
 btnClose.addEventListener('click', () => { if (activeTabId !== null) closeTab(activeTabId); });
 btnReload.addEventListener('click', reloadFile);
