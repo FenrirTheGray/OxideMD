@@ -1,0 +1,396 @@
+import {
+  invoke, convertFileSrc, appWindow,
+  modKey,
+  tabs, state,
+  ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
+  supportsHighlights, matchHighlight, currentHighlight,
+  tabBarEl, contentEl, contentScroll,
+  btnClose, btnReload, btnSearch, btnZoomIn, btnZoomOut, zoomLabel,
+  filePathEl, statusIndicator, statusText,
+  pickerBackdrop, WELCOME_HTML,
+  hasActiveOverlay,
+} from './state.js';
+import { clearSearch } from './search.js';
+import { syncWatcher, highlightActiveTreeItem } from './folder.js';
+
+// Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
+// with an absolute path. The webview can't load a raw filesystem path, so we
+// rewrite it to an asset:// URL here. Remote images already carry a real `src`
+// and are untouched.
+export function renderContent(html) {
+  // Any existing search highlights point to about-to-be-detached text nodes.
+  // Drop them so the registry doesn't hold refs to orphaned ranges.
+  if (state.searchRanges.length || (supportsHighlights && currentHighlight.size)) {
+    state.searchRanges = [];
+    state.searchCurrent = -1;
+    if (supportsHighlights) {
+      matchHighlight.clear();
+      currentHighlight.clear();
+    }
+  }
+  contentEl.innerHTML = html;
+  for (const img of contentEl.querySelectorAll('img[data-oxide-src]')) {
+    img.src = convertFileSrc(img.dataset.oxideSrc);
+  }
+}
+
+export function syncToolbar() {
+  const hasTab = state.activeTabId !== null;
+  btnClose.disabled  = !hasTab;
+  btnReload.disabled = !hasTab;
+  btnSearch.disabled = !hasTab;
+  btnZoomIn.disabled  = !hasTab;
+  btnZoomOut.disabled = !hasTab;
+  zoomLabel.disabled  = !hasTab;
+}
+
+export function activeTab() {
+  return tabs.find(t => t.id === state.activeTabId) ?? null;
+}
+
+export function openInNewTab(path, title, html) {
+  // Switch to existing tab if this path is already open
+  if (path) {
+    const existing = tabs.find(t => t.path === path);
+    if (existing) {
+      switchToTab(existing.id);
+      return;
+    }
+  }
+  const id = state.nextTabId++;
+  tabs.push({ id, path, title, html, scrollTop: 0, zoom: ZOOM_DEFAULT });
+  state.activeTabId = id;
+  syncToolbar();
+  renderTabBar();
+  applyActiveTab();
+  syncWatcher();
+}
+
+export function switchToTab(id) {
+  // Save scroll position of current tab before leaving
+  const cur = activeTab();
+  if (cur) cur.scrollTop = contentScroll.scrollTop;
+
+  state.activeTabId = id;
+  clearSearch();
+  renderTabBar();
+  applyActiveTab();
+}
+
+export function closeTab(id) {
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+
+  // Save scroll before closing if it's active
+  if (id === state.activeTabId) {
+    tabs[idx].scrollTop = contentScroll.scrollTop;
+  }
+
+  tabs.splice(idx, 1);
+  syncWatcher();
+
+  if (tabs.length === 0) {
+    state.activeTabId = null;
+    clearSearch();
+    syncToolbar();
+    renderTabBar();
+    showWelcome();
+  } else if (id === state.activeTabId) {
+    state.activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
+    clearSearch();
+    syncToolbar();
+    renderTabBar();
+    applyActiveTab();
+  } else {
+    renderTabBar();
+  }
+}
+
+export function applyActiveTab() {
+  const tab = activeTab();
+  if (!tab) { showWelcome(); return; }
+
+  renderContent(tab.html);
+  state.originalContent = tab.html;
+  appWindow.setTitle(tab.title);
+  document.title = tab.title;
+  setStatusFilePath(tab.path || '');
+  applyZoom(tab.zoom);
+  highlightActiveTreeItem();
+
+  // Restore scroll position after layout
+  requestAnimationFrame(() => {
+    contentScroll.scrollTop = tab.scrollTop;
+  });
+}
+
+export function showWelcome() {
+  contentEl.innerHTML = WELCOME_HTML;
+  // Re-patch the welcome hint for the correct modifier key (WELCOME_HTML
+  // was captured before applyPlatformLabels ran, so it always says "Ctrl").
+  const hintEl = contentEl.querySelector('.welcome-hint');
+  if (hintEl) {
+    hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
+  }
+  contentEl.style.fontSize = '';
+  state.originalContent = '';
+  appWindow.setTitle('OxideMD');
+  document.title = 'OxideMD';
+  setStatusFilePath('');
+  zoomLabel.textContent = '100%';
+  highlightActiveTreeItem();
+  clearStatus();
+}
+
+export function setStatusFilePath(path) {
+  if (state.copyResetTimer) { clearTimeout(state.copyResetTimer); state.copyResetTimer = null; }
+  filePathEl.textContent = path || '';
+  filePathEl.title = path || '';
+  filePathEl.classList.toggle('clickable', !!path);
+  filePathEl.classList.remove('copied');
+  if (path) {
+    filePathEl.setAttribute('role', 'button');
+    filePathEl.setAttribute('tabindex', '0');
+    filePathEl.setAttribute('aria-label', `Copy path to clipboard: ${path}`);
+  } else {
+    filePathEl.removeAttribute('role');
+    filePathEl.removeAttribute('tabindex');
+    filePathEl.removeAttribute('aria-label');
+  }
+}
+
+export function applyZoom(zoom) {
+  contentEl.style.fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
+  contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
+  zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  btnZoomOut.disabled = zoom <= ZOOM_MIN;
+  btnZoomIn.disabled  = zoom >= ZOOM_MAX;
+}
+
+export function zoomIn() {
+  const tab = activeTab();
+  if (!tab) return;
+  tab.zoom = Math.min(ZOOM_MAX, parseFloat((tab.zoom + ZOOM_STEP).toFixed(2)));
+  applyZoom(tab.zoom);
+}
+
+export function zoomOut() {
+  const tab = activeTab();
+  if (!tab) return;
+  tab.zoom = Math.max(ZOOM_MIN, parseFloat((tab.zoom - ZOOM_STEP).toFixed(2)));
+  applyZoom(tab.zoom);
+}
+
+export function resetZoom() {
+  const tab = activeTab();
+  if (!tab) return;
+  tab.zoom = ZOOM_DEFAULT;
+  applyZoom(tab.zoom);
+}
+
+export function renderTabBar() {
+  tabBarEl.innerHTML = '';
+
+  if (tabs.length === 0) return;
+
+  for (const tab of tabs) {
+    const isActive = tab.id === state.activeTabId;
+    const el = document.createElement('div');
+    el.className = 'tab' + (isActive ? ' active' : '');
+    el.setAttribute('role', 'tab');
+    el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    el.setAttribute('aria-label', tab.title);
+    el.tabIndex = isActive ? 0 : -1;
+    el.dataset.tabId = String(tab.id);
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'tab-title';
+    titleSpan.textContent = tab.title;
+    titleSpan.title = tab.path || tab.title;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'tab-close';
+    closeBtn.setAttribute('aria-label', `Close ${tab.title}`);
+    closeBtn.tabIndex = -1;
+    closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
+    closeBtn.title = `Close (${modKey}+W)`;
+
+    el.appendChild(titleSpan);
+    el.appendChild(closeBtn);
+    tabBarEl.appendChild(el);
+
+    el.addEventListener('click', (e) => {
+      if (!e.target.closest('.tab-close')) switchToTab(tab.id);
+    });
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeTab(tab.id);
+    });
+  }
+
+  // Scroll active tab into view
+  const activeEl = tabBarEl.querySelector('.tab.active');
+  if (activeEl) activeEl.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+
+  updateTabOverflow();
+}
+
+tabBarEl.addEventListener('keydown', (e) => {
+  const targetTab = e.target.closest('.tab');
+  if (!targetTab || !tabBarEl.contains(targetTab)) return;
+  const allTabs = Array.from(tabBarEl.querySelectorAll('.tab'));
+  const idx = allTabs.indexOf(targetTab);
+  if (idx === -1) return;
+
+  let nextIdx = -1;
+  if (e.key === 'ArrowLeft')      nextIdx = (idx - 1 + allTabs.length) % allTabs.length;
+  else if (e.key === 'ArrowRight') nextIdx = (idx + 1) % allTabs.length;
+  else if (e.key === 'Home')       nextIdx = 0;
+  else if (e.key === 'End')        nextIdx = allTabs.length - 1;
+  else if (e.key === 'Delete') {
+    e.preventDefault();
+    const id = Number(targetTab.dataset.tabId);
+    if (!Number.isNaN(id)) {
+      closeTab(id);
+      const newActive = tabBarEl.querySelector('.tab.active');
+      if (newActive) newActive.focus();
+    }
+    return;
+  } else if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    const id = Number(targetTab.dataset.tabId);
+    if (!Number.isNaN(id)) switchToTab(id);
+    return;
+  } else {
+    return;
+  }
+
+  e.preventDefault();
+  const nextTab = allTabs[nextIdx];
+  const id = Number(nextTab.dataset.tabId);
+  if (!Number.isNaN(id)) switchToTab(id);
+  nextTab.focus();
+});
+
+export function updateTabOverflow() {
+  const hasOverflow = tabBarEl.scrollWidth > tabBarEl.clientWidth;
+  if (!hasOverflow) {
+    tabBarEl.classList.remove('has-overflow-left', 'has-overflow-right');
+    return;
+  }
+  const scrollLeft = tabBarEl.scrollLeft;
+  const maxScroll = tabBarEl.scrollWidth - tabBarEl.clientWidth;
+  tabBarEl.classList.toggle('has-overflow-left', scrollLeft > 2);
+  tabBarEl.classList.toggle('has-overflow-right', scrollLeft < maxScroll - 2);
+}
+
+tabBarEl.addEventListener('scroll', updateTabOverflow);
+
+export async function loadFile(path) {
+  setLoading();
+  try {
+    const result = await invoke('open_file', { path });
+    openInNewTab(result.path || path, result.title, result.html);
+  } catch (e) {
+    showError(String(e));
+  } finally {
+    clearStatus();
+  }
+}
+
+export async function reloadFile() {
+  const tab = activeTab();
+  if (!tab?.path) return;
+  setLoading();
+  try {
+    const result = await invoke('open_file', { path: tab.path });
+    tab.html = result.html;
+    tab.title = result.title;
+    applyActiveTab();
+    renderTabBar();
+  } catch (e) {
+    showError(String(e));
+  } finally {
+    clearStatus();
+  }
+}
+
+function showError(msg) {
+  const p = document.createElement('p');
+  p.style.cssText = 'color:#e06c75;margin-top:2em;font-family:monospace;';
+  p.textContent = 'Error: ' + msg;
+  contentEl.replaceChildren(p);
+}
+
+export function setLoading() {
+  statusText.textContent = 'Loading';
+  statusIndicator.classList.remove('hidden');
+  statusIndicator.classList.add('status-loading');
+}
+
+function setReady() {
+  statusText.textContent = 'Ready';
+  statusIndicator.classList.remove('hidden', 'status-loading');
+}
+
+export function clearStatus() {
+  if (tabs.length === 0) {
+    statusIndicator.classList.add('hidden');
+    statusIndicator.classList.remove('status-loading');
+  } else {
+    setReady();
+  }
+}
+
+// Links are handled via a single delegated listener on contentEl (installed
+// near the other contentEl delegation at the bottom of app.js). That means we
+// don't attach a per-anchor listener after every innerHTML rewrite, which
+// used to both churn listeners and stop working when search mutated the DOM.
+export async function handleAnchorClick(anchor) {
+  const href = anchor.getAttribute('href') || '';
+  if (!href) return;
+
+  // In-page anchor → smooth scroll
+  if (href.startsWith('#')) {
+    const target = document.getElementById(href.slice(1));
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  // If this resolves to a local .md file, open it in a (new) tab.
+  const tab = activeTab();
+  if (tab?.path) {
+    try {
+      const resolved = await invoke('resolve_md_path', { base: tab.path, href });
+      if (resolved) {
+        // Strip fragment from href; we'll scroll to it after the tab loads.
+        const hashIdx = href.indexOf('#');
+        const fragment = hashIdx !== -1 ? href.slice(hashIdx + 1) : '';
+        await loadFile(resolved);
+        if (fragment) {
+          requestAnimationFrame(() => {
+            const target = document.getElementById(fragment);
+            if (target) target.scrollIntoView({ behavior: 'smooth' });
+          });
+        }
+        return;
+      }
+    } catch {}
+  }
+
+  // Fallback: open externally.
+  try { await invoke('open_url', { url: href }); } catch {}
+}
+
+export async function openFilePicker() {
+  if (hasActiveOverlay()) return;
+  state.filePickerOpen = true;
+  pickerBackdrop.classList.remove('hidden');
+  try {
+    const paths = await invoke('pick_file');
+    for (const path of paths) await loadFile(path);
+  } catch {} finally {
+    pickerBackdrop.classList.add('hidden');
+    state.filePickerOpen = false;
+  }
+}
