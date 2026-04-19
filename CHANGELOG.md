@@ -4,6 +4,25 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-04-19
+
+### Added
+
+- Folder browser with sidebar tree UI to navigate and open files in a directory
+- Live file watching to automatically reload Markdown files when they are modified on disk
+- Local images are now served securely via the Tauri asset protocol
+- Link delegation and markdown link hover effects
+
+### Changed
+
+- Complete frontend architecture rewrite: migrated from a monolithic `app.js` to modular ES components (`state.js`, `folder.js`, `tabs.js`, `search.js`, `settings.js`)
+- Rewritten search functionality for improved modularity
+- Hardened Markdown renderer and CLI path handling
+
+### Fixed
+
+- Resolved module-load syntax errors caused by duplicate declarations during refactoring
+
 ## [1.6.2] - 2026-04-19
 
 ### Fixed
