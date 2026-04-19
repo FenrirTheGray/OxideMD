@@ -114,3 +114,10 @@ export const sidebarCloseBtn = document.getElementById('sidebar-close');
 // Capture the welcome screen HTML from the initial DOM (index.html) before
 // any content is loaded, so showWelcome() can restore the full styled version.
 export const WELCOME_HTML = contentEl.innerHTML;
+
+// Only one overlay (file picker, search, settings) can be open at a time.
+export function hasActiveOverlay() {
+  return state.filePickerOpen
+    || !searchBar.classList.contains('hidden')
+    || !settingsOverlay.classList.contains('hidden');
+}

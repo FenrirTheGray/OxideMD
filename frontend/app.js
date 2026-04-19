@@ -14,7 +14,11 @@ import {
   settingsOverlay, pickerBackdrop,
   sidebarEl, sidebarFolderName, sidebarTreeEl, sidebarCloseBtn,
   WELCOME_HTML,
+  hasActiveOverlay,
 } from './state.js';
+import {
+  toggleSearch, closeSearch, clearSearch, runSearch, nextMatch, prevMatch,
+} from './search.js';
 
 // Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
 // with an absolute path. The webview can't load a raw filesystem path, so we
@@ -777,14 +781,6 @@ async function handleAnchorClick(anchor) {
   try { await invoke('open_url', { url: href }); } catch {}
 }
 
-// ── Overlay exclusivity ────────────────────────────────────────────────────
-// Only one overlay (file picker, search, settings) can be open at a time.
-function hasActiveOverlay() {
-  return state.filePickerOpen
-    || !searchBar.classList.contains('hidden')
-    || !settingsOverlay.classList.contains('hidden');
-}
-
 // ── Open dialog ────────────────────────────────────────────────────────────
 async function openFilePicker() {
   if (hasActiveOverlay()) return;
@@ -797,106 +793,6 @@ async function openFilePicker() {
     pickerBackdrop.classList.add('hidden');
     state.filePickerOpen = false;
   }
-}
-
-// ── Search ─────────────────────────────────────────────────────────────────
-function toggleSearch() {
-  if (!searchBar.classList.contains('hidden')) { closeSearch(); return; }
-  if (hasActiveOverlay()) return;
-  searchBar.classList.remove('hidden');
-  btnSearch.classList.add('active');
-  searchInput.focus();
-  searchInput.select();
-}
-
-function closeSearch() {
-  searchBar.classList.add('hidden');
-  btnSearch.classList.remove('active');
-  clearSearch();
-  searchInput.value = '';
-  state.searchCaseSensitive = false;
-  searchCase.classList.remove('active');
-  searchCase.setAttribute('aria-pressed', 'false');
-}
-
-function clearSearch() {
-  state.searchRanges = [];
-  state.searchCurrent = -1;
-  if (supportsHighlights) {
-    matchHighlight.clear();
-    currentHighlight.clear();
-  }
-  searchCount.textContent = '';
-}
-
-function runSearch(query) {
-  clearSearch();
-  if (!query) return;
-
-  const needle = state.searchCaseSensitive ? query : query.toLowerCase();
-  const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-  let tn;
-  while ((tn = walker.nextNode())) {
-    const text = tn.nodeValue;
-    const haystack = state.searchCaseSensitive ? text : text.toLowerCase();
-    let idx = 0;
-    while (idx < text.length) {
-      const pos = haystack.indexOf(needle, idx);
-      if (pos === -1) break;
-      const range = document.createRange();
-      range.setStart(tn, pos);
-      range.setEnd(tn, pos + query.length);
-      state.searchRanges.push(range);
-      idx = pos + query.length;
-    }
-  }
-
-  if (supportsHighlights) {
-    for (const r of state.searchRanges) matchHighlight.add(r);
-  }
-
-  if (state.searchRanges.length > 0) {
-    state.searchCurrent = 0;
-    highlightCurrent();
-  }
-  updateSearchCount();
-}
-
-function highlightCurrent() {
-  if (!supportsHighlights) return;
-  currentHighlight.clear();
-  const range = state.searchRanges[state.searchCurrent];
-  if (!range) return;
-  currentHighlight.add(range);
-  const rect = range.getBoundingClientRect();
-  const scrollRect = contentScroll.getBoundingClientRect();
-  const target =
-    contentScroll.scrollTop
-    + rect.top
-    - scrollRect.top
-    - scrollRect.height / 2
-    + rect.height / 2;
-  contentScroll.scrollTo({ top: target, behavior: 'smooth' });
-}
-
-function nextMatch() {
-  if (!state.searchRanges.length) return;
-  state.searchCurrent = (state.searchCurrent + 1) % state.searchRanges.length;
-  highlightCurrent();
-  updateSearchCount();
-}
-
-function prevMatch() {
-  if (!state.searchRanges.length) return;
-  state.searchCurrent = (state.searchCurrent - 1 + state.searchRanges.length) % state.searchRanges.length;
-  highlightCurrent();
-  updateSearchCount();
-}
-
-function updateSearchCount() {
-  searchCount.textContent = state.searchRanges.length
-    ? `${state.searchCurrent + 1} / ${state.searchRanges.length}`
-    : (searchInput.value ? 'No matches' : '');
 }
 
 // ── Custom selects ─────────────────────────────────────────────────────────
