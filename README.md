@@ -14,8 +14,9 @@ A lightweight, cross-platform, read-only Markdown viewer written in Rust using [
 - **Custom fonts** — install `.ttf`/`.otf`/`.woff`/`.woff2` font files from the settings font dropdown; fonts are stored in the OxideMD config folder and persist across sessions
 - **Settings** — tabbed settings dialog (Reading / Colors / About) with persistent configuration (font family, font size, line height, reading width, colors, theme) saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Reading layout** — configurable line height (1.0–2.4) and reading width (480–1400 px) that scales with zoom
-- **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs
+- **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs; expand-all / collapse-all toolbar buttons; case-insensitive filename filter that auto-expands matching folders and highlights matched characters
 - **Live file watching** — opened files and folders are monitored for changes; tabs automatically reload when modified externally
+- **Tab overflow scrolling** — left/right chevron buttons appear in the toolbar when the tab strip overflows
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
 - **Multi-file open** — select multiple files at once from the open dialog
 - **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
@@ -99,9 +100,14 @@ Installers are output to `src-tauri/target/release/bundle/`:
 OxideMD/
 ├── .github/workflows/      # CI/CD (GitHub Actions release workflow)
 ├── frontend/               # WebView frontend (HTML/CSS/JS)
-│   ├── index.html          # App shell: toolbar, search bar, content area, settings modal
+│   ├── index.html          # App shell: toolbar, search bar, sidebar, content area, settings modal
 │   ├── style.css           # Dark/light/system themes, markdown element styles
-│   └── app.js              # All UI logic: rendering, search, settings, shortcuts
+│   ├── app.js              # Entry point: initialization and global keyboard shortcuts
+│   ├── state.js            # Shared state and DOM references
+│   ├── tabs.js             # Tab bar, tab switching, zoom, overflow scrolling
+│   ├── folder.js           # Sidebar folder tree, filter, file watching
+│   ├── search.js           # In-document search (match highlighting, navigation)
+│   └── settings.js         # Settings dialog (fonts, colors, update check)
 ├── src-tauri/              # Rust backend (Tauri)
 │   ├── src/
 │   │   ├── main.rs         # Entry point
