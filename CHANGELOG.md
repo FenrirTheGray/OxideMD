@@ -4,6 +4,22 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-04-19
+
+### Added
+
+- Sidebar filename filter: case-insensitive substring input above the tree; matching folders auto-expand and matched characters are highlighted in the label
+- Sidebar "Expand all" and "Collapse all" buttons in the folder header
+- Tab overflow scroll buttons (left/right chevrons) appear in the toolbar when the tab strip overflows
+
+### Changed
+
+- Folder scanner redesigned: flat discovery of every `.md` file first, then the tree is reconstructed from the collected paths. Removed the 12-level depth cap and the 5000 entries-per-folder cap; replaced with a single 500000 visited-entries safety cap so deep project trees are fully indexed
+
+### Fixed
+
+- Sidebar icons now render on Linux (`.deb` / WebKitGTK) builds: inline SVGs had no intrinsic size in WebKitGTK, so explicit `width`/`height` are now applied to the `.tree-twisty` and `.tree-icon` children
+
 ## [2.0.0] - 2026-04-19
 
 ### Added
