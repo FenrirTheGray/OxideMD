@@ -4,6 +4,7 @@ import {
   contentScroll,
   pickerBackdrop,
   sidebarEl, sidebarFolderName, sidebarTreeEl,
+  sidebarFilterInput, sidebarFilterClearBtn,
   hasActiveOverlay,
 } from './state.js';
 import { activeTab, loadFile, renderContent } from './tabs.js';
@@ -83,6 +84,7 @@ export async function openFolder() {
 export function setFolder(tree) {
   state.currentFolder = tree;
   expandedFolders.clear();
+  resetFilter();
   sidebarFolderName.textContent = tree.name || tree.root;
   sidebarFolderName.title = tree.root;
   sidebarEl.classList.remove('hidden');
@@ -90,9 +92,75 @@ export function setFolder(tree) {
   syncWatcher();
 }
 
+function resetFilter() {
+  state.treeFilter = '';
+  if (sidebarFilterInput) sidebarFilterInput.value = '';
+  if (sidebarFilterClearBtn) sidebarFilterClearBtn.classList.add('hidden');
+}
+
+export function setTreeFilter(query) {
+  const next = (query || '').trim();
+  if (next === state.treeFilter) return;
+  state.treeFilter = next;
+  if (sidebarFilterClearBtn) sidebarFilterClearBtn.classList.toggle('hidden', next === '');
+  renderFolderTree();
+}
+
+export function clearTreeFilter() {
+  if (!state.treeFilter && !(sidebarFilterInput && sidebarFilterInput.value)) return;
+  resetFilter();
+  renderFolderTree();
+}
+
+// Filter the tree entries by name (case-insensitive substring). A folder is
+// kept if it or any descendant matches; when a folder itself matches, all its
+// children are kept so the user can see what's inside.
+function filterEntries(entries, query) {
+  const q = query.toLowerCase();
+  const walk = (node) => {
+    const selfMatch = node.name.toLowerCase().includes(q);
+    if (!node.isDir) return selfMatch ? node : null;
+    if (selfMatch) return node;
+    const kept = [];
+    for (const child of node.children || []) {
+      const r = walk(child);
+      if (r) kept.push(r);
+    }
+    if (kept.length === 0) return null;
+    return { ...node, children: kept };
+  };
+  const out = [];
+  for (const n of entries) {
+    const r = walk(n);
+    if (r) out.push(r);
+  }
+  return out;
+}
+
+function collectDirPaths(entries, out) {
+  for (const entry of entries || []) {
+    if (!entry.isDir) continue;
+    out.add(entry.path);
+    collectDirPaths(entry.children, out);
+  }
+}
+
+export function expandAllFolders() {
+  if (!state.currentFolder) return;
+  collectDirPaths(state.currentFolder.entries, expandedFolders);
+  renderFolderTree();
+}
+
+export function collapseAllFolders() {
+  if (!state.currentFolder) return;
+  expandedFolders.clear();
+  renderFolderTree();
+}
+
 export function closeFolder() {
   state.currentFolder = null;
   expandedFolders.clear();
+  resetFilter();
   sidebarTreeEl.innerHTML = '';
   sidebarFolderName.textContent = '';
   sidebarFolderName.title = '';
@@ -103,23 +171,39 @@ export function closeFolder() {
 export function renderFolderTree() {
   sidebarTreeEl.innerHTML = '';
   if (!state.currentFolder) return;
-  if (!state.currentFolder.entries || state.currentFolder.entries.length === 0) {
+
+  const allEntries = state.currentFolder.entries;
+  if (!allEntries || allEntries.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'tree-empty';
     empty.textContent = 'No Markdown files in this folder.';
     sidebarTreeEl.appendChild(empty);
     return;
   }
-  for (const entry of state.currentFolder.entries) {
-    sidebarTreeEl.appendChild(buildTreeNode(entry));
+
+  const filter = state.treeFilter;
+  const hasFilter = filter.length > 0;
+  const entries = hasFilter ? filterEntries(allEntries, filter) : allEntries;
+
+  if (hasFilter && entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'tree-empty';
+    empty.textContent = 'No files match the filter.';
+    sidebarTreeEl.appendChild(empty);
+    return;
   }
-  if (state.currentFolder.truncated) {
+
+  const opts = { forceExpand: hasFilter, highlight: hasFilter ? filter : '' };
+  for (const entry of entries) {
+    sidebarTreeEl.appendChild(buildTreeNode(entry, opts));
+  }
+  if (state.currentFolder.truncated && !hasFilter) {
     const hint = document.createElement('div');
     hint.className = 'tree-truncated';
-    hint.textContent = 'Folder too large — some entries are not shown.';
+    hint.textContent = 'Folder too large — scan stopped, some files may be missing.';
     sidebarTreeEl.appendChild(hint);
   }
-  highlightActiveTreeItem();
+  if (!hasFilter) highlightActiveTreeItem();
   // Roving tabindex: set the active row (or first) as the focus entry point
   const active = sidebarTreeEl.querySelector('.tree-row.active');
   const first = sidebarTreeEl.querySelector('.tree-row');
@@ -127,18 +211,22 @@ export function renderFolderTree() {
   if (entry) entry.tabIndex = 0;
 }
 
-function buildTreeNode(node) {
+function buildTreeNode(node, opts = {}) {
+  const forceExpand = !!opts.forceExpand;
+  const highlight = opts.highlight || '';
+
   const wrap = document.createElement('div');
   wrap.className = 'tree-node' + (node.isDir ? ' tree-dir' : ' tree-file');
   wrap.dataset.path = node.path;
-  if (node.isDir && expandedFolders.has(node.path)) wrap.classList.add('expanded');
+  const expanded = node.isDir && (forceExpand || expandedFolders.has(node.path));
+  if (expanded) wrap.classList.add('expanded');
 
   const row = document.createElement('div');
   row.className = 'tree-row';
   row.setAttribute('role', 'treeitem');
   row.tabIndex = -1;
   if (node.isDir) {
-    row.setAttribute('aria-expanded', expandedFolders.has(node.path) ? 'true' : 'false');
+    row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   }
   row.title = node.path;
 
@@ -154,7 +242,8 @@ function buildTreeNode(node) {
 
   const label = document.createElement('span');
   label.className = 'tree-label';
-  label.textContent = node.name;
+  if (highlight) renderHighlightedLabel(label, node.name, highlight);
+  else label.textContent = node.name;
   row.appendChild(label);
 
   wrap.appendChild(row);
@@ -163,7 +252,7 @@ function buildTreeNode(node) {
     const children = document.createElement('div');
     children.className = 'tree-children';
     for (const child of node.children || []) {
-      children.appendChild(buildTreeNode(child));
+      children.appendChild(buildTreeNode(child, opts));
     }
     wrap.appendChild(children);
 
@@ -178,6 +267,25 @@ function buildTreeNode(node) {
   }
 
   return wrap;
+}
+
+function renderHighlightedLabel(label, text, query) {
+  const q = query.toLowerCase();
+  const lower = text.toLowerCase();
+  let idx = lower.indexOf(q);
+  if (idx === -1) { label.textContent = text; return; }
+  label.textContent = '';
+  let pos = 0;
+  while (idx !== -1) {
+    if (idx > pos) label.appendChild(document.createTextNode(text.slice(pos, idx)));
+    const mark = document.createElement('mark');
+    mark.className = 'tree-match';
+    mark.textContent = text.slice(idx, idx + q.length);
+    label.appendChild(mark);
+    pos = idx + q.length;
+    idx = lower.indexOf(q, pos);
+  }
+  if (pos < text.length) label.appendChild(document.createTextNode(text.slice(pos)));
 }
 
 function visibleTreeRows() {
