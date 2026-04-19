@@ -66,23 +66,17 @@ pub struct FolderTree {
     pub root: String,
     pub name: String,
     pub entries: Vec<TreeNode>,
-    /// True if the walk hit a depth or entry cap and the tree is
-    /// incomplete. The sidebar uses this to show a "truncated" hint
-    /// so a monster repo doesn't silently look like an empty folder.
+    /// True if the scan hit the visited-entries safety cap and some
+    /// files may have been missed. The sidebar uses this to warn the
+    /// user so a monster folder doesn't silently look incomplete.
     pub truncated: bool,
 }
 
-// Bounds on the folder walk. We pick numbers big enough that ordinary
-// docs folders are never hit, and small enough that someone pointing
-// at `C:\` doesn't take the process down.
-const WALK_MAX_DEPTH: usize = 12;
-const WALK_MAX_ENTRIES_PER_DIR: usize = 500;
-const WALK_MAX_TOTAL_ENTRIES: usize = 5000;
-
-struct WalkCtx {
-    total: usize,
-    truncated: bool,
-}
+// Single safety cap: the maximum number of raw filesystem entries we'll
+// stat during the scan. Large enough to cover typical dev workspaces
+// (including node_modules-heavy trees), small enough to refuse someone
+// pointing at `~/` or `C:\`.
+const WALK_MAX_VISITED: usize = 500_000;
 
 #[derive(serde::Serialize)]
 pub struct TreeNode {
@@ -102,38 +96,32 @@ fn is_md_file(path: &std::path::Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Walks `dir` and returns its entries. Folders are kept only if they
-/// (or one of their descendants) contain a markdown file. Hidden entries
-/// (names starting with '.') are skipped. Bounded by WALK_MAX_DEPTH,
-/// WALK_MAX_ENTRIES_PER_DIR and WALK_MAX_TOTAL_ENTRIES — crossing any
-/// limit sets `ctx.truncated = true` so the UI can warn the user.
-fn walk_dir(dir: &std::path::Path, depth: usize, ctx: &mut WalkCtx) -> Vec<TreeNode> {
-    let mut nodes: Vec<TreeNode> = Vec::new();
-    if depth >= WALK_MAX_DEPTH {
-        ctx.truncated = true;
-        return nodes;
-    }
-    if ctx.total >= WALK_MAX_TOTAL_ENTRIES {
-        ctx.truncated = true;
-        return nodes;
+/// Descends into every non-hidden directory under `dir` and appends any
+/// markdown file paths to `out`. No depth or per-directory cap — the
+/// only guard is `visited`, which counts raw filesystem entries and
+/// aborts the scan once it crosses `WALK_MAX_VISITED`.
+fn collect_md_paths(
+    dir: &std::path::Path,
+    out: &mut Vec<PathBuf>,
+    visited: &mut usize,
+    truncated: &mut bool,
+) {
+    if *truncated {
+        return;
     }
     let read = match fs::read_dir(dir) {
         Ok(r) => r,
-        Err(_) => return nodes,
+        Err(_) => return,
     };
-    let mut per_dir: usize = 0;
     for entry in read.flatten() {
-        if per_dir >= WALK_MAX_ENTRIES_PER_DIR {
-            ctx.truncated = true;
-            break;
-        }
-        if ctx.total >= WALK_MAX_TOTAL_ENTRIES {
-            ctx.truncated = true;
-            break;
+        *visited += 1;
+        if *visited >= WALK_MAX_VISITED {
+            *truncated = true;
+            return;
         }
         let path = entry.path();
         let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
+            Some(n) => n,
             None => continue,
         };
         if name.starts_with('.') {
@@ -144,29 +132,65 @@ fn walk_dir(dir: &std::path::Path, depth: usize, ctx: &mut WalkCtx) -> Vec<TreeN
             Err(_) => continue,
         };
         if ft.is_dir() {
-            let children = walk_dir(&path, depth + 1, ctx);
-            if !children.is_empty() {
-                nodes.push(TreeNode {
-                    name,
-                    path: path.to_string_lossy().into_owned(),
-                    is_dir: true,
-                    children,
-                });
-                ctx.total += 1;
-                per_dir += 1;
+            collect_md_paths(&path, out, visited, truncated);
+            if *truncated {
+                return;
             }
         } else if ft.is_file() && is_md_file(&path) {
-            nodes.push(TreeNode {
-                name,
-                path: path.to_string_lossy().into_owned(),
-                is_dir: false,
-                children: Vec::new(),
-            });
-            ctx.total += 1;
-            per_dir += 1;
+            out.push(path);
         }
     }
-    // Folders first, then files, each group alphabetical (case-insensitive).
+}
+
+/// Reconstructs a folder/file tree from a flat list of markdown file
+/// paths. All ancestor directories of any included file are synthesized;
+/// directories with no markdown descendant never appear. Within each
+/// level, folders sort before files and each group is alphabetical
+/// (case-insensitive).
+fn build_nodes(parent: &std::path::Path, files: &[PathBuf]) -> Vec<TreeNode> {
+    use std::collections::BTreeMap;
+    let mut groups: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+    let mut direct_files: Vec<(String, String)> = Vec::new();
+
+    for f in files {
+        let rel = match f.strip_prefix(parent) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let mut comps = rel.components();
+        let first = match comps.next() {
+            Some(c) => c.as_os_str().to_string_lossy().into_owned(),
+            None => continue,
+        };
+        if comps.clone().next().is_none() {
+            direct_files.push((first, f.to_string_lossy().into_owned()));
+        } else {
+            groups.entry(first).or_default().push(f.clone());
+        }
+    }
+
+    let mut nodes: Vec<TreeNode> = Vec::new();
+    for (name, group_paths) in groups {
+        let subdir = parent.join(&name);
+        let children = build_nodes(&subdir, &group_paths);
+        if children.is_empty() {
+            continue;
+        }
+        nodes.push(TreeNode {
+            name,
+            path: subdir.to_string_lossy().into_owned(),
+            is_dir: true,
+            children,
+        });
+    }
+    for (name, full_path) in direct_files {
+        nodes.push(TreeNode {
+            name,
+            path: full_path,
+            is_dir: false,
+            children: Vec::new(),
+        });
+    }
     nodes.sort_by(|a, b| match (a.is_dir, b.is_dir) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
@@ -181,13 +205,16 @@ fn build_folder_tree(root: &std::path::Path) -> FolderTree {
         .and_then(|n| n.to_str())
         .unwrap_or_else(|| root.to_str().unwrap_or(""))
         .to_string();
-    let mut ctx = WalkCtx { total: 0, truncated: false };
-    let entries = walk_dir(root, 0, &mut ctx);
+    let mut md_paths: Vec<PathBuf> = Vec::new();
+    let mut visited: usize = 0;
+    let mut truncated = false;
+    collect_md_paths(root, &mut md_paths, &mut visited, &mut truncated);
+    let entries = build_nodes(root, &md_paths);
     FolderTree {
         root: root.to_string_lossy().into_owned(),
         name,
         entries,
-        truncated: ctx.truncated,
+        truncated,
     }
 }
 
