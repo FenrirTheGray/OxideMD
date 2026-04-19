@@ -26,6 +26,14 @@
         Open
       </button>
 
+      <button id="btn-open-folder" title="Open folder" aria-label="Open folder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <path d="M3 11h18"/>
+        </svg>
+        Folder
+      </button>
+
       <button id="btn-reload" title="Reload file (Ctrl+R)" aria-label="Reload current file" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
@@ -100,9 +108,21 @@
     <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
   </div>
 
-  <!-- ── Content area ───────────────────────────────────────────────── -->
-  <div id="content-scroll">
-    <main id="content">
+  <!-- ── Main area: sidebar + content ───────────────────────────────── -->
+  <div id="main-container">
+
+    <!-- File tree sidebar (only shown when a folder is opened) -->
+    <aside id="sidebar" class="hidden" aria-label="File tree">
+      <div id="sidebar-header">
+        <span id="sidebar-folder-name" title=""></span>
+        <button id="sidebar-close" title="Close folder" aria-label="Close folder">&#x2715;</button>
+      </div>
+      <div id="sidebar-tree" role="tree"></div>
+    </aside>
+
+    <!-- Content area -->
+    <div id="content-scroll">
+      <main id="content">
       <div id="welcome">
         <div class="welcome-wordmark">
           <h1 class="welcome-wordmark-name">OxideMD</h1>
@@ -144,6 +164,7 @@
         </div>
       </div>
     </main>
+    </div>
   </div>
 
   <!-- ── Status bar ─────────────────────────────────────────────────── -->
@@ -341,7 +362,7 @@
             </div>
             <div class="about-meta-row">
               <span class="about-meta-label">Repository</span>
-              <a href="#" class="about-link" data-url="https://github.com/FenrirTheGray/OxideMD">github.com/FenrirTheGray/OxideMD</a>
+              <a href="https://github.com/FenrirTheGray/OxideMD" class="about-link" data-url="https://github.com/FenrirTheGray/OxideMD" rel="noopener noreferrer">github.com/FenrirTheGray/OxideMD</a>
             </div>
           </div>
         </div>
