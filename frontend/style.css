@@ -199,6 +199,35 @@ body.maximized {
   mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
 }
 
+/* Tab overflow scroll buttons — visible only when tabs overflow on that side */
+.tab-scroll-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              transform var(--dur-xs) var(--ease);
+}
+.tab-scroll-btn[hidden] { display: none; }
+.tab-scroll-btn svg { width: 14px; height: 14px; display: block; }
+.tab-scroll-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.tab-scroll-btn:active { transform: scale(0.94); }
+.tab-scroll-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
 /* ── Tabs ─────────────────────────────────────────────────────────── */
 .tab {
   display: flex;
@@ -578,7 +607,14 @@ body.maximized {
   font-weight: 600;
 }
 
-#sidebar-close {
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-header-actions button {
   background: transparent;
   border: 1px solid transparent;
   color: var(--fg-dim);
@@ -597,6 +633,19 @@ body.maximized {
               border-color var(--dur-sm) var(--ease),
               box-shadow var(--dur-sm) var(--ease);
 }
+.sidebar-header-btn svg { width: 13px; height: 13px; display: block; }
+
+.sidebar-header-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.sidebar-header-btn:focus-visible {
+  outline: none;
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
 #sidebar-close:hover {
   background: var(--bg-danger-hover);
   color: var(--danger);
@@ -607,6 +656,76 @@ body.maximized {
   color: var(--danger);
   border-color: var(--danger);
   box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#sidebar-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-filter-icon {
+  position: absolute;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  color: var(--fg-dim);
+  pointer-events: none;
+}
+
+#sidebar-filter-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 4px 24px 4px 26px;
+  outline: none;
+  min-width: 0;
+  transition: border-color var(--dur-sm) var(--ease),
+              box-shadow var(--dur-sm) var(--ease);
+}
+#sidebar-filter-input::placeholder { color: var(--fg-dim); }
+#sidebar-filter-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#sidebar-filter-clear {
+  position: absolute;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: background var(--dur-sm) var(--ease), color var(--dur-sm) var(--ease);
+}
+#sidebar-filter-clear:hover { background: var(--bg-btn-hover); color: var(--fg); }
+#sidebar-filter-clear:focus-visible {
+  outline: none;
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.tree-match {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 #sidebar-tree {
@@ -665,6 +784,7 @@ body.maximized {
   transition: transform var(--dur-sm) var(--ease);
 }
 .tree-twisty.empty { visibility: hidden; }
+.tree-twisty svg { width: 14px; height: 14px; display: block; }
 .tree-node.expanded > .tree-row > .tree-twisty { transform: rotate(90deg); }
 
 .tree-icon {
@@ -676,6 +796,7 @@ body.maximized {
   flex-shrink: 0;
   color: var(--fg-dim);
 }
+.tree-icon svg { width: 16px; height: 16px; display: block; }
 .tree-row:hover .tree-icon,
 .tree-row.active .tree-icon { color: var(--accent); }
 

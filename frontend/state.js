@@ -49,6 +49,7 @@ export const state = {
   copyResetTimer: null,
   filePickerOpen: false,
   releaseFocusTrap: null,
+  treeFilter: '',
 };
 
 // ── Zoom constants ────────────────────────────────────────────────────────
@@ -80,6 +81,8 @@ export const systemDarkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 export const tabBarEl        = document.getElementById('tab-area');
+export const tabScrollLeftEl  = document.getElementById('tab-scroll-left');
+export const tabScrollRightEl = document.getElementById('tab-scroll-right');
 export const contentEl       = document.getElementById('content');
 export const contentScroll   = document.getElementById('content-scroll');
 export const btnOpen         = document.getElementById('btn-open');
@@ -110,6 +113,10 @@ export const sidebarEl       = document.getElementById('sidebar');
 export const sidebarFolderName = document.getElementById('sidebar-folder-name');
 export const sidebarTreeEl   = document.getElementById('sidebar-tree');
 export const sidebarCloseBtn = document.getElementById('sidebar-close');
+export const sidebarExpandAllBtn   = document.getElementById('sidebar-expand-all');
+export const sidebarCollapseAllBtn = document.getElementById('sidebar-collapse-all');
+export const sidebarFilterInput    = document.getElementById('sidebar-filter-input');
+export const sidebarFilterClearBtn = document.getElementById('sidebar-filter-clear');
 
 // Capture the welcome screen HTML from the initial DOM (index.html) before
 // any content is loaded, so showWelcome() can restore the full styled version.
