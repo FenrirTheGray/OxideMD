@@ -1,96 +1,20 @@
-// Tauri v2 API (available via withGlobalTauri: true)
-const { invoke, convertFileSrc } = window.__TAURI__.core;
-const { listen } = window.__TAURI__.event;
-const { getCurrentWindow } = window.__TAURI__.window;
-const appWindow = getCurrentWindow();
-
-// ── Platform detection ────────────────────────────────────────────────────
-const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-const modKey = isMac ? 'Cmd' : 'Ctrl';
-
-const MD_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
-function isMarkdownPath(p) { return typeof p === 'string' && MD_EXT_RE.test(p); }
-
-// ── Tab state ──────────────────────────────────────────────────────────────
-// Each tab: { id, path, title, html, scrollTop }
-let tabs = [];
-let activeTabId = null;
-let nextTabId = 1;
-
-// ── Folder/sidebar state ───────────────────────────────────────────────────
-let currentFolder = null; // { root, name, entries }
-const expandedFolders = new Set();
-
-// ── Global state ───────────────────────────────────────────────────────────
-let config = null;
-let searchRanges = [];
-let searchCurrent = -1;
-let searchCaseSensitive = false;
-let originalContent = '';
-
-// CSS Custom Highlight API registry — painted via ::highlight() in style.css.
-// Avoids mutating the DOM on search, so images, links, and event bindings
-// survive a search untouched. `currentHighlight.priority` outranks the base
-// match highlight so the "current" styling wins where they overlap.
-const supportsHighlights =
-  typeof Highlight === 'function'
-  && typeof CSS !== 'undefined'
-  && CSS.highlights;
-const matchHighlight = supportsHighlights ? new Highlight() : null;
-const currentHighlight = supportsHighlights ? new Highlight() : null;
-if (supportsHighlights) {
-  matchHighlight.priority = 0;
-  currentHighlight.priority = 1;
-  CSS.highlights.set('oxide-match', matchHighlight);
-  CSS.highlights.set('oxide-current', currentHighlight);
-}
-
-// ── Custom font state ─────────────────────────────────────────────────────
-let customFonts = [];          // cached list: [{ name, filename }, …]
-let fontStyleEl = null;        // <style> element for the active @font-face
-let activeFontFilename = null; // filename of the currently loaded custom font
-
-// ── DOM refs ───────────────────────────────────────────────────────────────
-const tabBarEl        = document.getElementById('tab-area');
-const contentEl       = document.getElementById('content');
-const contentScroll   = document.getElementById('content-scroll');
-const btnOpen         = document.getElementById('btn-open');
-const btnOpenFolder   = document.getElementById('btn-open-folder');
-const btnClose        = document.getElementById('btn-close');
-const btnReload       = document.getElementById('btn-reload');
-const btnSearch       = document.getElementById('btn-search');
-const btnSettings     = document.getElementById('btn-settings');
-const btnMinimize     = document.getElementById('btn-minimize');
-const btnMaximize     = document.getElementById('btn-maximize');
-const btnWinClose     = document.getElementById('btn-winclose');
-const filePathEl      = document.getElementById('file-path');
-const statusIndicator = document.getElementById('status-indicator');
-const statusText      = document.getElementById('status-text');
-const btnZoomOut      = document.getElementById('btn-zoom-out');
-const btnZoomIn       = document.getElementById('btn-zoom-in');
-const zoomLabel       = document.getElementById('zoom-label');
-const searchBar       = document.getElementById('search-bar');
-const searchInput     = document.getElementById('search-input');
-const searchCase      = document.getElementById('search-case');
-const searchPrev      = document.getElementById('search-prev');
-const searchNext      = document.getElementById('search-next');
-const searchClose     = document.getElementById('search-close');
-const searchCount     = document.getElementById('search-count');
-const settingsOverlay = document.getElementById('settings-overlay');
-const pickerBackdrop  = document.getElementById('picker-backdrop');
-const sidebarEl       = document.getElementById('sidebar');
-const sidebarFolderName = document.getElementById('sidebar-folder-name');
-const sidebarTreeEl   = document.getElementById('sidebar-tree');
-const sidebarCloseBtn = document.getElementById('sidebar-close');
-
-const ZOOM_MIN  = 0.5;
-const ZOOM_MAX  = 2.0;
-const ZOOM_STEP = 0.1;
-const ZOOM_DEFAULT = 1.0;
-
-// Capture the welcome screen HTML from the initial DOM (index.html) before
-// any content is loaded, so showWelcome() can restore the full styled version.
-const WELCOME_HTML = contentEl.innerHTML;
+import {
+  invoke, convertFileSrc, listen, appWindow,
+  isMac, modKey, isMarkdownPath, isPathInside, hasMod,
+  tabs, expandedFolders, state,
+  ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
+  supportsHighlights, matchHighlight, currentHighlight,
+  systemDarkMQ,
+  tabBarEl, contentEl, contentScroll,
+  btnOpen, btnOpenFolder, btnClose, btnReload, btnSearch, btnSettings,
+  btnMinimize, btnMaximize, btnWinClose,
+  filePathEl, statusIndicator, statusText,
+  btnZoomOut, btnZoomIn, zoomLabel,
+  searchBar, searchInput, searchCase, searchPrev, searchNext, searchClose, searchCount,
+  settingsOverlay, pickerBackdrop,
+  sidebarEl, sidebarFolderName, sidebarTreeEl, sidebarCloseBtn,
+  WELCOME_HTML,
+} from './state.js';
 
 // Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
 // with an absolute path. The webview can't load a raw filesystem path, so we
@@ -99,9 +23,9 @@ const WELCOME_HTML = contentEl.innerHTML;
 function renderContent(html) {
   // Any existing search highlights point to about-to-be-detached text nodes.
   // Drop them so the registry doesn't hold refs to orphaned ranges.
-  if (searchRanges.length || (supportsHighlights && currentHighlight.size)) {
-    searchRanges = [];
-    searchCurrent = -1;
+  if (state.searchRanges.length || (supportsHighlights && currentHighlight.size)) {
+    state.searchRanges = [];
+    state.searchCurrent = -1;
     if (supportsHighlights) {
       matchHighlight.clear();
       currentHighlight.clear();
@@ -115,12 +39,12 @@ function renderContent(html) {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
-  config = await invoke('get_config');
-  customFonts = await invoke('list_custom_fonts');
-  if (config.font_family.startsWith('custom:')) {
-    await loadCustomFont(config.font_family.slice(7));
+  state.config = await invoke('get_config');
+  state.customFonts = await invoke('list_custom_fonts');
+  if (state.config.font_family.startsWith('custom:')) {
+    await loadCustomFont(state.config.font_family.slice(7));
   }
-  applyConfig(config);
+  applyConfig(state.config);
 
   // Open every file passed on the command line (Explorer "Open with…" can
   // pass multiple paths in a single launch).
@@ -163,27 +87,25 @@ async function init() {
 }
 
 // ── Config / theme ─────────────────────────────────────────────────────────
-const systemDarkMQ = window.matchMedia('(prefers-color-scheme: dark)');
-
 function resolvedTheme(theme) {
   if (theme !== 'system') return theme;
   return systemDarkMQ.matches ? 'dark' : 'light';
 }
 
 async function loadCustomFont(filename) {
-  if (activeFontFilename === filename) return;
+  if (state.activeFontFilename === filename) return;
   try {
     const b64 = await invoke('get_font_data', { filename });
     const ext = filename.split('.').pop().toLowerCase();
     const format = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' }[ext] || 'truetype';
-    if (!fontStyleEl) {
-      fontStyleEl = document.createElement('style');
-      document.head.appendChild(fontStyleEl);
+    if (!state.fontStyleEl) {
+      state.fontStyleEl = document.createElement('style');
+      document.head.appendChild(state.fontStyleEl);
     }
-    fontStyleEl.textContent = `@font-face { font-family: "OxideMD-Custom"; src: url("data:font/${ext};base64,${b64}") format("${format}"); }`;
-    activeFontFilename = filename;
+    state.fontStyleEl.textContent = `@font-face { font-family: "OxideMD-Custom"; src: url("data:font/${ext};base64,${b64}") format("${format}"); }`;
+    state.activeFontFilename = filename;
   } catch (err) {
-    activeFontFilename = null;
+    state.activeFontFilename = null;
     statusText.textContent = `Font error: ${err}`;
     statusIndicator.classList.remove('hidden', 'status-loading');
     setTimeout(clearStatus, 4000);
@@ -194,7 +116,7 @@ function applyConfig(cfg) {
   document.body.className = `theme-${resolvedTheme(cfg.theme)}`;
   if (cfg.font_family.startsWith('custom:')) {
     const filename = cfg.font_family.slice(7);
-    if (activeFontFilename !== filename) loadCustomFont(filename);
+    if (state.activeFontFilename !== filename) loadCustomFont(filename);
     document.body.style.setProperty('--font-family', '"OxideMD-Custom", sans-serif');
   } else {
     document.body.style.setProperty('--font-family', `"${cfg.font_family}", sans-serif`);
@@ -210,7 +132,7 @@ function applyConfig(cfg) {
 
 // Live update when the OS switches dark/light while theme is set to 'system'
 systemDarkMQ.addEventListener('change', () => {
-  if (config?.theme === 'system') applyConfig(config);
+  if (state.config?.theme === 'system') applyConfig(state.config);
 });
 
 // ── Window geometry ────────────────────────────────────────────────────────
@@ -218,7 +140,7 @@ async function saveGeometry() {
   try {
     const maximized = await appWindow.isMaximized();
     if (maximized) {
-      await invoke('save_window_geometry', { width: config.window_width, height: config.window_height, maximized: true });
+      await invoke('save_window_geometry', { width: state.config.window_width, height: state.config.window_height, maximized: true });
     } else {
       const size = await appWindow.outerSize();
       await invoke('save_window_geometry', { width: size.width, height: size.height, maximized: false });
@@ -228,7 +150,7 @@ async function saveGeometry() {
 
 // ── Toolbar state ──────────────────────────────────────────────────────────
 function syncToolbar() {
-  const hasTab = activeTabId !== null;
+  const hasTab = state.activeTabId !== null;
   btnClose.disabled  = !hasTab;
   btnReload.disabled = !hasTab;
   btnSearch.disabled = !hasTab;
@@ -245,7 +167,7 @@ function syncToolbar() {
 function syncWatcher() {
   const paths = new Set();
   for (const t of tabs) if (t.path) paths.add(t.path);
-  if (currentFolder?.root) paths.add(currentFolder.root);
+  if (state.currentFolder?.root) paths.add(state.currentFolder.root);
   invoke('watch_paths', { paths: [...paths] }).catch(() => {});
 }
 
@@ -271,7 +193,7 @@ async function flushFsChanges() {
   pendingFsChanges.clear();
 
   let folderDirty = false;
-  const folderRoot = currentFolder?.root ?? null;
+  const folderRoot = state.currentFolder?.root ?? null;
 
   for (const p of paths) {
     const tab = tabs.find(t => t.path === p);
@@ -280,10 +202,10 @@ async function flushFsChanges() {
         const result = await invoke('open_file', { path: p });
         tab.html = result.html;
         tab.title = result.title;
-        if (tab.id === activeTabId) {
+        if (tab.id === state.activeTabId) {
           const scrollTop = contentScroll.scrollTop;
           renderContent(result.html);
-          originalContent = result.html;
+          state.originalContent = result.html;
           requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
         }
       } catch { /* file vanished; leave tab as-is */ }
@@ -294,7 +216,7 @@ async function flushFsChanges() {
   if (folderDirty && folderRoot) {
     try {
       const tree = await invoke('read_folder_tree', { path: folderRoot });
-      currentFolder = tree;
+      state.currentFolder = tree;
       renderFolderTree();
     } catch { /* folder gone */ }
   }
@@ -302,7 +224,7 @@ async function flushFsChanges() {
 
 // ── Tab management ─────────────────────────────────────────────────────────
 function activeTab() {
-  return tabs.find(t => t.id === activeTabId) ?? null;
+  return tabs.find(t => t.id === state.activeTabId) ?? null;
 }
 
 function openInNewTab(path, title, html) {
@@ -314,9 +236,9 @@ function openInNewTab(path, title, html) {
       return;
     }
   }
-  const id = nextTabId++;
+  const id = state.nextTabId++;
   tabs.push({ id, path, title, html, scrollTop: 0, zoom: ZOOM_DEFAULT });
-  activeTabId = id;
+  state.activeTabId = id;
   syncToolbar();
   renderTabBar();
   applyActiveTab();
@@ -328,7 +250,7 @@ function switchToTab(id) {
   const cur = activeTab();
   if (cur) cur.scrollTop = contentScroll.scrollTop;
 
-  activeTabId = id;
+  state.activeTabId = id;
   clearSearch();
   renderTabBar();
   applyActiveTab();
@@ -339,7 +261,7 @@ function closeTab(id) {
   if (idx === -1) return;
 
   // Save scroll before closing if it's active
-  if (id === activeTabId) {
+  if (id === state.activeTabId) {
     tabs[idx].scrollTop = contentScroll.scrollTop;
   }
 
@@ -347,13 +269,13 @@ function closeTab(id) {
   syncWatcher();
 
   if (tabs.length === 0) {
-    activeTabId = null;
+    state.activeTabId = null;
     clearSearch();
     syncToolbar();
     renderTabBar();
     showWelcome();
-  } else if (id === activeTabId) {
-    activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
+  } else if (id === state.activeTabId) {
+    state.activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
     clearSearch();
     syncToolbar();
     renderTabBar();
@@ -368,7 +290,7 @@ function applyActiveTab() {
   if (!tab) { showWelcome(); return; }
 
   renderContent(tab.html);
-  originalContent = tab.html;
+  state.originalContent = tab.html;
   appWindow.setTitle(tab.title);
   document.title = tab.title;
   setStatusFilePath(tab.path || '');
@@ -390,7 +312,7 @@ function showWelcome() {
     hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
   }
   contentEl.style.fontSize = '';
-  originalContent = '';
+  state.originalContent = '';
   appWindow.setTitle('OxideMD');
   document.title = 'OxideMD';
   setStatusFilePath('');
@@ -399,9 +321,8 @@ function showWelcome() {
   clearStatus();
 }
 
-let copyResetTimer = null;
 function setStatusFilePath(path) {
-  if (copyResetTimer) { clearTimeout(copyResetTimer); copyResetTimer = null; }
+  if (state.copyResetTimer) { clearTimeout(state.copyResetTimer); state.copyResetTimer = null; }
   filePathEl.textContent = path || '';
   filePathEl.title = path || '';
   filePathEl.classList.toggle('clickable', !!path);
@@ -420,7 +341,7 @@ function setStatusFilePath(path) {
 // ── Zoom ───────────────────────────────────────────────────────────────────
 function applyZoom(zoom) {
   contentEl.style.fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
-  contentEl.style.maxWidth = `${Math.round((config?.reading_width ?? 800) * zoom)}px`;
+  contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
   btnZoomOut.disabled = zoom <= ZOOM_MIN;
   btnZoomIn.disabled  = zoom >= ZOOM_MAX;
@@ -453,7 +374,7 @@ function renderTabBar() {
   if (tabs.length === 0) return;
 
   for (const tab of tabs) {
-    const isActive = tab.id === activeTabId;
+    const isActive = tab.id === state.activeTabId;
     const el = document.createElement('div');
     el.className = 'tab' + (isActive ? ' active' : '');
     el.setAttribute('role', 'tab');
@@ -552,20 +473,20 @@ const SVG_FILE   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 
 async function openFolder() {
   if (hasActiveOverlay()) return;
-  filePickerOpen = true;
+  state.filePickerOpen = true;
   pickerBackdrop.classList.remove('hidden');
   let tree = null;
   try {
     tree = await invoke('pick_folder');
   } catch {} finally {
     pickerBackdrop.classList.add('hidden');
-    filePickerOpen = false;
+    state.filePickerOpen = false;
   }
   if (tree) setFolder(tree);
 }
 
 function setFolder(tree) {
-  currentFolder = tree;
+  state.currentFolder = tree;
   expandedFolders.clear();
   sidebarFolderName.textContent = tree.name || tree.root;
   sidebarFolderName.title = tree.root;
@@ -575,7 +496,7 @@ function setFolder(tree) {
 }
 
 function closeFolder() {
-  currentFolder = null;
+  state.currentFolder = null;
   expandedFolders.clear();
   sidebarTreeEl.innerHTML = '';
   sidebarFolderName.textContent = '';
@@ -586,18 +507,18 @@ function closeFolder() {
 
 function renderFolderTree() {
   sidebarTreeEl.innerHTML = '';
-  if (!currentFolder) return;
-  if (!currentFolder.entries || currentFolder.entries.length === 0) {
+  if (!state.currentFolder) return;
+  if (!state.currentFolder.entries || state.currentFolder.entries.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'tree-empty';
     empty.textContent = 'No Markdown files in this folder.';
     sidebarTreeEl.appendChild(empty);
     return;
   }
-  for (const entry of currentFolder.entries) {
+  for (const entry of state.currentFolder.entries) {
     sidebarTreeEl.appendChild(buildTreeNode(entry));
   }
-  if (currentFolder.truncated) {
+  if (state.currentFolder.truncated) {
     const hint = document.createElement('div');
     hint.className = 'tree-truncated';
     hint.textContent = 'Folder too large — some entries are not shown.';
@@ -734,7 +655,7 @@ sidebarTreeEl.addEventListener('keydown', (e) => {
 });
 
 function highlightActiveTreeItem() {
-  if (!currentFolder) return;
+  if (!state.currentFolder) return;
   const tab = activeTab();
   const activePath = tab?.path || '';
   sidebarTreeEl.querySelectorAll('.tree-row').forEach(r => r.classList.remove('active'));
@@ -858,9 +779,8 @@ async function handleAnchorClick(anchor) {
 
 // ── Overlay exclusivity ────────────────────────────────────────────────────
 // Only one overlay (file picker, search, settings) can be open at a time.
-let filePickerOpen = false;
 function hasActiveOverlay() {
-  return filePickerOpen
+  return state.filePickerOpen
     || !searchBar.classList.contains('hidden')
     || !settingsOverlay.classList.contains('hidden');
 }
@@ -868,14 +788,14 @@ function hasActiveOverlay() {
 // ── Open dialog ────────────────────────────────────────────────────────────
 async function openFilePicker() {
   if (hasActiveOverlay()) return;
-  filePickerOpen = true;
+  state.filePickerOpen = true;
   pickerBackdrop.classList.remove('hidden');
   try {
     const paths = await invoke('pick_file');
     for (const path of paths) await loadFile(path);
   } catch {} finally {
     pickerBackdrop.classList.add('hidden');
-    filePickerOpen = false;
+    state.filePickerOpen = false;
   }
 }
 
@@ -894,14 +814,14 @@ function closeSearch() {
   btnSearch.classList.remove('active');
   clearSearch();
   searchInput.value = '';
-  searchCaseSensitive = false;
+  state.searchCaseSensitive = false;
   searchCase.classList.remove('active');
   searchCase.setAttribute('aria-pressed', 'false');
 }
 
 function clearSearch() {
-  searchRanges = [];
-  searchCurrent = -1;
+  state.searchRanges = [];
+  state.searchCurrent = -1;
   if (supportsHighlights) {
     matchHighlight.clear();
     currentHighlight.clear();
@@ -913,12 +833,12 @@ function runSearch(query) {
   clearSearch();
   if (!query) return;
 
-  const needle = searchCaseSensitive ? query : query.toLowerCase();
+  const needle = state.searchCaseSensitive ? query : query.toLowerCase();
   const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
   let tn;
   while ((tn = walker.nextNode())) {
     const text = tn.nodeValue;
-    const haystack = searchCaseSensitive ? text : text.toLowerCase();
+    const haystack = state.searchCaseSensitive ? text : text.toLowerCase();
     let idx = 0;
     while (idx < text.length) {
       const pos = haystack.indexOf(needle, idx);
@@ -926,17 +846,17 @@ function runSearch(query) {
       const range = document.createRange();
       range.setStart(tn, pos);
       range.setEnd(tn, pos + query.length);
-      searchRanges.push(range);
+      state.searchRanges.push(range);
       idx = pos + query.length;
     }
   }
 
   if (supportsHighlights) {
-    for (const r of searchRanges) matchHighlight.add(r);
+    for (const r of state.searchRanges) matchHighlight.add(r);
   }
 
-  if (searchRanges.length > 0) {
-    searchCurrent = 0;
+  if (state.searchRanges.length > 0) {
+    state.searchCurrent = 0;
     highlightCurrent();
   }
   updateSearchCount();
@@ -945,7 +865,7 @@ function runSearch(query) {
 function highlightCurrent() {
   if (!supportsHighlights) return;
   currentHighlight.clear();
-  const range = searchRanges[searchCurrent];
+  const range = state.searchRanges[state.searchCurrent];
   if (!range) return;
   currentHighlight.add(range);
   const rect = range.getBoundingClientRect();
@@ -960,22 +880,22 @@ function highlightCurrent() {
 }
 
 function nextMatch() {
-  if (!searchRanges.length) return;
-  searchCurrent = (searchCurrent + 1) % searchRanges.length;
+  if (!state.searchRanges.length) return;
+  state.searchCurrent = (state.searchCurrent + 1) % state.searchRanges.length;
   highlightCurrent();
   updateSearchCount();
 }
 
 function prevMatch() {
-  if (!searchRanges.length) return;
-  searchCurrent = (searchCurrent - 1 + searchRanges.length) % searchRanges.length;
+  if (!state.searchRanges.length) return;
+  state.searchCurrent = (state.searchCurrent - 1 + state.searchRanges.length) % state.searchRanges.length;
   highlightCurrent();
   updateSearchCount();
 }
 
 function updateSearchCount() {
-  searchCount.textContent = searchRanges.length
-    ? `${searchCurrent + 1} / ${searchRanges.length}`
+  searchCount.textContent = state.searchRanges.length
+    ? `${state.searchCurrent + 1} / ${state.searchRanges.length}`
     : (searchInput.value ? 'No matches' : '');
 }
 
@@ -1179,13 +1099,13 @@ function rebuildFontDropdown() {
   sep.className = 'font-options-sep';
   fontOptionsContainer.appendChild(sep);
 
-  if (customFonts.length === 0) {
+  if (state.customFonts.length === 0) {
     const hint = document.createElement('div');
     hint.className = 'font-empty-hint';
     hint.textContent = 'No custom fonts installed';
     fontOptionsContainer.appendChild(hint);
   } else {
-    for (const f of customFonts) {
+    for (const f of state.customFonts) {
       const opt = document.createElement('div');
       opt.className = 'custom-select-option custom-font-option';
       opt.dataset.value = `custom:${f.filename}`;
@@ -1237,12 +1157,12 @@ fontOptionsContainer.addEventListener('click', async (e) => {
     if (!confirm(`Remove "${fontName}"? The font file will be deleted.`)) return;
     const filename = opt.dataset.value.slice(7); // strip "custom:"
     await invoke('remove_font', { filename });
-    customFonts = await invoke('list_custom_fonts');
+    state.customFonts = await invoke('list_custom_fonts');
     // If the removed font was selected, fall back to system-ui
     if (fontSelect.dataset.value === opt.dataset.value) {
       fontSelect.value = 'system-ui';
     }
-    if (activeFontFilename === filename) activeFontFilename = null;
+    if (state.activeFontFilename === filename) state.activeFontFilename = null;
     rebuildFontDropdown();
     return;
   }
@@ -1257,7 +1177,7 @@ fontOptionsContainer.addEventListener('click', async (e) => {
     fontTrigger.setAttribute('aria-expanded', 'false');
     const result = await invoke('install_font');
     if (result) {
-      customFonts = await invoke('list_custom_fonts');
+      state.customFonts = await invoke('list_custom_fonts');
       rebuildFontDropdown();
       fontSelect.value = `custom:${result.filename}`;
     }
@@ -1311,8 +1231,6 @@ document.querySelectorAll('.custom-number').forEach(num => {
 });
 
 // ── Focus trap ─────────────────────────────────────────────────────────────
-let releaseFocusTrap = null;
-
 function trapFocus(container) {
   const focusableSelector = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
@@ -1390,20 +1308,20 @@ function openSettings() {
   window.__TAURI__.app.getVersion().then(v => {
     document.getElementById('settings-version').textContent = 'v' + v;
   });
-  document.getElementById('setting-theme').value         = config.theme;
+  document.getElementById('setting-theme').value         = state.config.theme;
   rebuildFontDropdown();
-  fontSelect.value = config.font_family;
-  document.getElementById('setting-size').value          = config.font_size;
-  document.getElementById('setting-line-height').value   = config.line_height;
-  document.getElementById('setting-reading-width').value = config.reading_width;
-  document.getElementById('setting-h1').value            = config.h1_color;
-  document.getElementById('setting-h2').value            = config.h2_color;
-  document.getElementById('setting-h3').value            = config.h3_color;
-  document.getElementById('setting-bullet').value        = config.bullet_color;
+  fontSelect.value = state.config.font_family;
+  document.getElementById('setting-size').value          = state.config.font_size;
+  document.getElementById('setting-line-height').value   = state.config.line_height;
+  document.getElementById('setting-reading-width').value = state.config.reading_width;
+  document.getElementById('setting-h1').value            = state.config.h1_color;
+  document.getElementById('setting-h2').value            = state.config.h2_color;
+  document.getElementById('setting-h3').value            = state.config.h3_color;
+  document.getElementById('setting-bullet').value        = state.config.bullet_color;
   updatePreviewColors();
   activateSettingsTab('reading');
   settingsOverlay.classList.remove('hidden');
-  releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
+  state.releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
 }
 
 function activateSettingsTab(name) {
@@ -1435,7 +1353,7 @@ function updatePreviewColors() {
 }
 
 function closeSettings() {
-  if (releaseFocusTrap) { releaseFocusTrap(); releaseFocusTrap = null; }
+  if (state.releaseFocusTrap) { state.releaseFocusTrap(); state.releaseFocusTrap = null; }
   if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
   settingsOverlay.classList.add('closing');
   settingsOverlay.addEventListener('animationend', () => {
@@ -1446,7 +1364,7 @@ function closeSettings() {
 
 async function saveSettings() {
   const newConfig = {
-    ...config,
+    ...state.config,
     theme:          document.getElementById('setting-theme').value,
     font_family:    fontSelect.value,
     font_size:      parseInt(document.getElementById('setting-size').value, 10),
@@ -1463,8 +1381,8 @@ async function saveSettings() {
     if (newConfig.font_family.startsWith('custom:')) {
       await loadCustomFont(newConfig.font_family.slice(7));
     }
-    config = newConfig;
-    applyConfig(config);
+    state.config = newConfig;
+    applyConfig(state.config);
     const tab = activeTab();
     if (tab) applyZoom(tab.zoom);
     closeSettings();
@@ -1527,8 +1445,8 @@ filePathEl.addEventListener('click', async () => {
   filePathEl.classList.add('copied');
   const originalText = path;
   filePathEl.textContent = 'Copied!';
-  clearTimeout(copyResetTimer);
-  copyResetTimer = setTimeout(() => {
+  clearTimeout(state.copyResetTimer);
+  state.copyResetTimer = setTimeout(() => {
     filePathEl.classList.remove('copied');
     filePathEl.textContent = originalText;
   }, 1200);
@@ -1551,7 +1469,7 @@ contentEl.addEventListener('click', (e) => {
     handleAnchorClick(anchor);
   }
 });
-btnClose.addEventListener('click', () => { if (activeTabId !== null) closeTab(activeTabId); });
+btnClose.addEventListener('click', () => { if (state.activeTabId !== null) closeTab(state.activeTabId); });
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
 btnSettings.addEventListener('click', openSettings);
@@ -1560,9 +1478,9 @@ btnZoomIn.addEventListener('click', zoomIn);
 zoomLabel.addEventListener('click', resetZoom);
 
 searchCase.addEventListener('click', () => {
-  searchCaseSensitive = !searchCaseSensitive;
-  searchCase.classList.toggle('active', searchCaseSensitive);
-  searchCase.setAttribute('aria-pressed', searchCaseSensitive);
+  state.searchCaseSensitive = !state.searchCaseSensitive;
+  searchCase.classList.toggle('active', state.searchCaseSensitive);
+  searchCase.setAttribute('aria-pressed', state.searchCaseSensitive);
   runSearch(searchInput.value);
 });
 
@@ -1629,7 +1547,7 @@ document.addEventListener('keydown', (e) => {
   if (hasMod(e) && e.key === 'Tab') {
     e.preventDefault();
     if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === activeTabId);
+      const idx = tabs.findIndex(t => t.id === state.activeTabId);
       const next = e.shiftKey
         ? (idx - 1 + tabs.length) % tabs.length
         : (idx + 1) % tabs.length;
@@ -1640,7 +1558,7 @@ document.addEventListener('keydown', (e) => {
   if (hasMod(e) && e.shiftKey && e.key === 'ArrowLeft') {
     e.preventDefault();
     if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === activeTabId);
+      const idx = tabs.findIndex(t => t.id === state.activeTabId);
       const target = (idx - 1 + tabs.length) % tabs.length;
       [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
       renderTabBar();
@@ -1650,7 +1568,7 @@ document.addEventListener('keydown', (e) => {
   if (hasMod(e) && e.shiftKey && e.key === 'ArrowRight') {
     e.preventDefault();
     if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === activeTabId);
+      const idx = tabs.findIndex(t => t.id === state.activeTabId);
       const target = (idx + 1) % tabs.length;
       [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
       renderTabBar();
@@ -1659,7 +1577,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (hasMod(e) && e.key === 'w') {
     e.preventDefault();
-    if (activeTabId !== null) closeTab(activeTabId);
+    if (state.activeTabId !== null) closeTab(state.activeTabId);
     return;
   }
   if (e.key === 'Escape') {
@@ -1675,7 +1593,7 @@ document.addEventListener('keydown', (e) => {
 // so the Rust side registers hidden menu accelerators and emits events.
 listen('prev-tab', () => {
   if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const idx = tabs.findIndex(t => t.id === state.activeTabId);
     const prev = (idx - 1 + tabs.length) % tabs.length;
     switchToTab(tabs[prev].id);
   }
@@ -1683,7 +1601,7 @@ listen('prev-tab', () => {
 
 listen('next-tab', () => {
   if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const idx = tabs.findIndex(t => t.id === state.activeTabId);
     const next = (idx + 1) % tabs.length;
     switchToTab(tabs[next].id);
   }
@@ -1691,7 +1609,7 @@ listen('next-tab', () => {
 
 listen('move-tab-left', () => {
   if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const idx = tabs.findIndex(t => t.id === state.activeTabId);
     const target = (idx - 1 + tabs.length) % tabs.length;
     [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
     renderTabBar();
@@ -1700,7 +1618,7 @@ listen('move-tab-left', () => {
 
 listen('move-tab-right', () => {
   if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === activeTabId);
+    const idx = tabs.findIndex(t => t.id === state.activeTabId);
     const target = (idx + 1) % tabs.length;
     [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
     renderTabBar();
