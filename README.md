@@ -132,9 +132,3 @@ OxideMD/
 ## License
 
 GPL-3.0-or-later
-ttps://serde.rs/) + [toml](https://crates.io/crates/toml) |
-| Config paths        | [directories](https://crates.io/crates/directories)                |
-
-## License
-
-GPL-3.0-or-later
