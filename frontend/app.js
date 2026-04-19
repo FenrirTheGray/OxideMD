@@ -175,14 +175,6 @@ function syncWatcher() {
   invoke('watch_paths', { paths: [...paths] }).catch(() => {});
 }
 
-// Prefix-match with a trailing separator so `C:\docs` doesn't match
-// `C:\docs2\foo.md`. Handle both separator styles — notify can echo
-// either depending on how the path was registered.
-function isPathInside(child, parent) {
-  if (child === parent) return true;
-  return child.startsWith(parent + '\\') || child.startsWith(parent + '/');
-}
-
 const pendingFsChanges = new Set();
 let fsChangeTimer = null;
 function handleFsChange(path) {
@@ -1430,9 +1422,6 @@ document.querySelectorAll('.about-link[data-url]').forEach(a => {
 });
 
 // ── Global keyboard shortcuts ──────────────────────────────────────────────
-// Accept both Ctrl and Cmd (metaKey) so shortcuts work on macOS
-function hasMod(e) { return e.ctrlKey || e.metaKey; }
-
 document.addEventListener('keydown', (e) => {
   if (hasMod(e) && e.key === 'f') { e.preventDefault(); toggleSearch(); return; }
   if (hasMod(e) && e.key === 'o') { e.preventDefault(); openFilePicker(); return; }
