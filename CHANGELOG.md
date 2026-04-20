@@ -4,6 +4,31 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-04-20
+
+### Added
+
+- **Edit mode** — CodeMirror 6 editor surface replaces the previous textarea; toggle between read and edit mode per tab
+- **Split view** — side-by-side editor and live HTML preview pane with a draggable divider; layout state (divider position, active pane) is saved per tab
+- **Proportional scroll sync** — editor and preview scroll positions stay in sync as you type
+- **Formatting toolbar** — bold, italic, strikethrough, inline code, H1–H3, ordered list, unordered list, task list, link, image, indent, and outdent; wired to a shared `editor-format` module so shortcuts and toolbar share one implementation
+- **Smart Enter** — pressing Enter inside a list or blockquote continues the marker; double-Enter exits the block cleanly
+- **Find/replace panel** — themed search-and-replace panel inside the editor matching the read-mode search bar
+- **Document outline popover** — anchored to the toolbar; lists ATX and setext headings; click to jump to the heading in either the editor or the preview
+- **Per-file draft autosave** — unsaved changes are written to `localStorage`; on reopen OxideMD prompts to recover the draft or discard it
+- **Discard button** — reverts the editor buffer to the on-disk content with a confirmation prompt
+- **Rebindable keyboard shortcuts** — all actions are registered in a sparse-override action registry; conflicts are detected; shortcuts can be rebound from Settings → Shortcuts with a per-action key-capture flow
+- **Right-click context menu** — contextual menus for the sidebar tree (open, open in new tab) and tab bar (close, close others, close to the right)
+- **Persistent window position** — window position is saved alongside window size and restored on next launch
+
+### Changed
+
+- Keybinding layer extracted from `app.js` into a dedicated `keybindings.js` module with a named action registry, making all shortcuts user-configurable
+- Settings dialog gains a Shortcuts tab listing all actions and their current bindings
+- `esbuild` wired into Tauri's `beforeDevCommand` and `beforeBuildCommand` so the JS bundle is always rebuilt before dev/release
+- Backend gains `save_file` and `render_preview` commands; `OpenResult` now includes a `raw` field so the frontend can round-trip edits without re-reading disk
+- Config extended with sparse keybinding overrides and additional theme color tokens
+
 ## [2.0.1] - 2026-04-19
 
 ### Added
