@@ -55,6 +55,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
+            commands::save_file,
+            commands::render_preview,
             commands::get_cli_files,
             commands::pick_file,
             commands::pick_folder,
