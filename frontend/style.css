@@ -33,7 +33,6 @@ body.theme-dark {
   --bg-settings:       #2c313c;
   --bg-settings-hd:    #31363f;
   --bg-settings-ft:    #21252b;
-  --bg-overlay:        rgba(0, 0, 0, 0.75);
   --bg-btn-hover:      rgba(97, 175, 239, 0.1);
   --bg-tab-hover:      rgba(97, 175, 239, 0.13);
   --bg-danger-hover:   rgba(224, 108, 117, 0.1);
@@ -91,7 +90,6 @@ body.theme-light {
   --bg-settings:       #ffffff;
   --bg-settings-hd:    #f0f0f0;
   --bg-settings-ft:    #fafafa;
-  --bg-overlay:        rgba(40, 44, 52, 0.45);
   --bg-btn-hover:      rgba(64, 120, 242, 0.14);
   --bg-tab-hover:      rgba(64, 120, 242, 0.16);
   --bg-danger-hover:   rgba(228, 86, 73, 0.1);
@@ -166,17 +164,192 @@ body.maximized {
   background: var(--bg-toolbar);
   flex-shrink: 0;
   height: 44px;
-  border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
+  /* Inset (not border) so the active tab can paint over it and flow
+     seamlessly into #content-scroll below — matches Windows Notepad. */
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+/* ── App logo (doubles as shortcuts popover trigger) ──────────────── */
+#btn-logo {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background var(--dur-sm) var(--ease);
+}
+#btn-logo img {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  pointer-events: none;
+}
+#btn-logo:hover {
+  background: var(--bg-btn-hover);
+}
+#btn-logo:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+#shortcuts-popover {
+  position: fixed;
+  top: 48px;
+  left: 6px;
+  z-index: 180;
+  width: 310px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--fg);
+  animation: shortcuts-pop var(--dur) var(--ease-out);
+}
+#shortcuts-popover.hidden { display: none; }
+@keyframes shortcuts-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Outline popover ──────────────────────────────────────────────────
+   Anchored to btn-outline; positioning is set inline by outline.js
+   (top + right) so the popover stays under the button as the window
+   resizes. Indentation per-row is also inline (depends on min heading
+   level in the doc). Visuals match the shortcuts-popover idiom. */
+#outline-popover {
+  position: fixed;
+  z-index: 180;
+  width: 320px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 6px 0;
+  font-size: 12.5px;
+  color: var(--fg);
+  animation: shortcuts-pop var(--dur) var(--ease-out);
+}
+#outline-popover.hidden { display: none; }
+.outline-empty {
+  padding: 14px 16px;
+  color: var(--fg-muted, var(--fg-toolbar));
+  font-style: italic;
+  text-align: center;
+}
+.outline-list {
+  display: flex;
+  flex-direction: column;
+}
+.outline-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  padding: 6px 12px;
+  font: inherit;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 0;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease);
+}
+.outline-item:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.outline-item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+.outline-h1 { font-weight: 700; font-size: 13px; }
+.outline-h2 { font-weight: 600; }
+.outline-h3 { font-weight: 500; }
+.outline-h4,
+.outline-h5,
+.outline-h6 {
+  font-weight: 400;
+  color: var(--fg-toolbar);
+}
+.shortcuts-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 8px;
+}
+.shortcuts-group {
+  margin-bottom: 10px;
+}
+.shortcuts-group:last-child { margin-bottom: 0; }
+.shortcuts-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--fg);
+}
+.shortcut-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.shortcut-row > span:last-child {
+  color: var(--fg-muted);
+  text-align: right;
+  min-width: 0;
+}
+.shortcut-row kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  line-height: 1.3;
+  text-align: center;
 }
 
 /* ── Tab area ─────────────────────────────────────────────────────── */
 #tab-area {
+  flex: 1;
   display: flex;
   overflow-x: auto;
   min-width: 0;
-  -webkit-app-region: no-drag;
   scrollbar-width: none;
+  -webkit-app-region: no-drag;
 }
 #toolbar-spacer {
   flex: 1;
@@ -251,31 +424,19 @@ body.maximized {
               background var(--dur-sm) var(--ease);
 }
 
-/* Gradient underline bar */
-.tab::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: transparent;
-  transition: background var(--dur-sm) var(--ease);
-  border-radius: 2px 2px 0 0;
-}
-
 .tab:hover {
   color: var(--fg-dim);
   background: var(--bg-tab-hover);
 }
 
+/* Active tab takes the body color and rounds its top corners so it
+   reads as a folder tab. Its full-height background covers the 1px
+   toolbar separator at its own width, producing the seamless flow
+   into the content area below (Notepad-style). */
 .tab.active {
   color: var(--fg);
   background: var(--bg);
-}
-
-.tab.active::after {
-  background: var(--tab-indicator);
+  border-radius: 8px 8px 0 0;
 }
 
 .tab-title {
@@ -330,6 +491,8 @@ body.maximized {
   padding: 6px 8px;
   flex-shrink: 0;
   border-left: 1px solid var(--border-subtle);
+}
+#toolbar-buttons > button {
   -webkit-app-region: no-drag;
 }
 
@@ -380,6 +543,12 @@ body.maximized {
   flex-shrink: 0;
 }
 
+/* Compact toolbar: icons only. Hide the text labels on every toolbar
+   button and tighten the horizontal padding so the buttons stay
+   balanced as pure squares. */
+#toolbar-buttons.compact .btn-label { display: none; }
+#toolbar-buttons.compact button { padding: 5px 8px; }
+
 
 /* ── Window controls ──────────────────────────────────────────────── */
 #window-controls {
@@ -429,13 +598,6 @@ body.maximized {
 #window-controls #btn-winclose:focus-visible {
   background: #c42b1c;
   color: #fff;
-}
-
-/* Close tab button — danger color on hover */
-#toolbar-buttons #btn-close:hover:not(:disabled) {
-  background: var(--bg-danger-hover);
-  color: var(--danger);
-  border-color: var(--danger);
 }
 
 /* ── Search bar ───────────────────────────────────────────────────── */
@@ -573,7 +735,7 @@ body.maximized {
 
 /* ── Sidebar (file tree) ────────────────────────────────────────── */
 #sidebar {
-  width: 240px;
+  width: var(--sidebar-width, 240px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -584,6 +746,40 @@ body.maximized {
 }
 
 #sidebar.hidden { display: none; }
+
+/* Drag handle between sidebar and content. The element itself is a
+   9px transparent hit zone (extended beyond its layout slot with
+   negative margins so neighbors aren't pushed). The visible accent
+   line is painted by ::before at 1px centered, keeping the visual
+   weight the same as before while doubling the grab area. */
+#sidebar-divider {
+  flex: 0 0 9px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  margin-left: -4px;
+  margin-right: -4px;
+}
+#sidebar-divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--dur-sm) var(--ease);
+}
+#sidebar.hidden + #sidebar-divider { display: none; }
+#sidebar-divider:hover::before,
+#sidebar-divider.dragging::before,
+#sidebar-divider:focus-visible::before {
+  background: var(--accent);
+}
+#sidebar-divider:focus-visible { outline: none; }
+body.resizing-sidebar,
+body.resizing-sidebar * { cursor: col-resize !important; user-select: none !important; }
 
 #sidebar-header {
   display: flex;
@@ -731,7 +927,7 @@ body.maximized {
 #sidebar-tree {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   padding: 6px 0;
   font-size: 13px;
   scrollbar-width: thin;
@@ -757,7 +953,11 @@ body.maximized {
   padding: 3px 10px 3px 4px;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
+  /* Grow to fit the longest filename so horizontal scrolling of
+     #sidebar-tree reveals it; min-width keeps the hover/active
+     background extending across the visible viewport for short names. */
+  width: max-content;
+  min-width: 100%;
   color: var(--fg);
   transition: background var(--dur-sm) var(--ease), color var(--dur-sm) var(--ease);
 }
@@ -801,9 +1001,7 @@ body.maximized {
 .tree-row.active .tree-icon { color: var(--accent); }
 
 .tree-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
   font-size: 12.5px;
 }
 
@@ -901,14 +1099,14 @@ body.maximized {
   font-family: var(--font-family);
 }
 
-/* Reset markdown heading styles that leak in from #content h1/h2 */
-#content #welcome h1, #content #welcome h2 {
+/* Reset shared markdown heading styles on the welcome screen. */
+.md-rendered #welcome h1, .md-rendered #welcome h2 {
   border: none;
   padding: 0;
   margin: 0;
   position: static;
 }
-#content #welcome h1::after, #content #welcome h2::after { content: none; }
+.md-rendered #welcome h1::after, .md-rendered #welcome h2::after { content: none; }
 
 /* Wordmark */
 .welcome-wordmark {
@@ -1144,6 +1342,21 @@ body.maximized {
 }
 #status-indicator.hidden { display: none; }
 
+#status-counts {
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 0 0 0 8px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+/* Visibility tracks the editing state of the active tab — switching to a
+   non-editing tab hides counts from the prior tab without per-switch JS. */
+body:not(.editing) #status-counts { display: none; }
+
 .status-sep {
   width: 1px;
   height: 12px;
@@ -1189,6 +1402,7 @@ body.maximized {
   gap: 1px;
   flex-shrink: 0;
 }
+#zoom-controls.hidden { display: none; }
 
 #zoom-controls button {
   display: flex;
@@ -1250,28 +1464,30 @@ body.maximized {
    MARKDOWN CONTENT STYLES
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Markdown typography is shared by the main content area and the
+   split-mode live preview pane (both carry `.md-rendered`). */
 /* ── Headings ─────────────────────────────────────────────────────── */
-#content h1, #content h2, #content h3,
-#content h4, #content h5, #content h6 {
+.md-rendered h1, .md-rendered h2, .md-rendered h3,
+.md-rendered h4, .md-rendered h5, .md-rendered h6 {
   font-weight: 700;
   line-height: 1.25;
   margin: 1.8em 0 0.55em;
   letter-spacing: -0.025em;
 }
-#content h1 { font-size: 2em;    color: var(--h1-color); }
-#content h2 { font-size: 1.5em;  color: var(--h2-color); }
-#content h3 { font-size: 1.2em;  color: var(--h3-color); }
-#content h4 { font-size: 1em;    color: var(--fg); }
-#content h5 { font-size: 1em;    color: var(--fg-toolbar); }
-#content h6 { font-size: 1em;    color: var(--fg-dim); }
+.md-rendered h1 { font-size: 2em;    color: var(--h1-color); }
+.md-rendered h2 { font-size: 1.5em;  color: var(--h2-color); }
+.md-rendered h3 { font-size: 1.2em;  color: var(--h3-color); }
+.md-rendered h4 { font-size: 1em;    color: var(--fg); }
+.md-rendered h5 { font-size: 1em;    color: var(--fg-toolbar); }
+.md-rendered h6 { font-size: 1em;    color: var(--fg-dim); }
 
 /* H1 — accent underline */
-#content h1 {
+.md-rendered h1 {
   padding-bottom: 0.35em;
   border-bottom: 2px solid var(--border);
   position: relative;
 }
-#content h1::after {
+.md-rendered h1::after {
   content: '';
   position: absolute;
   bottom: -2px;
@@ -1283,22 +1499,22 @@ body.maximized {
 }
 
 /* H2 — subtle bottom border */
-#content h2 {
+.md-rendered h2 {
   padding-bottom: 0.3em;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ── Body text ────────────────────────────────────────────────────── */
-#content p           { line-height: var(--content-line-height, 1.8); margin: 0.8em 0; }
-#content strong      { font-weight: 700; color: var(--fg); }
-#content em          { font-style: italic; }
-#content del         { text-decoration: line-through; opacity: 0.6; }
+.md-rendered p           { line-height: var(--content-line-height, 1.8); margin: 0.8em 0; }
+.md-rendered strong      { font-weight: 700; color: var(--fg); }
+.md-rendered em          { font-style: italic; }
+.md-rendered del         { text-decoration: line-through; opacity: 0.6; }
 
 /* ── Inline code ──────────────────────────────────────────────────── */
-#content code {
+.md-rendered code {
   font-family: "Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, monospace;
   font-size: 0.84em;
-  background: var(--bg-code);
+  background: var(--code-bg, var(--bg-code));
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 6px;
@@ -1306,20 +1522,23 @@ body.maximized {
 }
 
 /* ── Code blocks ──────────────────────────────────────────────────── */
-#content pre {
-  background: var(--bg-code);
+/* `--code-bg` and `--code-accent` are user-configurable via Settings →
+   Colors. They fall back to the theme tokens so the block still renders
+   correctly before the config is applied. */
+.md-rendered pre {
+  background: var(--code-bg, var(--bg-code));
   border-radius: 10px;
   padding: 20px 24px;
   overflow-x: auto;
   margin: 1.2em 0;
   line-height: 1.65;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--code-accent, var(--accent));
   box-shadow: var(--shadow-sm);
   position: relative;
 }
 
-#content pre code {
+.md-rendered pre code {
   background: none;
   border: none;
   padding: 0;
@@ -1329,15 +1548,15 @@ body.maximized {
 }
 
 /* ── Blockquotes ──────────────────────────────────────────────────── */
-#content blockquote {
-  border-left: 3px solid var(--quote-border);
+.md-rendered blockquote {
+  border-left: 3px solid var(--note-accent, var(--quote-border));
   margin: 1.2em 0;
   padding: 14px 22px;
-  background: var(--accent-glow);
+  background: var(--note-bg, var(--accent-glow));
   border-radius: 0 8px 8px 0;
 }
 
-#content blockquote p {
+.md-rendered blockquote p {
   margin: 0;
   font-style: italic;
   font-size: 0.95em;
@@ -1346,16 +1565,16 @@ body.maximized {
 }
 
 /* ── Lists ────────────────────────────────────────────────────────── */
-#content ul, #content ol {
+.md-rendered ul, .md-rendered ol {
   padding-left: 1.75em;
   margin: 0.6em 0;
 }
-#content li              { line-height: var(--content-line-height, 1.8); margin: 0.2em 0; }
-#content ul li::marker   { color: var(--bullet-color); font-size: 0.9em; }
-#content ol li::marker   { color: var(--bullet-color); font-weight: 600; }
+.md-rendered li              { line-height: var(--content-line-height, 1.8); margin: 0.2em 0; }
+.md-rendered ul li::marker   { color: var(--bullet-color); font-size: 0.9em; }
+.md-rendered ol li::marker   { color: var(--bullet-color); font-weight: 600; }
 
 /* ── Tables ───────────────────────────────────────────────────────── */
-#content table {
+.md-rendered table {
   border-collapse: collapse;
   width: 100%;
   margin: 1.3em 0;
@@ -1366,11 +1585,11 @@ body.maximized {
   box-shadow: var(--shadow-sm);
 }
 
-#content thead {
+.md-rendered thead {
   background: var(--bg-table-hd);
 }
 
-#content thead tr th {
+.md-rendered thead tr th {
   font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1379,19 +1598,19 @@ body.maximized {
   border-bottom: 1px solid var(--border);
 }
 
-#content th, #content td { padding: 10px 18px; text-align: left; }
+.md-rendered th, .md-rendered td { padding: 10px 18px; text-align: left; }
 
-#content tbody tr {
+.md-rendered tbody tr {
   background: var(--bg-code);
   border-bottom: 1px solid var(--border-subtle);
   transition: background var(--dur-xs) var(--ease);
 }
-#content tbody tr:nth-child(even) { background: var(--bg-table-row); }
-#content tbody tr:last-child { border-bottom: none; }
-#content tbody tr:hover { background: var(--bg-btn-hover); }
+.md-rendered tbody tr:nth-child(even) { background: var(--bg-table-row); }
+.md-rendered tbody tr:last-child { border-bottom: none; }
+.md-rendered tbody tr:hover { background: var(--bg-btn-hover); }
 
 /* ── Horizontal rule ──────────────────────────────────────────────── */
-#content hr {
+.md-rendered hr {
   border: none;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
@@ -1399,31 +1618,31 @@ body.maximized {
 }
 
 /* ── Links ────────────────────────────────────────────────────────── */
-#content a {
+.md-rendered a {
   color: var(--link);
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: color var(--dur-sm) var(--ease),
               border-color var(--dur-sm) var(--ease);
 }
-#content a:hover {
+.md-rendered a:hover {
   color: var(--link-hover);
   border-bottom-color: currentColor;
 }
-#content a.md-link {
+.md-rendered a.md-link {
   transition: color var(--dur-sm) var(--ease),
               background-color var(--dur-sm) var(--ease),
               border-color var(--dur-sm) var(--ease);
   padding: 0.1em;
   border-radius: 4px;
 }
-#content a.md-link:hover {
+.md-rendered a.md-link:hover {
   background-color: var(--accent-2);
   /* border-bottom-color: transparent; */
 }
 
 /* ── Images ───────────────────────────────────────────────────────── */
-#content img {
+.md-rendered img {
   max-width: 100%;
   height: auto;
   display: block;
@@ -1453,17 +1672,43 @@ body.maximized {
 #settings-overlay {
   position: fixed;
   inset: 0;
-  background: var(--bg-overlay);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   z-index: 200;
   animation: overlay-fade var(--dur) var(--ease);
 }
+#picker-backdrop,
 #settings-overlay {
   display: flex;
   align-items: center;
   justify-content: center;
 }
+#picker-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 28px;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  animation: dialog-appear var(--dur) var(--ease);
+}
+#picker-loader.hidden { display: none; }
+.picker-loader-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.picker-loader-label { line-height: 1; }
 #picker-backdrop.hidden,
 #settings-overlay.hidden { display: none; }
 
@@ -1555,7 +1800,10 @@ body.maximized {
   gap: 2px;
   padding: 6px 8px 0;
   background: var(--bg-settings-hd);
-  border-bottom: 1px solid var(--border);
+  /* Inset shadow so the active tab's body-color fill can cover its
+     own width of the separator and flow seamlessly into #settings-body
+     below (Notepad-style tabs). */
+  box-shadow: inset 0 -1px 0 var(--border);
 }
 .settings-tab {
   appearance: none;
@@ -1574,16 +1822,9 @@ body.maximized {
               background var(--dur-sm) var(--ease);
 }
 .settings-tab:hover { color: var(--fg); background: var(--bg-btn-hover); }
-.settings-tab.active { color: var(--fg); }
-.settings-tab.active::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: -1px;
-  height: 2px;
-  background: var(--tab-indicator);
-  border-radius: 2px 2px 0 0;
+.settings-tab.active {
+  color: var(--fg);
+  background: var(--bg-settings);
 }
 .settings-tab:focus-visible {
   outline: 2px solid var(--border-focus);
@@ -1594,7 +1835,7 @@ body.maximized {
   padding: 18px 22px 20px;
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: 600px;
   box-sizing: border-box;
   overflow-y: auto;
 }
@@ -1658,6 +1899,46 @@ body.maximized {
   color: var(--accent);
 }
 
+/* Segmented control — two-option pill used for binary settings. */
+.segmented {
+  flex: 1;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.segmented > button {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease);
+}
+.segmented > button + button {
+  border-left: 1px solid var(--border);
+}
+.segmented > button:hover:not([aria-pressed="true"]) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.segmented > button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.segmented > button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
 /* Custom select dropdown */
 .custom-select {
   flex: 1;
@@ -1717,6 +1998,154 @@ body.maximized {
 }
 .custom-select-option.focused {
   background: var(--bg-btn-hover);
+}
+
+/* ── Settings: Shortcuts panel ────────────────────────────────────── */
+.shortcuts-intro {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+.shortcuts-intro kbd {
+  display: inline-block;
+  padding: 0 5px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shortcut-group-title {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-toolbar);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.shortcut-group-title:first-child { margin-top: 0; }
+
+.shortcut-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.shortcut-edit-row:hover { background: var(--bg-btn-hover); }
+.shortcut-edit-label {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--fg);
+  min-width: 0;
+}
+.shortcut-edit-label-note {
+  display: block;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+.shortcut-edit-pill {
+  min-width: 140px;
+  padding: 5px 10px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 100ms, border-color 100ms;
+}
+.shortcut-edit-pill:hover {
+  border-color: var(--border-focus);
+}
+.shortcut-edit-pill:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+.shortcut-edit-pill.capturing {
+  color: var(--accent);
+  border-color: var(--border-focus);
+  background: var(--bg-btn-hover);
+  animation: shortcut-capture-pulse 1.4s ease-in-out infinite;
+}
+@keyframes shortcut-capture-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(97, 175, 239, 0.35); }
+  50%      { box-shadow: 0 0 0 4px rgba(97, 175, 239, 0); }
+}
+
+.shortcut-edit-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 100ms, color 100ms, border-color 100ms;
+}
+.shortcut-edit-reset:hover {
+  color: var(--fg);
+  background: var(--bg-btn-hover);
+  border-color: var(--border);
+}
+.shortcut-edit-reset:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+.shortcut-edit-reset[disabled] {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+.shortcut-edit-reset svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+.shortcut-edit-row.locked .shortcut-edit-pill {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.shortcut-edit-row.locked .shortcut-edit-pill:hover {
+  border-color: var(--border);
+}
+
+.shortcuts-conflict {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg);
+  background: rgba(224, 108, 117, 0.14);
+  border: 1px solid rgba(224, 108, 117, 0.4);
+}
+.shortcuts-conflict.hidden { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-edit-pill.capturing { animation: none; }
 }
 
 /* ── Custom font options (dynamic) ────────────────────────────────── */
@@ -2076,6 +2505,28 @@ body.maximized {
   color: var(--preview-bullet, var(--bullet-color));
   font-weight: 600;
 }
+.settings-preview-card .preview-code {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  font-family: "Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 11.5px;
+  background: var(--preview-code-bg, var(--code-bg, var(--bg-code)));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--preview-code-accent, var(--code-accent, var(--accent)));
+  border-radius: 6px;
+  color: var(--fg);
+  overflow-x: auto;
+}
+.settings-preview-card .preview-note {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-style: italic;
+  background: var(--preview-note-bg, var(--note-bg, var(--accent-glow)));
+  border-left: 3px solid var(--preview-note-accent, var(--note-accent, var(--quote-border)));
+  border-radius: 0 6px 6px 0;
+  color: var(--fg);
+}
 
 /* ── Settings: About panel ────────────────────────────────────────── */
 .about-hero {
@@ -2174,6 +2625,631 @@ body.maximized {
 /* Hide reset button when About tab is active; keep Cancel/Save right-aligned */
 #settings-dialog.on-about #settings-reset { display: none; }
 #settings-dialog.on-about #settings-cancel { margin-left: auto; }
+
+/* ── Mode toggle (single button: View ⇄ Edit) ─────────────────────── */
+/* Inherits #toolbar-buttons button styling. Two icons + two labels live
+   in the DOM; body.editing flips which is visible so syncToolbar doesn't
+   need to swap markup. Default (not editing) shows the destination =
+   "Edit"; while editing it shows "View". */
+.mode-icon-view, .mode-label-view { display: none; }
+body.editing .mode-icon-edit, body.editing .mode-label-edit { display: none; }
+body.editing .mode-icon-view, body.editing .mode-label-view { display: inline-flex; }
+
+/* ── Tab dirty indicator ──────────────────────────────────────────── */
+.tab.dirty .tab-title::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Edit mode: split editor + live preview ──────────────────────────
+   While editing, #content is hidden and #editor-split takes over the
+   scroll area. Each pane scrolls independently, so the wrapper itself
+   must not scroll — otherwise the whole split would drift as one. */
+body.editing #content { display: none; }
+body.editing #content-scroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Visibility is entirely driven by body.editing — no per-tab juggling
+   of the `hidden` attribute is needed. */
+#editor-split {
+  /* Fraction of width given to the editor pane; the divider sets this. */
+  --editor-frac: 50%;
+  display: none;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+body.editing #editor-split { display: flex; }
+
+#editor-pane {
+  flex: 0 0 var(--editor-frac);
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+#preview-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px 32px;
+  cursor: text;
+  user-select: text;
+  background: var(--bg);
+}
+
+/* Split-mode classes set on #editor-split by editor.js. The default (no
+   class) is the resizable split layout above. These hide one pane and
+   the divider so the remaining pane fills the row. */
+#editor-split.split-mode-editor #preview-pane,
+#editor-split.split-mode-editor #split-divider { display: none; }
+#editor-split.split-mode-editor #editor-pane { flex: 1 1 auto; }
+#editor-split.split-mode-preview #editor-pane,
+#editor-split.split-mode-preview #split-divider { display: none; }
+#editor-split.split-mode-preview #preview-pane { flex: 1 1 auto; }
+
+/* Drag handle between the two panes. The hit area is a bit wider than
+   the visible line so a slight miss still grabs it (no-precision-required). */
+#split-divider {
+  flex: 0 0 6px;
+  align-self: stretch;
+  background: var(--border);
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  cursor: col-resize;
+  transition: background var(--dur-sm) var(--ease);
+  user-select: none;
+}
+#split-divider:hover,
+#split-divider.dragging,
+#split-divider:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+/* Editor and preview share the same webkit scrollbar treatment as the
+   main content scroll. */
+#editor-pane::-webkit-scrollbar,
+#preview-pane::-webkit-scrollbar { width: 14px; height: 14px; }
+#editor-pane::-webkit-scrollbar-track,
+#preview-pane::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
+#editor-pane::-webkit-scrollbar-thumb,
+#preview-pane::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  min-height: 40px;
+  transition: background-color var(--dur-sm) var(--ease);
+}
+#editor-pane:hover::-webkit-scrollbar-thumb,
+#preview-pane:hover::-webkit-scrollbar-thumb { background-color: var(--fg-muted); }
+#editor-pane::-webkit-scrollbar-thumb:hover,
+#preview-pane::-webkit-scrollbar-thumb:hover { background-color: var(--fg-toolbar); }
+#editor-pane::-webkit-scrollbar-thumb:active,
+#preview-pane::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
+
+/* While dragging the divider, freeze text selection everywhere so the
+   cursor doesn't accidentally select page text as it moves. */
+body.resizing-split, body.resizing-split * { cursor: col-resize !important; user-select: none !important; }
+
+/* CodeMirror 6 root. The view fills the pane; the inner .cm-scroller is
+   the actual scroll container. Padding and font come from a CM6 theme
+   (oxideCmTheme in editor.js); only structural rules live here. */
+.md-editor.cm-editor {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: none;
+  outline: none;
+}
+
+.md-editor.cm-editor.cm-focused { outline: none; }
+
+/* CM6 sets a default outline on the focused content; suppress it to
+   match the textarea look. */
+.md-editor .cm-content { outline: none; }
+
+/* CM6 find/replace panel — mirrors the read-mode #search-bar so the
+   edit-mode surface feels like a continuation of the same feature.
+   Selectors are bumped one class above CM6's base theme
+   (.cm-panel.cm-search …) so our skin always wins regardless of the
+   stylesheet injection order. CM6 also applies a per-element
+   margin: .2em .6em .2em 0 to inputs/buttons/labels and absolutely
+   positions the close button — both are reset here so flex gap drives
+   the rhythm and the close button sits inline like #search-close. */
+.md-editor .cm-panels {
+  background: var(--bg-search);
+  color: var(--fg);
+}
+.md-editor .cm-panels-top { border-bottom: 1px solid var(--border); }
+
+.md-editor .cm-panel.cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  position: static;
+  font-family: var(--font-family);
+  font-size: 13px;
+}
+.md-editor .cm-panel.cm-search br { display: none; }
+.md-editor .cm-panel.cm-search input,
+.md-editor .cm-panel.cm-search button,
+.md-editor .cm-panel.cm-search label {
+  margin: 0;
+}
+
+.md-editor .cm-panel.cm-search .cm-textfield {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  min-width: 200px;
+  outline: none;
+  transition: border-color var(--dur-sm) var(--ease),
+              box-shadow var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search .cm-textfield::placeholder { color: var(--fg-dim); }
+.md-editor .cm-panel.cm-search .cm-textfield:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.md-editor .cm-panel.cm-search .cm-button {
+  background: transparent;
+  background-image: none;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  text-transform: none;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search .cm-button:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search .cm-button:focus-visible {
+  outline: none;
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+}
+
+/* Option toggles (match case / regexp / by word). Styled as compact
+   pill-labels that pick up --accent-glow when their checkbox is :checked —
+   same active treatment as #search-case in the read-mode bar. */
+.md-editor .cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  user-select: none;
+  cursor: pointer;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search label:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search label:has(input:checked) {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: background var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"]:checked::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--bg);
+  clip-path: polygon(14% 50%, 0 64%, 36% 100%, 100% 28%, 86% 14%, 36% 70%);
+}
+
+/* Close button — borderless, danger-hover treatment matching #search-close.
+   CM6's base positions this absolutely (top: 0; right: 4px); reset to
+   inline so it flows at the end of the row alongside the toggles. */
+.md-editor .cm-panel.cm-search [name="close"] {
+  position: static;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  margin-left: auto;
+  cursor: pointer;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search [name="close"]:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.md-editor .cm-panel.cm-search [name="close"]:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Edit formatting toolbar ──────────────────────────────────────── */
+/* Shown only while a tab is in edit mode. Visibility is driven by the
+   `hidden` attribute on the element (set/cleared in syncToolbar) —
+   display:grid by default, display:none when [hidden] is present.
+   Three-column grid keeps the formatting cluster visually centered
+   while anchoring the primary Save CTA at the right edge. */
+#edit-toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 4px 12px;
+  min-height: 38px;
+  flex-shrink: 0;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+#edit-toolbar[hidden] { display: none; }
+
+#edit-toolbar .fmt-content {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+#edit-toolbar .fmt-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+#edit-toolbar .fmt-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+#edit-toolbar .fmt-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+#edit-toolbar .fmt-btn:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border);
+}
+#edit-toolbar .fmt-btn:active:not(:disabled) {
+  background: var(--accent-glow);
+}
+#edit-toolbar .fmt-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+#edit-toolbar .fmt-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#edit-toolbar .fmt-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Save is the sole primary CTA while editing. Solid accent fill (the
+   prior gradient + drop-shadow read as a marketing CTA against the flat
+   formatting icons); position alone provides the weight. Discard sits
+   beside it as a quieter secondary — same height, transparent fill,
+   border that activates only on hover so it doesn't compete visually. */
+#edit-toolbar .edit-actions {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#edit-toolbar #btn-discard,
+#edit-toolbar #btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              opacity var(--dur-sm) var(--ease);
+}
+#edit-toolbar #btn-discard svg,
+#edit-toolbar #btn-save svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+#edit-toolbar #btn-save {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+#edit-toolbar #btn-save:hover:not(:disabled) { filter: brightness(1.08); }
+#edit-toolbar #btn-save:active:not(:disabled) { filter: brightness(0.95); }
+#edit-toolbar #btn-save:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#edit-toolbar #btn-save:disabled { opacity: 0.5; cursor: default; }
+
+#edit-toolbar #btn-discard {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-toolbar);
+}
+#edit-toolbar #btn-discard:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  border-color: var(--border);
+}
+#edit-toolbar #btn-discard:active:not(:disabled) {
+  background: var(--accent-glow);
+}
+#edit-toolbar #btn-discard:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#edit-toolbar #btn-discard:disabled { opacity: 0.45; cursor: default; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONFIRM DIALOG (unsaved changes)
+   ═══════════════════════════════════════════════════════════════════ */
+#confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+#confirm-overlay.hidden { display: none; }
+#confirm-overlay.closing { animation: overlay-fade-out var(--dur) var(--ease) forwards; }
+#confirm-overlay.closing #confirm-dialog { animation: dialog-disappear var(--dur) var(--ease) forwards; }
+
+#confirm-dialog {
+  background: var(--bg-settings);
+  border-radius: 14px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  box-shadow: var(--shadow-dialog);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  animation: dialog-appear var(--dur) var(--ease-out);
+}
+
+#confirm-header {
+  padding: 15px 20px;
+  background: var(--bg-settings-hd);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+#confirm-body {
+  padding: 18px 22px 20px;
+  line-height: 1.55;
+  color: var(--fg);
+}
+#confirm-body p { margin: 0; }
+.confirm-file-name {
+  font-weight: 600;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+#confirm-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--bg-settings-ft);
+  border-top: 1px solid var(--border);
+}
+#confirm-footer button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 18px;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease),
+              transform var(--dur-sm) var(--ease),
+              opacity var(--dur-sm) var(--ease);
+}
+#confirm-footer button:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#confirm-footer button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#confirm-footer #confirm-cancel { margin-right: auto; }
+#confirm-footer #confirm-discard:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#confirm-footer #confirm-save.primary {
+  background: var(--save-btn-bg);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--save-btn-shadow);
+  font-weight: 700;
+  padding: 7px 24px;
+}
+#confirm-footer #confirm-save.primary:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+  color: #fff;
+}
+#confirm-footer #confirm-save.primary:active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* ── Context menu ──────────────────────────────────────────────────
+   Replaces the webview's default right-click menu (whose "Reload"
+   entry would wipe app state). Positioned absolutely at the cursor;
+   the JS module clamps it into the viewport. */
+.ctx-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  user-select: none;
+  animation: ctx-menu-in 120ms var(--ease-out);
+}
+@keyframes ctx-menu-in {
+  from { opacity: 0; transform: translateY(-2px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease);
+}
+.ctx-item:hover:not(:disabled),
+.ctx-item:focus-visible {
+  background: var(--accent-glow);
+  outline: none;
+}
+.ctx-item:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.ctx-label    { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-shortcut { color: var(--fg-muted); font-size: 11px; letter-spacing: 0.02em; }
+
+.ctx-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 2px;
+}
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {

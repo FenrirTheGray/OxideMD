@@ -11,6 +11,7 @@ export const appWindow = getCurrentWindow();
 
 // ── Platform detection ────────────────────────────────────────────────────
 export const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+export const isLinux = /Linux/i.test(navigator.platform) && !isMac;
 export const modKey = isMac ? 'Cmd' : 'Ctrl';
 
 const MD_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
@@ -50,6 +51,16 @@ export const state = {
   filePickerOpen: false,
   releaseFocusTrap: null,
   treeFilter: '',
+  confirmDialogOpen: false,
+  // Resolved keybindings map, shape { [actionId]: { primary, aliases[] } }.
+  // Set in app.js init() from state.config.keybindings, re-set after the
+  // Shortcuts tab saves. Dispatcher reads this on every keydown.
+  bindings: Object.create(null),
+  // Timestamp (ms) of the last successful save. While this sits within
+  // the debounce window, watcher fs-change events for that path are
+  // ignored so saving doesn't immediately re-trigger a file reload.
+  lastSaveAt: 0,
+  lastSavedPath: null,
 };
 
 // ── Zoom constants ────────────────────────────────────────────────────────
@@ -85,16 +96,25 @@ export const tabScrollLeftEl  = document.getElementById('tab-scroll-left');
 export const tabScrollRightEl = document.getElementById('tab-scroll-right');
 export const contentEl       = document.getElementById('content');
 export const contentScroll   = document.getElementById('content-scroll');
+export const editorSplit     = document.getElementById('editor-split');
+export const editorPane      = document.getElementById('editor-pane');
+export const previewPane     = document.getElementById('preview-pane');
+export const splitDivider    = document.getElementById('split-divider');
 export const btnOpen         = document.getElementById('btn-open');
 export const btnOpenFolder   = document.getElementById('btn-open-folder');
-export const btnClose        = document.getElementById('btn-close');
 export const btnReload       = document.getElementById('btn-reload');
+export const btnModeToggle   = document.getElementById('btn-mode-toggle');
+export const btnSave         = document.getElementById('btn-save');
+export const btnDiscard      = document.getElementById('btn-discard');
+export const editToolbar     = document.getElementById('edit-toolbar');
 export const btnSearch       = document.getElementById('btn-search');
+export const btnOutline      = document.getElementById('btn-outline');
 export const btnSettings     = document.getElementById('btn-settings');
 export const btnMinimize     = document.getElementById('btn-minimize');
 export const btnMaximize     = document.getElementById('btn-maximize');
 export const btnWinClose     = document.getElementById('btn-winclose');
 export const filePathEl      = document.getElementById('file-path');
+export const statusCountsEl  = document.getElementById('status-counts');
 export const statusIndicator = document.getElementById('status-indicator');
 export const statusText      = document.getElementById('status-text');
 export const btnZoomOut      = document.getElementById('btn-zoom-out');
@@ -108,8 +128,13 @@ export const searchNext      = document.getElementById('search-next');
 export const searchClose     = document.getElementById('search-close');
 export const searchCount     = document.getElementById('search-count');
 export const settingsOverlay = document.getElementById('settings-overlay');
+export const btnLogo         = document.getElementById('btn-logo');
+export const shortcutsPopover = document.getElementById('shortcuts-popover');
+export const outlinePopover  = document.getElementById('outline-popover');
 export const pickerBackdrop  = document.getElementById('picker-backdrop');
+export const pickerLoader    = document.getElementById('picker-loader');
 export const sidebarEl       = document.getElementById('sidebar');
+export const sidebarDivider  = document.getElementById('sidebar-divider');
 export const sidebarFolderName = document.getElementById('sidebar-folder-name');
 export const sidebarTreeEl   = document.getElementById('sidebar-tree');
 export const sidebarCloseBtn = document.getElementById('sidebar-close');
@@ -117,14 +142,22 @@ export const sidebarExpandAllBtn   = document.getElementById('sidebar-expand-all
 export const sidebarCollapseAllBtn = document.getElementById('sidebar-collapse-all');
 export const sidebarFilterInput    = document.getElementById('sidebar-filter-input');
 export const sidebarFilterClearBtn = document.getElementById('sidebar-filter-clear');
+export const confirmOverlay   = document.getElementById('confirm-overlay');
+export const confirmDialog    = document.getElementById('confirm-dialog');
+export const confirmDialogTitle = document.getElementById('confirm-dialog-title');
+export const confirmDialogBody  = document.getElementById('confirm-dialog-body');
+export const confirmCancelBtn = document.getElementById('confirm-cancel');
+export const confirmDiscardBtn = document.getElementById('confirm-discard');
+export const confirmSaveBtn   = document.getElementById('confirm-save');
 
 // Capture the welcome screen HTML from the initial DOM (index.html) before
 // any content is loaded, so showWelcome() can restore the full styled version.
 export const WELCOME_HTML = contentEl.innerHTML;
 
-// Only one overlay (file picker, search, settings) can be open at a time.
+// Only one overlay (file picker, search, settings, confirm) can be open at a time.
 export function hasActiveOverlay() {
   return state.filePickerOpen
     || !searchBar.classList.contains('hidden')
-    || !settingsOverlay.classList.contains('hidden');
+    || !settingsOverlay.classList.contains('hidden')
+    || !confirmOverlay.classList.contains('hidden');
 }

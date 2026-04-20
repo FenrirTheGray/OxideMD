@@ -1,5 +1,6 @@
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -15,9 +16,19 @@ pub struct Config {
     pub h2_color: String,
     pub h3_color: String,
     pub bullet_color: String,
+    pub code_bg_color: String,
+    pub code_accent_color: String,
+    pub note_bg_color: String,
+    pub note_accent_color: String,
+    pub toolbar_compact: bool,
+    pub sidebar_width: u32,
     pub window_width: u32,
     pub window_height: u32,
     pub window_maximized: bool,
+    // Sparse overrides keyed by action id (e.g. "save" → "Mod+S").
+    // Missing entries fall back to the frontend's default registry, so
+    // new actions shipped in updates auto-apply without rewriting config.
+    pub keybindings: HashMap<String, String>,
 }
 
 impl Default for Config {
@@ -32,9 +43,16 @@ impl Default for Config {
             h2_color: "#67e8f9".into(),
             h3_color: "#fbbf24".into(),
             bullet_color: "#8b5cf6".into(),
+            code_bg_color: "#1e2127".into(),
+            code_accent_color: "#61afef".into(),
+            note_bg_color: "#2a2f3a".into(),
+            note_accent_color: "#c678dd".into(),
+            toolbar_compact: false,
+            sidebar_width: 240,
             window_width: 600,
             window_height: 700,
             window_maximized: false,
+            keybindings: HashMap::new(),
         }
     }
 }

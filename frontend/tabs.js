@@ -1,17 +1,21 @@
 import {
   invoke, convertFileSrc, appWindow,
-  modKey,
   tabs, state,
   ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
   supportsHighlights, matchHighlight, currentHighlight,
   tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
-  btnClose, btnReload, btnSearch, btnZoomIn, btnZoomOut, zoomLabel,
+  editorPane, previewPane,
+  btnReload, btnSearch, btnOutline, btnZoomIn, btnZoomOut, zoomLabel,
+  btnModeToggle, btnSave, btnDiscard, editToolbar,
   filePathEl, statusIndicator, statusText,
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
 } from './state.js';
 import { clearSearch } from './search.js';
 import { syncWatcher, highlightActiveTreeItem } from './folder.js';
+import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop } from './editor.js';
+import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
+import { readDraft, clearDraft } from './draft-store.js';
 
 // Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
 // with an absolute path. The webview can't load a raw filesystem path, so we
@@ -36,19 +40,35 @@ export function renderContent(html) {
 
 export function syncToolbar() {
   const hasTab = state.activeTabId !== null;
-  btnClose.disabled  = !hasTab;
-  btnReload.disabled = !hasTab;
-  btnSearch.disabled = !hasTab;
+  const tab = activeTab();
+  const editing = !!tab?.editing;
+  btnReload.disabled = !hasTab || editing;
+  btnSearch.disabled = !hasTab || editing;
+  if (btnOutline) btnOutline.disabled = !hasTab;
   btnZoomIn.disabled  = !hasTab;
   btnZoomOut.disabled = !hasTab;
   zoomLabel.disabled  = !hasTab;
+  // Hide the zoom cluster entirely until a file is loaded.
+  const zoomControls = document.getElementById('zoom-controls');
+  if (zoomControls) zoomControls.classList.toggle('hidden', !hasTab);
+
+  // Mode toggle enabled only for file-backed tabs (welcome screen has
+  // no file to edit). The button's icon/label flips via body.editing in CSS.
+  const canToggle = hasTab && !!tab?.path;
+  btnModeToggle.disabled = !canToggle;
+  btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
+
+  const dirty = editing && ((tab?.raw ?? '') !== (tab?.savedRaw ?? ''));
+  btnSave.disabled = !dirty;
+  if (btnDiscard) btnDiscard.disabled = !dirty;
+  editToolbar.hidden = !editing;
 }
 
 export function activeTab() {
   return tabs.find(t => t.id === state.activeTabId) ?? null;
 }
 
-export function openInNewTab(path, title, html) {
+export function openInNewTab(path, title, html, raw = null) {
   // Switch to existing tab if this path is already open
   if (path) {
     const existing = tabs.find(t => t.path === path);
@@ -58,7 +78,14 @@ export function openInNewTab(path, title, html) {
     }
   }
   const id = state.nextTabId++;
-  tabs.push({ id, path, title, html, scrollTop: 0, zoom: ZOOM_DEFAULT });
+  tabs.push({
+    id, path, title, html,
+    raw: raw ?? '',
+    savedRaw: raw ?? '',
+    editing: false,
+    scrollTop: 0,
+    zoom: ZOOM_DEFAULT,
+  });
   state.activeTabId = id;
   syncToolbar();
   renderTabBar();
@@ -67,21 +94,66 @@ export function openInNewTab(path, title, html) {
 }
 
 export function switchToTab(id) {
-  // Save scroll position of current tab before leaving
+  // Save scroll position of current tab before leaving. When leaving an
+  // editor, capture the current buffer value and both pane scroll
+  // positions so returning to this tab doesn't lose in-flight edits or
+  // jump the scroll state.
   const cur = activeTab();
-  if (cur) cur.scrollTop = contentScroll.scrollTop;
+  if (cur) {
+    if (cur.editing) {
+      const liveValue = getEditorValue();
+      if (liveValue != null) {
+        cur.raw = liveValue;
+        cur.editorScrollTop = getEditorScrollTop();
+      }
+      cur.previewScrollTop = previewPane.scrollTop;
+    } else {
+      cur.scrollTop = contentScroll.scrollTop;
+    }
+  }
 
   state.activeTabId = id;
   clearSearch();
   renderTabBar();
   applyActiveTab();
+  syncToolbar();
 }
 
-export function closeTab(id) {
+export async function closeTab(id) {
   const idx = tabs.findIndex(t => t.id === id);
   if (idx === -1) return;
+  const tab = tabs[idx];
 
-  // Save scroll before closing if it's active
+  // Capture pending edits from the live editor into the tab buffer so
+  // isDirty() sees the user's latest keystrokes, not a stale snapshot.
+  if (tab.editing && id === state.activeTabId) {
+    const liveValue = getEditorValue();
+    if (liveValue != null) tab.raw = liveValue;
+  }
+
+  if (isDirty(tab)) {
+    // Make sure the dirty tab is visible while the prompt is up so the
+    // user sees which file they're deciding about.
+    if (id !== state.activeTabId) switchToTab(id);
+    const decision = await promptUnsavedChanges(tab);
+    if (decision === 'cancel') return;
+    if (decision === 'save') {
+      const ok = await saveActiveFile();
+      if (!ok) return;
+    } else if (decision === 'discard') {
+      // User explicitly threw away the in-memory edits — cancel any
+      // pending debounced draft write first (otherwise it could re-write
+      // the draft after we clear it), then drop the localStorage entry.
+      cancelPendingDraftWrite();
+      if (tab.path) clearDraft(tab.path);
+    }
+  }
+
+  // If we're closing the active, editing tab, tear the editor down first.
+  if (tab.editing && id === state.activeTabId) {
+    exitEditMode({ keepHtml: false });
+  }
+
   if (id === state.activeTabId) {
     tabs[idx].scrollTop = contentScroll.scrollTop;
   }
@@ -98,11 +170,30 @@ export function closeTab(id) {
   } else if (id === state.activeTabId) {
     state.activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
     clearSearch();
-    syncToolbar();
     renderTabBar();
     applyActiveTab();
+    syncToolbar();
   } else {
     renderTabBar();
+  }
+}
+
+// Close every tab except `keepId`. Iterates sequentially so each dirty
+// tab gets its own unsaved-changes prompt; if `closeTab` cancels or
+// fails, the tab stays in `tabs` and we bail out of the loop.
+export async function closeOtherTabs(keepId) {
+  const ids = tabs.filter(t => t.id !== keepId).map(t => t.id);
+  for (const id of ids) {
+    await closeTab(id);
+    if (tabs.some(t => t.id === id)) break;
+  }
+}
+
+export async function closeAllTabs() {
+  const ids = tabs.map(t => t.id);
+  for (const id of ids) {
+    await closeTab(id);
+    if (tabs.some(t => t.id === id)) break;
   }
 }
 
@@ -110,28 +201,39 @@ export function applyActiveTab() {
   const tab = activeTab();
   if (!tab) { showWelcome(); return; }
 
-  renderContent(tab.html);
-  state.originalContent = tab.html;
+  // Body-level flag drives the edit toolbar visibility and split layout;
+  // keep it in sync whenever we render a tab (switching between
+  // editing/non-editing tabs).
+  document.body.classList.toggle('editing', tab.editing);
+
+  if (tab.editing) {
+    // Rebuild the split so it reflects this tab's raw buffer and
+    // preview state (another tab may have been editing its own buffer).
+    mountEditor(tab);
+  } else {
+    renderContent(tab.html);
+    state.originalContent = tab.html;
+  }
+
   appWindow.setTitle(tab.title);
   document.title = tab.title;
   setStatusFilePath(tab.path || '');
   applyZoom(tab.zoom);
   highlightActiveTreeItem();
 
-  // Restore scroll position after layout
-  requestAnimationFrame(() => {
-    contentScroll.scrollTop = tab.scrollTop;
-  });
+  if (!tab.editing) {
+    requestAnimationFrame(() => {
+      contentScroll.scrollTop = tab.scrollTop;
+    });
+  }
 }
 
 export function showWelcome() {
   contentEl.innerHTML = WELCOME_HTML;
-  // Re-patch the welcome hint for the correct modifier key (WELCOME_HTML
-  // was captured before applyPlatformLabels ran, so it always says "Ctrl").
-  const hintEl = contentEl.querySelector('.welcome-hint');
-  if (hintEl) {
-    hintEl.innerHTML = `<kbd>${modKey}+O</kbd> to open &nbsp;&middot;&nbsp; or drag a <kbd>.md</kbd> file here`;
-  }
+  // Welcome's shortcut chips and hero key spans are empty in the static
+  // HTML — fill them from the registry so platform symbols and any user
+  // rebinds are reflected.
+  renderShortcutsUI();
   contentEl.style.fontSize = '';
   state.originalContent = '';
   appWindow.setTitle('OxideMD');
@@ -160,8 +262,18 @@ export function setStatusFilePath(path) {
 }
 
 export function applyZoom(zoom) {
-  contentEl.style.fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
-  contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
+  const tab = activeTab();
+  const fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
+  contentEl.style.fontSize = fontSize;
+  // Mirror the zoom on the live preview so Ctrl+/− affect it too.
+  if (previewPane) previewPane.style.fontSize = fontSize;
+  // The editor takes the full viewport width; reading-width constraints
+  // are a rendered-markdown concern only.
+  if (tab?.editing) {
+    contentEl.style.maxWidth = 'none';
+  } else {
+    contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
+  }
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
   btnZoomOut.disabled = zoom <= ZOOM_MIN;
   btnZoomIn.disabled  = zoom >= ZOOM_MAX;
@@ -195,8 +307,9 @@ export function renderTabBar() {
 
   for (const tab of tabs) {
     const isActive = tab.id === state.activeTabId;
+    const dirty = isDirty(tab);
     const el = document.createElement('div');
-    el.className = 'tab' + (isActive ? ' active' : '');
+    el.className = 'tab' + (isActive ? ' active' : '') + (dirty ? ' dirty' : '');
     el.setAttribute('role', 'tab');
     el.setAttribute('aria-selected', isActive ? 'true' : 'false');
     el.setAttribute('aria-label', tab.title);
@@ -213,7 +326,7 @@ export function renderTabBar() {
     closeBtn.setAttribute('aria-label', `Close ${tab.title}`);
     closeBtn.tabIndex = -1;
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
-    closeBtn.title = `Close (${modKey}+W)`;
+    // Title is set per-binding by renderShortcutsUI() right after this loop.
 
     el.appendChild(titleSpan);
     el.appendChild(closeBtn);
@@ -231,6 +344,9 @@ export function renderTabBar() {
   // Scroll active tab into view
   const activeEl = tabBarEl.querySelector('.tab.active');
   if (activeEl) activeEl.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+
+  // Title each freshly-built close button with the live closeTab binding.
+  refreshTabCloseTitles();
 
   updateTabOverflow();
 }
@@ -307,7 +423,12 @@ export async function loadFile(path) {
   setLoading();
   try {
     const result = await invoke('open_file', { path });
-    openInNewTab(result.path || path, result.title, result.html);
+    const realPath = result.path || path;
+    // A draft is only worth offering on first-open of a path: re-clicking
+    // an already-open tab just switches to it and shouldn't re-prompt.
+    const wasAlreadyOpen = !!tabs.find(t => t.path === realPath);
+    openInNewTab(realPath, result.title, result.html, result.raw ?? '');
+    if (!wasAlreadyOpen) await maybeOfferDraftRecovery(realPath, result.raw ?? '');
   } catch (e) {
     showError(String(e));
   } finally {
@@ -315,14 +436,40 @@ export async function loadFile(path) {
   }
 }
 
+// Compares the on-disk markdown against any persisted draft for this
+// path. If they differ, prompts the user; on 'save' we restore the draft
+// into tab.raw (savedRaw stays as disk content so isDirty=true and Save
+// re-enables) and auto-enter edit mode. 'discard' clears the draft.
+// 'cancel' (Escape / overlay click) leaves the draft for next time.
+async function maybeOfferDraftRecovery(path, diskRaw) {
+  const draft = readDraft(path);
+  if (!draft) return;
+  if (draft.content === diskRaw) { clearDraft(path); return; }
+  const tab = tabs.find(t => t.path === path);
+  if (!tab) return;
+  const decision = await promptRecoverDraft(tab, draft);
+  if (decision === 'save') {
+    tab.raw = draft.content;
+    await enterEditMode();
+  } else if (decision === 'discard') {
+    clearDraft(path);
+  }
+}
+
 export async function reloadFile() {
   const tab = activeTab();
   if (!tab?.path) return;
+  // Reloading while editing would clobber unsaved edits. The toolbar
+  // already disables this button in edit mode, but guard anyway so the
+  // Ctrl+R shortcut also respects it.
+  if (tab.editing) return;
   setLoading();
   try {
     const result = await invoke('open_file', { path: tab.path });
     tab.html = result.html;
     tab.title = result.title;
+    tab.raw = result.raw ?? '';
+    tab.savedRaw = tab.raw;
     applyActiveTab();
     renderTabBar();
   } catch (e) {

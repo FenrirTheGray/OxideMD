@@ -1,9 +1,15 @@
 import {
-  invoke, state, systemDarkMQ,
-  statusText, statusIndicator, settingsOverlay,
+  invoke, state, systemDarkMQ, isLinux,
+  statusText, statusIndicator, settingsOverlay, searchBar,
   hasActiveOverlay,
 } from './state.js';
 import { activeTab, applyZoom, setLoading, clearStatus } from './tabs.js';
+import { closeSearch } from './search.js';
+import {
+  ACTIONS, effectiveBindings, findActionByAccel, eventToAccel,
+  accelToTokens, canonicalizeAccel, MODIFIER_ONLY_KEYS,
+} from './keybindings.js';
+import { renderShortcutsUI } from './shortcuts-display.js';
 
 // ── Config / theme ─────────────────────────────────────────────────────────
 function resolvedTheme(theme) {
@@ -47,6 +53,12 @@ export function applyConfig(cfg) {
   document.body.style.setProperty('--h2-color', cfg.h2_color);
   document.body.style.setProperty('--h3-color', cfg.h3_color);
   document.body.style.setProperty('--bullet-color', cfg.bullet_color);
+  document.body.style.setProperty('--code-bg', cfg.code_bg_color);
+  document.body.style.setProperty('--code-accent', cfg.code_accent_color);
+  document.body.style.setProperty('--note-bg', cfg.note_bg_color);
+  document.body.style.setProperty('--note-accent', cfg.note_accent_color);
+  document.body.style.setProperty('--sidebar-width', `${cfg.sidebar_width}px`);
+  document.getElementById('toolbar-buttons').classList.toggle('compact', !!cfg.toolbar_compact);
 }
 
 // Live update when the OS switches dark/light while theme is set to 'system'
@@ -355,6 +367,30 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── Segmented controls ─────────────────────────────────────────────────────
+// Two-button pill with data-value on each segment; exposes a .value
+// getter/setter like the custom-select above so settings save/load code
+// can treat it as a regular form control.
+document.querySelectorAll('.segmented').forEach(seg => {
+  const btns = Array.from(seg.querySelectorAll('button[data-value]'));
+
+  Object.defineProperty(seg, 'value', {
+    get() { return seg.dataset.value ?? ''; },
+    set(v) {
+      const str = String(v);
+      seg.dataset.value = str;
+      btns.forEach(b => {
+        const on = b.dataset.value === str;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+  });
+
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => { seg.value = btn.dataset.value; });
+  });
+});
+
 // ── Custom number inputs ───────────────────────────────────────────────────
 document.querySelectorAll('.custom-number').forEach(num => {
   const display  = num.querySelector('.custom-number-value');
@@ -410,6 +446,156 @@ function trapFocus(container) {
   return () => container.removeEventListener('keydown', handler);
 }
 
+// ── Shortcuts panel ────────────────────────────────────────────────────────
+// Working copy of user overrides, mutated while the Shortcuts tab is open.
+// Commits to state.config on Save; discarded on Cancel. Sparse map keyed
+// by action id — missing entries fall back to the registry default.
+let pendingOverrides = null;
+let capturingId = null;
+
+const shortcutsList = document.getElementById('shortcuts-list');
+const shortcutsConflict = document.getElementById('shortcuts-conflict');
+const RESET_ICON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>';
+
+function showShortcutConflict(msg) {
+  shortcutsConflict.textContent = msg;
+  shortcutsConflict.classList.remove('hidden');
+}
+function hideShortcutConflict() {
+  shortcutsConflict.textContent = '';
+  shortcutsConflict.classList.add('hidden');
+}
+function formatAccelForDisplay(accel) {
+  if (!accel) return 'Not assigned';
+  return accelToTokens(accel).join(' ');
+}
+
+function renderShortcutsPanel() {
+  hideShortcutConflict();
+  shortcutsList.innerHTML = '';
+  const effective = effectiveBindings(pendingOverrides);
+
+  // Group by category preserving registry order.
+  const groups = [];
+  const seen = new Map();
+  for (const a of ACTIONS) {
+    let g = seen.get(a.category);
+    if (!g) { g = { name: a.category, actions: [] }; seen.set(a.category, g); groups.push(g); }
+    g.actions.push(a);
+  }
+
+  for (const g of groups) {
+    const title = document.createElement('div');
+    title.className = 'shortcut-group-title';
+    title.textContent = g.name;
+    shortcutsList.appendChild(title);
+
+    for (const a of g.actions) {
+      const locked = isLinux && a.rebindableOnLinux === false;
+
+      const row = document.createElement('div');
+      row.className = 'shortcut-edit-row' + (locked ? ' locked' : '');
+      row.dataset.actionId = a.id;
+
+      const label = document.createElement('div');
+      label.className = 'shortcut-edit-label';
+      label.textContent = a.label;
+      if (locked) {
+        const note = document.createElement('span');
+        note.className = 'shortcut-edit-label-note';
+        note.textContent = 'Fixed on Linux (handled by the window system)';
+        label.appendChild(note);
+      }
+      row.appendChild(label);
+
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'shortcut-edit-pill';
+      pill.textContent = formatAccelForDisplay(effective[a.id]?.primary || '');
+      pill.setAttribute('aria-label', `Change shortcut for ${a.label}`);
+      if (locked) pill.disabled = true;
+      row.appendChild(pill);
+
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'shortcut-edit-reset';
+      reset.setAttribute('aria-label', `Reset shortcut for ${a.label}`);
+      reset.title = 'Reset to default';
+      reset.innerHTML = RESET_ICON_SVG;
+      const overridden = pendingOverrides
+        && Object.prototype.hasOwnProperty.call(pendingOverrides, a.id);
+      reset.disabled = !overridden || locked;
+      row.appendChild(reset);
+
+      shortcutsList.appendChild(row);
+
+      if (locked) continue;
+
+      pill.addEventListener('click', () => startShortcutCapture(a.id, pill));
+      reset.addEventListener('click', () => {
+        if (pendingOverrides) delete pendingOverrides[a.id];
+        endShortcutCapture();
+        renderShortcutsPanel();
+      });
+    }
+  }
+}
+
+function startShortcutCapture(actionId, pill) {
+  if (capturingId === actionId) return;
+  if (capturingId) endShortcutCapture();
+  capturingId = actionId;
+  pill.classList.add('capturing');
+  pill.textContent = 'Press new shortcut\u2026';
+  hideShortcutConflict();
+  pill.focus();
+}
+
+function endShortcutCapture() {
+  if (!capturingId) return;
+  const row = shortcutsList.querySelector(
+    `.shortcut-edit-row[data-action-id="${CSS.escape(capturingId)}"]`);
+  row?.querySelector('.shortcut-edit-pill')?.classList.remove('capturing');
+  capturingId = null;
+}
+
+// Capture-phase so we absorb keydowns before the global dispatcher —
+// otherwise trying to bind Mod+S would save the file mid-capture.
+document.addEventListener('keydown', (e) => {
+  if (!capturingId) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (e.key === 'Escape') { endShortcutCapture(); renderShortcutsPanel(); return; }
+  if (MODIFIER_ONLY_KEYS.has(e.key)) return;
+
+  const accel = eventToAccel(e);
+  if (!accel) return;
+
+  const action = ACTIONS.find(a => a.id === capturingId);
+  if (!action) return;
+
+  const effective = effectiveBindings(pendingOverrides);
+  const conflictId = findActionByAccel(effective, accel, capturingId);
+  if (conflictId) {
+    const other = ACTIONS.find(a => a.id === conflictId);
+    showShortcutConflict(
+      `${accelToTokens(accel).join(' ')} is already assigned to "${other?.label || conflictId}". Reset that shortcut first or pick another combo.`
+    );
+    return;
+  }
+
+  const defaultCanon = canonicalizeAccel(action.defaultAccel);
+  if (accel === defaultCanon) {
+    if (pendingOverrides) delete pendingOverrides[capturingId];
+  } else {
+    pendingOverrides = pendingOverrides || Object.create(null);
+    pendingOverrides[capturingId] = accel;
+  }
+  endShortcutCapture();
+  renderShortcutsPanel();
+}, true);
+
 // ── Settings ───────────────────────────────────────────────────────────────
 const UPDATE_ICON_AVAILABLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>';
 const UPDATE_ICON_CURRENT   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -458,6 +644,8 @@ async function checkForUpdates() {
 }
 
 export function openSettings() {
+  // Close the search bar first so Settings can open over it.
+  if (!searchBar.classList.contains('hidden')) closeSearch();
   if (hasActiveOverlay()) return;
   hideUpdateStatus();
   window.__TAURI__.app.getVersion().then(v => {
@@ -473,13 +661,26 @@ export function openSettings() {
   document.getElementById('setting-h2').value            = state.config.h2_color;
   document.getElementById('setting-h3').value            = state.config.h3_color;
   document.getElementById('setting-bullet').value        = state.config.bullet_color;
+  document.getElementById('setting-code-bg').value       = state.config.code_bg_color;
+  document.getElementById('setting-code-accent').value   = state.config.code_accent_color;
+  document.getElementById('setting-note-bg').value       = state.config.note_bg_color;
+  document.getElementById('setting-note-accent').value   = state.config.note_accent_color;
+  document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
   updatePreviewColors();
+  // Seed the shortcuts working copy from the saved overrides so edits are
+  // only committed on Save. Plain object, not state.config.keybindings
+  // itself, so cancel leaves state untouched.
+  pendingOverrides = Object.assign(Object.create(null), state.config.keybindings || {});
+  renderShortcutsPanel();
   activateSettingsTab('reading');
   settingsOverlay.classList.remove('hidden');
   state.releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
 }
 
 function activateSettingsTab(name) {
+  // Leaving the Shortcuts panel must cancel any in-progress capture so a
+  // stray keypress in another panel doesn't get intercepted.
+  if (name !== 'shortcuts') endShortcutCapture();
   const tabs = document.querySelectorAll('.settings-tab');
   const panels = document.querySelectorAll('.settings-panel');
   tabs.forEach(t => {
@@ -498,7 +699,7 @@ function activateSettingsTab(name) {
 
 function updatePreviewColors() {
   const body = document.body.style;
-  const keys = ['h1', 'h2', 'h3', 'bullet'];
+  const keys = ['h1', 'h2', 'h3', 'bullet', 'code-bg', 'code-accent', 'note-bg', 'note-accent'];
   keys.forEach(k => {
     const v = document.getElementById(`setting-${k}`).value;
     body.setProperty(`--preview-${k}`, v);
@@ -508,6 +709,7 @@ function updatePreviewColors() {
 }
 
 export function closeSettings() {
+  endShortcutCapture();
   if (state.releaseFocusTrap) { state.releaseFocusTrap(); state.releaseFocusTrap = null; }
   if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
   settingsOverlay.classList.add('closing');
@@ -529,6 +731,12 @@ async function saveSettings() {
     h2_color:       document.getElementById('setting-h2').value,
     h3_color:       document.getElementById('setting-h3').value,
     bullet_color:   document.getElementById('setting-bullet').value,
+    code_bg_color:  document.getElementById('setting-code-bg').value,
+    code_accent_color: document.getElementById('setting-code-accent').value,
+    note_bg_color:  document.getElementById('setting-note-bg').value,
+    note_accent_color: document.getElementById('setting-note-accent').value,
+    toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
+    keybindings: pendingOverrides ? { ...pendingOverrides } : {},
   };
   setLoading();
   try {
@@ -537,6 +745,8 @@ async function saveSettings() {
       await loadCustomFont(newConfig.font_family.slice(7));
     }
     state.config = newConfig;
+    state.bindings = effectiveBindings(newConfig.keybindings);
+    renderShortcutsUI();
     applyConfig(state.config);
     const tab = activeTab();
     if (tab) applyZoom(tab.zoom);
@@ -557,13 +767,23 @@ async function resetSettings() {
     document.getElementById('setting-size').value          = defaults.font_size;
     document.getElementById('setting-line-height').value   = defaults.line_height;
     document.getElementById('setting-reading-width').value = defaults.reading_width;
+    document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;
     document.getElementById('setting-h2').value     = defaults.h2_color;
     document.getElementById('setting-h3').value     = defaults.h3_color;
     document.getElementById('setting-bullet').value = defaults.bullet_color;
+    document.getElementById('setting-code-bg').value     = defaults.code_bg_color;
+    document.getElementById('setting-code-accent').value = defaults.code_accent_color;
+    document.getElementById('setting-note-bg').value     = defaults.note_bg_color;
+    document.getElementById('setting-note-accent').value = defaults.note_accent_color;
     updatePreviewColors();
+  } else if (activeTabName === 'shortcuts') {
+    // Drop every override so every action falls back to its registry
+    // default. Still a pending change until the user hits Save.
+    pendingOverrides = Object.create(null);
+    renderShortcutsPanel();
   }
 }
 
@@ -592,7 +812,7 @@ document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
 });
 
 // Live preview updates
-['setting-h1', 'setting-h2', 'setting-h3', 'setting-bullet'].forEach(id => {
+['setting-h1', 'setting-h2', 'setting-h3', 'setting-bullet', 'setting-code-bg', 'setting-code-accent', 'setting-note-bg', 'setting-note-accent'].forEach(id => {
   document.getElementById(id).addEventListener('input', updatePreviewColors);
 });
 
