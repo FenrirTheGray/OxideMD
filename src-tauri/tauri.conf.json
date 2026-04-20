@@ -4,7 +4,9 @@
 "version": "2.0.1",
   "identifier": "com.oxidemd.viewer",
   "build": {
-    "frontendDist": "../frontend"
+    "frontendDist": "../frontend",
+    "beforeDevCommand": "npm run build:frontend && npm run watch:frontend",
+    "beforeBuildCommand": "npm run build:frontend"
   },
   "app": {
     "withGlobalTauri": true,
@@ -16,6 +18,7 @@
         "height": 700,
         "minWidth": 640,
         "minHeight": 480,
+        "center": true,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,

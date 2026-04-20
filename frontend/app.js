@@ -1,17 +1,21 @@
 import {
   invoke, listen, appWindow,
-  modKey, isMarkdownPath, hasMod,
+  isMarkdownPath, hasMod,
   tabs, state,
-  tabBarEl, contentEl, contentScroll,
-  btnOpen, btnOpenFolder, btnClose, btnReload, btnSearch, btnSettings,
+  contentEl, contentScroll, previewPane,
+  btnOpen, btnOpenFolder, btnReload, btnSearch, btnSettings,
+  btnModeToggle, btnSave,
   btnMinimize, btnMaximize, btnWinClose,
   filePathEl,
   btnZoomOut, btnZoomIn, zoomLabel,
   searchBar, searchInput, searchCase, searchPrev, searchNext, searchClose,
-  settingsOverlay,
+  settingsOverlay, btnLogo, shortcutsPopover,
   sidebarCloseBtn, sidebarExpandAllBtn, sidebarCollapseAllBtn,
   sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
+  confirmOverlay,
 } from './state.js';
+import { effectiveBindings, registerHandler, dispatchKey, runAction } from './keybindings.js';
+import { renderShortcutsUI } from './shortcuts-display.js';
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
 } from './search.js';
@@ -23,10 +27,17 @@ import {
   loadFile, reloadFile, handleAnchorClick, openFilePicker,
 } from './tabs.js';
 import { loadCustomFont, applyConfig, openSettings, closeSettings } from './settings.js';
+import { enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch } from './editor.js';
+import { activeTab } from './tabs.js';
+import './contextmenu.js';
+import './window-size.js';
+import './outline.js';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
   state.config = await invoke('get_config');
+  state.bindings = effectiveBindings(state.config.keybindings);
+  renderShortcutsUI();
   state.customFonts = await invoke('list_custom_fonts');
   if (state.config.font_family.startsWith('custom:')) {
     await loadCustomFont(state.config.font_family.slice(7));
@@ -103,6 +114,71 @@ btnMaximize.addEventListener('click', async () => { await appWindow.toggleMaximi
 btnWinClose.addEventListener('click', () => appWindow.close());
 appWindow.onResized(syncMaximizeIcon);
 
+// ── Shortcuts popover (anchored to the logo) ──────────────────────────
+// Opens on hover or click/focus. A small grace timer bridges the gap
+// between the logo and the popover so the user can move from one to
+// the other without the popover flickering shut.
+let shortcutsHoverTimer = null;
+let shortcutsPinned = false;   // latched open on click/focus-visible
+
+function positionShortcutsPopover() {
+  const rect = btnLogo.getBoundingClientRect();
+  shortcutsPopover.style.top = `${Math.round(rect.bottom + 4)}px`;
+  shortcutsPopover.style.left = `${Math.round(rect.left + 4)}px`;
+}
+function openShortcutsPopover() {
+  positionShortcutsPopover();
+  shortcutsPopover.classList.remove('hidden');
+  shortcutsPopover.setAttribute('aria-hidden', 'false');
+  btnLogo.setAttribute('aria-expanded', 'true');
+}
+function closeShortcutsPopover() {
+  shortcutsPopover.classList.add('hidden');
+  shortcutsPopover.setAttribute('aria-hidden', 'true');
+  btnLogo.setAttribute('aria-expanded', 'false');
+  shortcutsPinned = false;
+}
+function scheduleClose() {
+  if (shortcutsPinned) return;
+  clearTimeout(shortcutsHoverTimer);
+  shortcutsHoverTimer = setTimeout(closeShortcutsPopover, 180);
+}
+function cancelScheduledClose() {
+  clearTimeout(shortcutsHoverTimer);
+}
+
+btnLogo.addEventListener('mouseenter', () => { cancelScheduledClose(); openShortcutsPopover(); });
+btnLogo.addEventListener('mouseleave', scheduleClose);
+shortcutsPopover.addEventListener('mouseenter', cancelScheduledClose);
+shortcutsPopover.addEventListener('mouseleave', scheduleClose);
+
+btnLogo.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (shortcutsPopover.classList.contains('hidden')) {
+    openShortcutsPopover();
+    shortcutsPinned = true;
+  } else if (shortcutsPinned) {
+    closeShortcutsPopover();
+  } else {
+    shortcutsPinned = true;
+  }
+});
+
+// Click outside closes the pinned popover.
+document.addEventListener('mousedown', (e) => {
+  if (shortcutsPopover.classList.contains('hidden')) return;
+  if (shortcutsPopover.contains(e.target) || btnLogo.contains(e.target)) return;
+  closeShortcutsPopover();
+});
+
+// Keep popover anchored to the logo across window resizes (maximize,
+// snap, manual resize). The listener is cheap and only reads/writes
+// two style properties when the popover is open.
+window.addEventListener('resize', () => {
+  if (shortcutsPopover.classList.contains('hidden')) return;
+  positionShortcutsPopover();
+});
+
 btnOpen.addEventListener('click', openFilePicker);
 btnOpenFolder.addEventListener('click', openFolder);
 sidebarCloseBtn.addEventListener('click', closeFolder);
@@ -163,17 +239,35 @@ filePathEl.addEventListener('keydown', (e) => {
 // anchor (re-created on every tab switch / search render). A single listener
 // survives all DOM replacements inside contentEl.
 contentEl.addEventListener('click', (e) => {
-  if (e.target.closest('#welcome-open')) { openFilePicker(); return; }
+  if (e.target.closest('#welcome-open-folder')) { openFolder(); return; }
+  if (e.target.closest('#welcome-open'))        { openFilePicker(); return; }
   const anchor = e.target.closest('a');
   if (anchor && contentEl.contains(anchor)) {
     e.preventDefault();
     handleAnchorClick(anchor);
   }
 });
-btnClose.addEventListener('click', () => { if (state.activeTabId !== null) closeTab(state.activeTabId); });
+// Same treatment for anchors inside the live preview pane — without this,
+// clicking a link would let the webview navigate away and take the whole
+// app with it.
+if (previewPane) {
+  previewPane.addEventListener('click', (e) => {
+    const anchor = e.target.closest('a');
+    if (anchor && previewPane.contains(anchor)) {
+      e.preventDefault();
+      handleAnchorClick(anchor);
+    }
+  });
+}
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
 btnSettings.addEventListener('click', openSettings);
+btnModeToggle.addEventListener('click', () => {
+  const tab = activeTab();
+  if (!tab || !tab.path) return;
+  if (tab.editing) exitEditMode(); else enterEditMode();
+});
+btnSave.addEventListener('click', saveActiveFile);
 btnZoomOut.addEventListener('click', zoomOut);
 btnZoomIn.addEventListener('click', zoomIn);
 zoomLabel.addEventListener('click', resetZoom);
@@ -198,121 +292,111 @@ searchPrev.addEventListener('click', prevMatch);
 searchNext.addEventListener('click', nextMatch);
 searchClose.addEventListener('click', closeSearch);
 
+// ── Action handlers ───────────────────────────────────────────────────────
+// Each handler wraps an action body with its preventDefault + any guards
+// that determine whether the event is consumed. Dispatcher matches the
+// accelerator; these functions own the semantics.
+
+function shiftActiveTab(direction) {
+  if (tabs.length < 2) return;
+  const idx = tabs.findIndex(t => t.id === state.activeTabId);
+  const target = (idx + direction + tabs.length) % tabs.length;
+  [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
+  renderTabBar();
+}
+
+function switchTabBy(direction) {
+  if (tabs.length < 2) return;
+  const idx = tabs.findIndex(t => t.id === state.activeTabId);
+  const next = (idx + direction + tabs.length) % tabs.length;
+  switchToTab(tabs[next].id);
+}
+
+registerHandler('openFile',    (e) => { e?.preventDefault(); openFilePicker(); });
+registerHandler('openFolder',  (e) => { e?.preventDefault(); openFolder(); });
+registerHandler('closeFolder', (e) => {
+  if (!state.currentFolder) return;   // no folder → let the key pass through
+  e?.preventDefault();
+  closeFolder();
+});
+registerHandler('save', (e) => {
+  e?.preventDefault();
+  const tab = activeTab();
+  if (tab?.editing) saveActiveFile();
+});
+registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
+
+registerHandler('toggleEdit', (e) => {
+  e?.preventDefault();
+  const tab = activeTab();
+  if (!tab?.path) return;
+  if (tab.editing) exitEditMode(); else enterEditMode();
+});
+registerHandler('toggleSearch', (e) => {
+  e?.preventDefault();
+  if (tryOpenEditorSearch()) return;
+  toggleSearch();
+});
+registerHandler('zoomIn',    (e) => { e?.preventDefault(); zoomIn(); });
+registerHandler('zoomOut',   (e) => { e?.preventDefault(); zoomOut(); });
+registerHandler('zoomReset', (e) => { e?.preventDefault(); resetZoom(); });
+
+registerHandler('nextTab',      (e) => { e?.preventDefault(); switchTabBy(+1); });
+registerHandler('prevTab',      (e) => { e?.preventDefault(); switchTabBy(-1); });
+registerHandler('moveTabLeft',  (e) => { e?.preventDefault(); shiftActiveTab(-1); });
+registerHandler('moveTabRight', (e) => { e?.preventDefault(); shiftActiveTab(+1); });
+registerHandler('closeTab', (e) => {
+  e?.preventDefault();
+  if (state.activeTabId !== null) closeTab(state.activeTabId);
+});
+
 // ── Global keyboard shortcuts ──────────────────────────────────────────────
+// The registry (keybindings.js) owns the Mod+X actions. Escape/Home and the
+// confirm-dialog guard live here because they're UI-state keys, not
+// rebindable commands.
 document.addEventListener('keydown', (e) => {
-  if (hasMod(e) && e.key === 'f') { e.preventDefault(); toggleSearch(); return; }
-  if (hasMod(e) && e.key === 'o') { e.preventDefault(); openFilePicker(); return; }
-  if (hasMod(e) && e.key === 'r') { e.preventDefault(); reloadFile(); return; }
-  if (hasMod(e) && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoomIn();    return; }
-  if (hasMod(e) && e.key === '-')                    { e.preventDefault(); zoomOut();   return; }
-  if (hasMod(e) && e.key === '0')                    { e.preventDefault(); resetZoom(); return; }
-  if (hasMod(e) && e.key === 'Tab') {
-    e.preventDefault();
-    if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === state.activeTabId);
-      const next = e.shiftKey
-        ? (idx - 1 + tabs.length) % tabs.length
-        : (idx + 1) % tabs.length;
-      switchToTab(tabs[next].id);
-    }
-    return;
-  }
-  if (hasMod(e) && e.shiftKey && e.key === 'ArrowLeft') {
-    e.preventDefault();
-    if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === state.activeTabId);
-      const target = (idx - 1 + tabs.length) % tabs.length;
-      [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
-      renderTabBar();
-    }
-    return;
-  }
-  if (hasMod(e) && e.shiftKey && e.key === 'ArrowRight') {
-    e.preventDefault();
-    if (tabs.length > 1) {
-      const idx = tabs.findIndex(t => t.id === state.activeTabId);
-      const target = (idx + 1) % tabs.length;
-      [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
-      renderTabBar();
-    }
-    return;
-  }
-  if (hasMod(e) && e.key === 'w') {
-    e.preventDefault();
-    if (state.activeTabId !== null) closeTab(state.activeTabId);
-    return;
-  }
+  // While the unsaved-changes confirm is up, let editor.js handle Enter/
+  // Escape and swallow everything else. Otherwise Ctrl+S from within the
+  // prompt would save, defeating the point of the "cancel" choice.
+  if (state.confirmDialogOpen) return;
+
   if (e.key === 'Escape') {
+    if (!confirmOverlay.classList.contains('hidden')) { /* handled in editor.js */ return; }
+    if (!shortcutsPopover.classList.contains('hidden')) { closeShortcutsPopover(); btnLogo.focus(); return; }
     if (!settingsOverlay.classList.contains('hidden')) { closeSettings(); return; }
     if (!searchBar.classList.contains('hidden'))       { closeSearch();   return; }
+    return;
   }
   if (e.key === 'Home' && document.activeElement === document.body) {
     contentScroll.scrollTop = 0;
+    return;
   }
+
+  dispatchKey(e, state.bindings, 'global');
 });
 
 // Some key combos are intercepted by WebKitGTK before JS sees them,
 // so the Rust side registers hidden menu accelerators and emits events.
-listen('prev-tab', () => {
-  if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === state.activeTabId);
-    const prev = (idx - 1 + tabs.length) % tabs.length;
-    switchToTab(tabs[prev].id);
-  }
-});
-
-listen('next-tab', () => {
-  if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === state.activeTabId);
-    const next = (idx + 1) % tabs.length;
-    switchToTab(tabs[next].id);
-  }
-});
-
-listen('move-tab-left', () => {
-  if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === state.activeTabId);
-    const target = (idx - 1 + tabs.length) % tabs.length;
-    [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
-    renderTabBar();
-  }
-});
-
-listen('move-tab-right', () => {
-  if (tabs.length > 1) {
-    const idx = tabs.findIndex(t => t.id === state.activeTabId);
-    const target = (idx + 1) % tabs.length;
-    [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
-    renderTabBar();
-  }
-});
+// These must call the same action handlers as the Ctrl+Tab path so a
+// rebind of an adjacent action can't leave the GTK-intercepted default
+// firing a stale implementation.
+listen('prev-tab',       () => runAction('prevTab'));
+listen('next-tab',       () => runAction('nextTab'));
+listen('move-tab-left',  () => runAction('moveTabLeft'));
+listen('move-tab-right', () => runAction('moveTabRight'));
 
 // Prevent browser default drag-drop navigation
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 
-// ── Platform-aware UI labels ──────────────────────────────────────────────
-// Update tooltips and hints to show Cmd on macOS, Ctrl elsewhere
-function applyPlatformLabels() {
-  btnOpen.title       = `Open file (${modKey}+O)`;
-  btnReload.title     = `Reload file (${modKey}+R)`;
-  btnClose.title      = `Close tab (${modKey}+W)`;
-  btnSearch.title     = `Search (${modKey}+F)`;
-  btnZoomOut.title    = `Zoom out (${modKey}+-)`;
-  btnZoomIn.title     = `Zoom in (${modKey}++)`;
-  zoomLabel.title     = `Reset zoom (${modKey}+0)`;
-
-  // Tab close buttons
-  const tabCloses = tabBarEl.querySelectorAll('.tab-close');
-  tabCloses.forEach(b => b.title = `Close (${modKey}+W)`);
-
-  // Welcome screen: swap Ctrl → Cmd on macOS
-  document.querySelectorAll('#welcome kbd.mod-key').forEach(k => {
-    k.textContent = modKey;
-  });
-}
-
-applyPlatformLabels();
+// Ctrl/Cmd + wheel → zoom the active tab. Must be non-passive so
+// preventDefault suppresses the webview's default page-zoom behavior.
+window.addEventListener('wheel', (e) => {
+  if (!hasMod(e)) return;
+  if (state.activeTabId === null) return;
+  e.preventDefault();
+  if (e.deltaY < 0) zoomIn(); else if (e.deltaY > 0) zoomOut();
+}, { passive: false });
 
 // ── Start ──────────────────────────────────────────────────────────────────
 init();

@@ -11,6 +11,12 @@
   <!-- ── Toolbar (draggable title bar + tabs + actions) ────────────── -->
   <div id="toolbar" role="toolbar" aria-label="Application toolbar" data-tauri-drag-region>
 
+    <button id="btn-logo" type="button" aria-label="Keyboard shortcuts"
+            aria-haspopup="dialog" aria-expanded="false"
+            title="Keyboard shortcuts">
+      <img src="icon.png" alt="" draggable="false">
+    </button>
+
     <!-- Tabs -->
     <button id="tab-scroll-left" class="tab-scroll-btn" title="Scroll tabs left" aria-label="Scroll tabs left" aria-controls="tab-area" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
@@ -24,20 +30,20 @@
     <div id="toolbar-spacer" data-tauri-drag-region></div>
 
     <!-- Action buttons -->
-    <div id="toolbar-buttons">
+    <div id="toolbar-buttons" data-tauri-drag-region>
       <button id="btn-open" title="Open file (Ctrl+O)" aria-label="Open file">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
         </svg>
-        Open
+        <span class="btn-label">Open File</span>
       </button>
 
-      <button id="btn-open-folder" title="Open folder" aria-label="Open folder">
+      <button id="btn-open-folder" title="Open folder (Ctrl+Shift+O)" aria-label="Open folder">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           <path d="M3 11h18"/>
         </svg>
-        Folder
+        <span class="btn-label">Open Folder</span>
       </button>
 
       <button id="btn-reload" title="Reload file (Ctrl+R)" aria-label="Reload current file" disabled>
@@ -45,14 +51,24 @@
           <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
         </svg>
-        Reload
+        <span class="btn-label">Reload</span>
       </button>
 
-      <button id="btn-close" title="Close tab (Ctrl+W)" aria-label="Close current tab" disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      <!-- Single mode-toggle button: shows the destination mode. Visual
+           label/icon flip is driven by body.editing in CSS so syncToolbar
+           doesn't need to swap markup. Tooltip is set live by
+           renderShortcutsUI() so the keybinding stays in sync with config. -->
+      <button id="btn-mode-toggle" type="button" aria-label="Toggle edit mode" disabled>
+        <svg class="mode-icon mode-icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4z"/>
         </svg>
-        Close
+        <svg class="mode-icon mode-icon-view" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="btn-label mode-label mode-label-edit">Edit</span>
+        <span class="btn-label mode-label mode-label-view">View</span>
       </button>
 
       <button id="btn-search" title="Search (Ctrl+F)" aria-label="Search in document" disabled>
@@ -60,7 +76,16 @@
           <circle cx="11" cy="11" r="8"/>
           <line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
-        Search
+        <span class="btn-label">Search</span>
+      </button>
+
+      <button id="btn-outline" title="Document outline" aria-label="Open document outline" aria-haspopup="true" aria-expanded="false" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="7" y1="12" x2="21" y2="12"/>
+          <line x1="11" y1="18" x2="21" y2="18"/>
+        </svg>
+        <span class="btn-label">Outline</span>
       </button>
 
       <button id="btn-settings" title="Settings" aria-label="Open settings">
@@ -68,7 +93,7 @@
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
         </svg>
-        Settings
+        <span class="btn-label">Settings</span>
       </button>
 
     </div>
@@ -93,6 +118,18 @@
     </div>
   </div>
 
+  <!-- ── Shortcuts popover (anchored to the logo) ────────────────────── -->
+  <!-- Filled by shortcuts-display.js renderShortcutsUI() from the action
+       registry, so rebinds in Settings → Shortcuts are reflected here. -->
+  <div id="shortcuts-popover" class="hidden" role="dialog"
+       aria-label="Keyboard shortcuts" aria-hidden="true"></div>
+
+  <!-- ── Outline popover (anchored to btn-outline) ──────────────────── -->
+  <!-- Filled live by outline.js when opened; lists the active document's
+       markdown headings and jumps the editor/preview when one is clicked. -->
+  <div id="outline-popover" class="hidden" role="dialog"
+       aria-label="Document outline" aria-hidden="true"></div>
+
   <!-- ── Search bar ─────────────────────────────────────────────────── -->
   <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
     <input type="text" id="search-input"
@@ -112,6 +149,164 @@
     </div>
     <span id="search-count" aria-live="polite" aria-atomic="true"></span>
     <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
+  </div>
+
+  <!-- ── Edit formatting toolbar (shown only in edit mode) ──────────── -->
+  <div id="edit-toolbar" role="toolbar" aria-label="Formatting" hidden>
+    <div class="fmt-content">
+    <div class="fmt-group" role="group" aria-label="Text">
+      <button type="button" class="fmt-btn" data-format="bold" title="Bold" aria-label="Bold">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7z"/>
+          <path d="M7 12h7a3.5 3.5 0 0 1 0 7H7z"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="italic" title="Italic" aria-label="Italic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="19" y1="4" x2="10" y2="4"/>
+          <line x1="14" y1="20" x2="5" y2="20"/>
+          <line x1="15" y1="4" x2="9" y2="20"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="strike" title="Strikethrough" aria-label="Strikethrough">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12h16"/>
+          <path d="M17.5 7A4 4 0 0 0 14 5h-4a3 3 0 0 0-1.5 5.6"/>
+          <path d="M8 15a3 3 0 0 0 2 3h4a4 4 0 0 0 3.5-2"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="code" title="Inline code" aria-label="Inline code">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="8 16 4 12 8 8"/>
+          <polyline points="16 8 20 12 16 16"/>
+        </svg>
+      </button>
+    </div>
+
+    <span class="fmt-divider" aria-hidden="true"></span>
+
+    <div class="fmt-group" role="group" aria-label="Headings">
+      <button type="button" class="fmt-btn" data-format="h1" title="Heading 1" aria-label="Heading 1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12h8"/>
+          <path d="M4 18V6"/>
+          <path d="M12 18V6"/>
+          <path d="m17 12 3-2v8"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="h2" title="Heading 2" aria-label="Heading 2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12h8"/>
+          <path d="M4 18V6"/>
+          <path d="M12 18V6"/>
+          <path d="M17 10a2 2 0 0 1 4 0c0 1.2-1 1.8-2 2.5-1 .7-2 1.7-2 3.5h4"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="h3" title="Heading 3" aria-label="Heading 3">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 12h8"/>
+          <path d="M4 18V6"/>
+          <path d="M12 18V6"/>
+          <path d="M17 9a2 2 0 1 1 4 .5 1.8 1.8 0 0 1-1.5 1.7 1.9 1.9 0 0 1 1.6 2.1 2.1 2.1 0 0 1-4.1.4"/>
+        </svg>
+      </button>
+    </div>
+
+    <span class="fmt-divider" aria-hidden="true"></span>
+
+    <div class="fmt-group" role="group" aria-label="Lists and quote">
+      <button type="button" class="fmt-btn" data-format="ul" title="Bullet list" aria-label="Bullet list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="9" y1="6" x2="20" y2="6"/>
+          <line x1="9" y1="12" x2="20" y2="12"/>
+          <line x1="9" y1="18" x2="20" y2="18"/>
+          <circle cx="5" cy="6" r="1.4"/>
+          <circle cx="5" cy="12" r="1.4"/>
+          <circle cx="5" cy="18" r="1.4"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="ol" title="Numbered list" aria-label="Numbered list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="10" y1="6" x2="20" y2="6"/>
+          <line x1="10" y1="12" x2="20" y2="12"/>
+          <line x1="10" y1="18" x2="20" y2="18"/>
+          <path d="M4 4h2v5"/>
+          <path d="M4 9h4"/>
+          <path d="M4 13h3a1.5 1.5 0 0 1 0 3H4l3 2H4"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="task" title="Task list" aria-label="Task list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="6" height="6" rx="1"/>
+          <rect x="3" y="13" width="6" height="6" rx="1"/>
+          <polyline points="4.5 7.5 5.5 8.5 7.5 6.5"/>
+          <line x1="12" y1="8" x2="20" y2="8"/>
+          <line x1="12" y1="16" x2="20" y2="16"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="quote" title="Blockquote" aria-label="Blockquote">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 7h4v4H7a3 3 0 0 0 3 3"/>
+          <path d="M15 7h4v4h-4a3 3 0 0 0 3 3"/>
+        </svg>
+      </button>
+    </div>
+
+    <span class="fmt-divider" aria-hidden="true"></span>
+
+    <div class="fmt-group" role="group" aria-label="Insert">
+      <button type="button" class="fmt-btn" data-format="link" title="Insert link" aria-label="Insert link">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/>
+          <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="image" title="Image" aria-label="Insert image">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <circle cx="9" cy="10" r="1.5"/>
+          <polyline points="4 18 10 13 15 17 20 12"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="codeblock" title="Code block" aria-label="Code block">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2"/>
+          <polyline points="9 10 7 12 9 14"/>
+          <polyline points="15 10 17 12 15 14"/>
+        </svg>
+      </button>
+      <button type="button" class="fmt-btn" data-format="hr" title="Horizontal rule" aria-label="Horizontal rule">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="4" y1="12" x2="20" y2="12"/>
+          <line x1="6" y1="7" x2="6" y2="8"/>
+          <line x1="12" y1="7" x2="12" y2="8"/>
+          <line x1="18" y1="7" x2="18" y2="8"/>
+          <line x1="6" y1="16" x2="6" y2="17"/>
+          <line x1="12" y1="16" x2="12" y2="17"/>
+          <line x1="18" y1="16" x2="18" y2="17"/>
+        </svg>
+      </button>
+    </div>
+    </div><!-- /.fmt-content -->
+
+    <div class="edit-actions">
+      <button id="btn-discard" type="button" title="Discard unsaved changes" aria-label="Discard unsaved changes" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 3-6.7"/>
+          <polyline points="3 4 3 10 9 10"/>
+        </svg>
+        <span>Discard</span>
+      </button>
+
+      <button id="btn-save" type="button" title="Save file (Ctrl+S)" aria-label="Save file" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+        <span>Save</span>
+      </button>
+    </div>
   </div>
 
   <!-- ── Main area: sidebar + content ───────────────────────────────── -->
@@ -142,9 +337,22 @@
       <div id="sidebar-tree" role="tree"></div>
     </aside>
 
+    <div id="sidebar-divider" role="separator" aria-orientation="vertical"
+         aria-label="Resize sidebar" aria-valuemin="180" aria-valuemax="480"
+         aria-valuenow="240" tabindex="0"></div>
+
     <!-- Content area -->
     <div id="content-scroll">
-      <main id="content">
+      <!-- Split editor/preview layout (shown only in edit mode). The
+           textarea is mounted into #editor-pane; the live preview into
+           #preview-pane. Panes scroll independently; the divider can
+           be dragged to rebalance their widths. -->
+      <div id="editor-split">
+        <div id="editor-pane"></div>
+        <div id="split-divider" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview" aria-valuemin="15" aria-valuemax="85" aria-valuenow="50" tabindex="0"></div>
+        <div id="preview-pane" class="md-rendered"></div>
+      </div>
+      <main id="content" class="md-rendered">
       <div id="welcome">
         <div class="welcome-wordmark">
           <h1 class="welcome-wordmark-name">OxideMD</h1>
@@ -160,7 +368,23 @@
           <div class="welcome-hero-copy">
             <h2 class="welcome-hero-title">Open a Markdown file</h2>
             <div class="welcome-hero-sub">
-              Press <kbd class="mod-key">Ctrl</kbd><kbd>O</kbd> or drag a <kbd>.md</kbd> file anywhere on this window.
+              Press <span data-shortcut="openFile"></span> or drag a <kbd>.md</kbd> file anywhere on this window.
+            </div>
+          </div>
+          <span class="welcome-hero-cta">Browse&hellip;</span>
+        </button>
+
+        <button class="welcome-hero" id="welcome-open-folder" type="button">
+          <div class="welcome-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <path d="M3 11h18"/>
+            </svg>
+          </div>
+          <div class="welcome-hero-copy">
+            <h2 class="welcome-hero-title">Open a folder</h2>
+            <div class="welcome-hero-sub">
+              Press <span data-shortcut="openFolder"></span> to browse every <kbd>.md</kbd> file in a project.
             </div>
           </div>
           <span class="welcome-hero-cta">Browse&hellip;</span>
@@ -168,25 +392,13 @@
 
         <div class="welcome-shortcuts-section">
           <div class="welcome-col-title">Keyboard shortcuts</div>
-          <div class="welcome-shortcuts">
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Open file</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>O</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Search in document</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>F</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Reload file</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>R</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Close tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>W</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Next tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Tab</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Previous tab</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>Tab</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Move tab left</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>&larr;</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Move tab right</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>Shift</kbd><kbd>&rarr;</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Zoom in</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>+</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Zoom out</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>&minus;</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Reset zoom</span><span class="welcome-shortcut-keys"><kbd class="mod-key">Ctrl</kbd><kbd>0</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Scroll to top</span><span class="welcome-shortcut-keys"><kbd>Home</kbd></span></div>
-            <div class="welcome-shortcut"><span class="welcome-shortcut-label">Close dialog / search</span><span class="welcome-shortcut-keys"><kbd>Esc</kbd></span></div>
-          </div>
+          <!-- Filled by shortcuts-display.js renderShortcutsUI() from the
+               action registry; updated after rebinds in Settings. -->
+          <div class="welcome-shortcuts" id="welcome-shortcuts-list"></div>
         </div>
       </div>
     </main>
-    </div>
+    </div><!-- /#content-scroll -->
   </div>
 
   <!-- ── Status bar ─────────────────────────────────────────────────── -->
@@ -200,9 +412,10 @@
         <span class="status-sep" aria-hidden="true"></span>
       </span>
       <span id="file-path" title="" aria-label="Current file path"></span>
+      <span id="status-counts" aria-live="off"></span>
     </div>
 
-    <div id="zoom-controls" role="group" aria-label="Zoom controls">
+    <div id="zoom-controls" class="hidden" role="group" aria-label="Zoom controls">
       <button id="btn-zoom-out" title="Zoom out (Ctrl+-)" aria-label="Zoom out" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
           <line x1="5" y1="12" x2="19" y2="12"/>
@@ -218,7 +431,12 @@
   </div>
 
   <!-- ── Backdrop blur (shown while native file picker is open) ───── -->
-  <div id="picker-backdrop" class="hidden"></div>
+  <div id="picker-backdrop" class="hidden" aria-hidden="true">
+    <div id="picker-loader" class="hidden" role="status" aria-live="polite">
+      <div class="picker-loader-spinner" aria-hidden="true"></div>
+      <div class="picker-loader-label">Reading folder…</div>
+    </div>
+  </div>
 
   <!-- ── Settings modal ─────────────────────────────────────────────── -->
   <div id="settings-overlay" class="hidden"
@@ -237,6 +455,9 @@
         <button class="settings-tab" role="tab" data-tab="colors"
                 id="settings-tab-colors" aria-selected="false" tabindex="-1"
                 aria-controls="settings-panel-colors">Colors</button>
+        <button class="settings-tab" role="tab" data-tab="shortcuts"
+                id="settings-tab-shortcuts" aria-selected="false" tabindex="-1"
+                aria-controls="settings-panel-shortcuts">Shortcuts</button>
         <button class="settings-tab" role="tab" data-tab="about"
                 id="settings-tab-about" aria-selected="false" tabindex="-1"
                 aria-controls="settings-panel-about">About</button>
@@ -286,6 +507,15 @@
               <button class="custom-number-btn decrement" aria-label="Decrease reading width">&#x2212;</button>
               <span class="custom-number-value"></span>
               <button class="custom-number-btn increment" aria-label="Increase reading width">&#x2B;</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Toolbar</label>
+            <div class="segmented" id="setting-toolbar-compact" role="radiogroup"
+                 aria-label="Toolbar button style">
+              <button type="button" data-value="false" aria-pressed="true">Icons + labels</button>
+              <button type="button" data-value="true" aria-pressed="false">Icons only</button>
             </div>
           </div>
         </div>
@@ -338,6 +568,38 @@
                 <span class="color-hex" id="setting-bullet-hex"></span>
               </div>
             </label>
+
+            <label class="color-card" for="setting-code-bg">
+              <input type="color" id="setting-code-bg" class="color-swatch" aria-label="Code block background">
+              <div class="color-info">
+                <span class="color-name">Code Background</span>
+                <span class="color-hex" id="setting-code-bg-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-code-accent">
+              <input type="color" id="setting-code-accent" class="color-swatch" aria-label="Code block accent bar">
+              <div class="color-info">
+                <span class="color-name">Code Accent</span>
+                <span class="color-hex" id="setting-code-accent-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-note-bg">
+              <input type="color" id="setting-note-bg" class="color-swatch" aria-label="Blockquote note background">
+              <div class="color-info">
+                <span class="color-name">Notes Background</span>
+                <span class="color-hex" id="setting-note-bg-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-note-accent">
+              <input type="color" id="setting-note-accent" class="color-swatch" aria-label="Blockquote note accent bar">
+              <div class="color-info">
+                <span class="color-name">Notes Accent</span>
+                <span class="color-hex" id="setting-note-accent-hex"></span>
+              </div>
+            </label>
           </div>
 
           <div class="settings-preview" aria-hidden="true">
@@ -350,8 +612,22 @@
                 <li>Example list item</li>
                 <li>Another list item</li>
               </ul>
+              <pre class="preview-code"><code>const x = 42;</code></pre>
+              <blockquote class="preview-note">A short note about something.</blockquote>
             </div>
           </div>
+        </div>
+
+        <!-- ── Shortcuts panel ──────────────────────────────────────── -->
+        <div class="settings-panel" id="settings-panel-shortcuts"
+             role="tabpanel" aria-labelledby="settings-tab-shortcuts" hidden>
+          <p class="shortcuts-intro">
+            Click a shortcut and press the new key combination. Press
+            <kbd>Esc</kbd> to cancel, or use the reset button to restore
+            the default.
+          </p>
+          <div id="shortcuts-list" class="shortcuts-list"></div>
+          <div id="shortcuts-conflict" class="shortcuts-conflict hidden" role="status" aria-live="polite"></div>
         </div>
 
         <!-- ── About panel ──────────────────────────────────────────── -->
@@ -400,6 +676,24 @@
     </div><!-- /settings-dialog -->
   </div><!-- /settings-overlay -->
 
-  <script type="module" src="app.js"></script>
+  <!-- ── Unsaved changes confirm dialog ─────────────────────────────── -->
+  <div id="confirm-overlay" class="hidden"
+       role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
+    <div id="confirm-dialog">
+      <div id="confirm-header">
+        <span id="confirm-dialog-title">Unsaved changes</span>
+      </div>
+      <div id="confirm-body">
+        <p id="confirm-dialog-body"></p>
+      </div>
+      <div id="confirm-footer">
+        <button id="confirm-cancel" type="button">Cancel</button>
+        <button id="confirm-discard" type="button" class="danger">Discard</button>
+        <button id="confirm-save" type="button" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dist/bundle.js"></script>
 </body>
 </html>

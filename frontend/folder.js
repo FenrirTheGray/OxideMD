@@ -2,12 +2,13 @@ import {
   invoke, isPathInside,
   tabs, expandedFolders, state,
   contentScroll,
-  pickerBackdrop,
-  sidebarEl, sidebarFolderName, sidebarTreeEl,
+  pickerBackdrop, pickerLoader,
+  sidebarEl, sidebarDivider, sidebarFolderName, sidebarTreeEl,
   sidebarFilterInput, sidebarFilterClearBtn,
   hasActiveOverlay,
 } from './state.js';
 import { activeTab, loadFile, renderContent } from './tabs.js';
+import { saveRecentlyFor } from './editor.js';
 
 const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
 const SVG_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -43,17 +44,27 @@ async function flushFsChanges() {
   for (const p of paths) {
     const tab = tabs.find(t => t.path === p);
     if (tab) {
-      try {
-        const result = await invoke('open_file', { path: p });
-        tab.html = result.html;
-        tab.title = result.title;
-        if (tab.id === state.activeTabId) {
-          const scrollTop = contentScroll.scrollTop;
-          renderContent(result.html);
-          state.originalContent = result.html;
-          requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
-        }
-      } catch { /* file vanished; leave tab as-is */ }
+      // Don't clobber the tab while the user is actively editing it, and
+      // don't round-trip our own save through the watcher (the save itself
+      // already updated the tab; the inbound fs-changed event is just its
+      // echo).
+      if (tab.editing || saveRecentlyFor(p)) {
+        // still fall through to check folder tree refresh
+      } else {
+        try {
+          const result = await invoke('open_file', { path: p });
+          tab.html = result.html;
+          tab.title = result.title;
+          tab.raw = result.raw ?? '';
+          tab.savedRaw = tab.raw;
+          if (tab.id === state.activeTabId) {
+            const scrollTop = contentScroll.scrollTop;
+            renderContent(result.html);
+            state.originalContent = result.html;
+            requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
+          }
+        } catch { /* file vanished; leave tab as-is */ }
+      }
     }
     if (folderRoot && isPathInside(p, folderRoot)) folderDirty = true;
   }
@@ -71,14 +82,23 @@ export async function openFolder() {
   if (hasActiveOverlay()) return;
   state.filePickerOpen = true;
   pickerBackdrop.classList.remove('hidden');
-  let tree = null;
+  let path = null;
   try {
-    tree = await invoke('pick_folder');
-  } catch {} finally {
-    pickerBackdrop.classList.add('hidden');
-    state.filePickerOpen = false;
+    path = await invoke('pick_folder');
+  } catch {}
+  if (path) {
+    // Dialog has closed; show the loader while Rust scans the folder
+    // and while renderFolderTree blocks the main thread.
+    pickerLoader.classList.remove('hidden');
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    try {
+      const tree = await invoke('read_folder_tree', { path });
+      setFolder(tree);
+    } catch {}
   }
-  if (tree) setFolder(tree);
+  pickerLoader.classList.add('hidden');
+  pickerBackdrop.classList.add('hidden');
+  state.filePickerOpen = false;
 }
 
 export function setFolder(tree) {
@@ -380,3 +400,70 @@ export function highlightActiveTreeItem() {
   }
   node.querySelector('.tree-row')?.scrollIntoView({ block: 'nearest' });
 }
+
+// ── Sidebar divider ────────────────────────────────────────────────────
+// Drag to resize the file tree; width is clamped and persisted to config
+// on pointer release. Keyboard users get arrow-key nudging + Home/End.
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 480;
+
+function setSidebarWidth(px) {
+  const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(px)));
+  document.body.style.setProperty('--sidebar-width', `${w}px`);
+  sidebarDivider.setAttribute('aria-valuenow', String(w));
+  return w;
+}
+
+let sidebarDragPointerId = null;
+let sidebarContainerLeft = 0;
+let pendingSidebarSave = null;
+
+function persistSidebarWidth(width) {
+  if (!state.config) return;
+  state.config.sidebar_width = width;
+  if (pendingSidebarSave) clearTimeout(pendingSidebarSave);
+  pendingSidebarSave = setTimeout(() => {
+    pendingSidebarSave = null;
+    invoke('save_config_cmd', { config: state.config }).catch(() => {});
+  }, 150);
+}
+
+sidebarDivider.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  sidebarDragPointerId = e.pointerId;
+  const container = document.getElementById('main-container');
+  sidebarContainerLeft = container.getBoundingClientRect().left;
+  sidebarDivider.classList.add('dragging');
+  document.body.classList.add('resizing-sidebar');
+  try { sidebarDivider.setPointerCapture(e.pointerId); } catch {}
+});
+
+sidebarDivider.addEventListener('pointermove', (e) => {
+  if (sidebarDragPointerId !== e.pointerId) return;
+  setSidebarWidth(e.clientX - sidebarContainerLeft);
+});
+
+function endSidebarDrag(e) {
+  if (sidebarDragPointerId !== e.pointerId) return;
+  sidebarDragPointerId = null;
+  sidebarDivider.classList.remove('dragging');
+  document.body.classList.remove('resizing-sidebar');
+  try { sidebarDivider.releasePointerCapture(e.pointerId); } catch {}
+  const w = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
+  persistSidebarWidth(w);
+}
+sidebarDivider.addEventListener('pointerup', endSidebarDrag);
+sidebarDivider.addEventListener('pointercancel', endSidebarDrag);
+
+sidebarDivider.addEventListener('keydown', (e) => {
+  const cur = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
+  let next = cur;
+  if (e.key === 'ArrowLeft')       next = cur - 10;
+  else if (e.key === 'ArrowRight') next = cur + 10;
+  else if (e.key === 'Home')       next = SIDEBAR_MIN;
+  else if (e.key === 'End')        next = SIDEBAR_MAX;
+  else return;
+  e.preventDefault();
+  const applied = setSidebarWidth(next);
+  persistSidebarWidth(applied);
+});

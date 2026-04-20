@@ -1,8 +1,18 @@
 {
   "scripts": {
-    "build": "echo ok"
+    "build:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --minify --outfile=frontend/dist/bundle.js",
+    "watch:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --outfile=frontend/dist/bundle.js --watch --sourcemap"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/language": "^6.12.3",
+    "@codemirror/search": "^6.6.0",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/view": "^6.41.1",
     "@resvg/resvg-js": "^2.6.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
   }
 }
