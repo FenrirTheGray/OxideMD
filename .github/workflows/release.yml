@@ -46,6 +46,9 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Install Node dependencies
+        run: npm install
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
