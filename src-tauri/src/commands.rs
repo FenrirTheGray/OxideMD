@@ -28,6 +28,46 @@ pub async fn open_file(path: String) -> Result<OpenResult, String> {
             html,
             title,
             path: canonical.to_string_lossy().into_owned(),
+            raw: content,
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Re-renders `content` as HTML without touching disk. Used by the live
+/// preview pane while the user types; `path` is only consulted to resolve
+/// relative image references via its parent directory.
+#[tauri::command]
+pub async fn render_preview(content: String, path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        let base_dir = if path.is_empty() { None } else { p.parent() };
+        Ok(markdown::render(&content, base_dir))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn save_file(path: String, content: String) -> Result<OpenResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let raw = PathBuf::from(&path);
+        fs::write(&raw, &content).map_err(|e| e.to_string())?;
+        let canonical = fs::canonicalize(&raw).unwrap_or(raw);
+        let canonical = strip_windows_verbatim(canonical);
+        let base_dir = canonical.parent();
+        let html = markdown::render(&content, base_dir);
+        let title = canonical
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("OxideMD")
+            .to_string();
+        Ok(OpenResult {
+            html,
+            title,
+            path: canonical.to_string_lossy().into_owned(),
+            raw: content,
         })
     })
     .await
@@ -218,23 +258,18 @@ fn build_folder_tree(root: &std::path::Path) -> FolderTree {
     }
 }
 
+// Returns just the picked path; the folder scan happens in a separate
+// read_folder_tree call so the frontend can show a loading indicator
+// between the OS dialog closing and the tree being ready.
 #[tauri::command]
-pub async fn pick_folder(app: tauri::AppHandle) -> Option<FolderTree> {
+pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
     let window = app.get_webview_window("main").unwrap();
-    let picked = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
             .set_parent(&window)
             .blocking_pick_folder()
             .map(|p| p.to_string())
-    })
-    .await
-    .ok()
-    .flatten()?;
-
-    tauri::async_runtime::spawn_blocking(move || {
-        let path = PathBuf::from(picked);
-        Some(build_folder_tree(&path))
     })
     .await
     .ok()
@@ -498,6 +533,7 @@ pub struct OpenResult {
     pub html: String,
     pub title: String,
     pub path: String,
+    pub raw: String,
 }
 
 #[cfg(test)]
