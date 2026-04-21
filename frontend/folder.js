@@ -407,8 +407,8 @@ export function highlightActiveTreeItem() {
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 480;
 
-function setSidebarWidth(px) {
-  const w = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, Math.round(px)));
+function setSidebarWidth(px, maxOverride = SIDEBAR_MAX) {
+  const w = Math.max(SIDEBAR_MIN, Math.min(maxOverride, Math.round(px)));
   document.body.style.setProperty('--sidebar-width', `${w}px`);
   sidebarDivider.setAttribute('aria-valuenow', String(w));
   return w;
@@ -454,6 +454,18 @@ function endSidebarDrag(e) {
 }
 sidebarDivider.addEventListener('pointerup', endSidebarDrag);
 sidebarDivider.addEventListener('pointercancel', endSidebarDrag);
+
+// Double-click the divider to fit the sidebar to its widest tree row,
+// capped at 50% of the window's current width.
+sidebarDivider.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  const overflow = sidebarTreeEl.scrollWidth - sidebarTreeEl.clientWidth;
+  if (overflow <= 0) return;
+  const cur = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
+  const maxAllowed = Math.max(SIDEBAR_MIN, Math.floor(window.innerWidth * 0.5));
+  const applied = setSidebarWidth(cur + overflow, maxAllowed);
+  persistSidebarWidth(applied);
+});
 
 sidebarDivider.addEventListener('keydown', (e) => {
   const cur = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
