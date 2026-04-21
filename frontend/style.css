@@ -349,12 +349,6 @@ body.maximized {
   overflow-x: auto;
   min-width: 0;
   scrollbar-width: none;
-  -webkit-app-region: no-drag;
-}
-#toolbar-spacer {
-  flex: 1;
-  min-width: 8px;
-  -webkit-app-region: drag;
 }
 #tab-area::-webkit-scrollbar { display: none; }
 
