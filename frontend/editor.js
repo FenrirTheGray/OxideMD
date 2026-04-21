@@ -710,22 +710,34 @@ document.addEventListener('keydown', (e) => {
 // The two scrollers have different heights (CM6 line-wrapped editor vs
 // rendered markdown) so we map scroll position proportionally: the
 // fraction of the active scroller's range is mirrored to the other's.
-// `syncLock` guards against the programmatic scrollTop assignment
-// re-entering this handler. The editor → preview direction is wired
-// per-mount in `buildView` (the cm-scroller is the actual scroller, and
-// its scroll events don't bubble out of the cm-editor); the preview →
-// editor direction is wired once here against the module's editorView
-// handle.
-let syncLock = 0;
+// When we write `to.scrollTop`, mark `to` so its resulting scroll event
+// is treated as our own and not mirrored back. A rAF-based lock isn't
+// enough — programmatic scroll events can land after rAF during wheel
+// input, and the integer clamping of scrollTop then drifts the position
+// on each bounce. The editor → preview direction is wired per-mount in
+// `buildView` (the cm-scroller is the actual scroller, and its scroll
+// events don't bubble out of cm-editor); preview → editor is wired once
+// here against the module's editorView handle.
+const suppressNextScroll = new WeakSet();
 function mirrorScroll(from, to) {
-  if (syncLock) return;
+  if (suppressNextScroll.has(from)) {
+    suppressNextScroll.delete(from);
+    return;
+  }
   const fromMax = from.scrollHeight - from.clientHeight;
   const toMax = to.scrollHeight - to.clientHeight;
   if (fromMax <= 0 || toMax <= 0) return;
   const frac = from.scrollTop / fromMax;
-  syncLock++;
-  to.scrollTop = toMax * frac;
-  requestAnimationFrame(() => { syncLock = Math.max(0, syncLock - 1); });
+  const target = toMax * frac;
+  if (Math.abs(to.scrollTop - target) < 0.5) return;
+  suppressNextScroll.add(to);
+  to.scrollTop = target;
+  // Fallback: if the write didn't end up firing a scroll event (e.g.
+  // it clamped to the same integer we were already at), clear the
+  // mark after two frames so a real user scroll on `to` isn't eaten.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { suppressNextScroll.delete(to); });
+  });
 }
 if (previewPane) {
   previewPane.addEventListener('scroll', () => {
