@@ -402,15 +402,38 @@ export function updateTabOverflow() {
   const canScrollRight = scrollLeft < maxScroll - 2;
   tabBarEl.classList.toggle('has-overflow-left', canScrollLeft);
   tabBarEl.classList.toggle('has-overflow-right', canScrollRight);
-  tabScrollLeftEl.hidden  = !canScrollLeft;
-  tabScrollRightEl.hidden = !canScrollRight;
+  // Keep both buttons mounted whenever tabs overflow; disable the one at
+  // its scroll edge instead of hiding it so the control strip doesn't
+  // shift as the user scrolls.
+  tabScrollLeftEl.hidden   = false;
+  tabScrollRightEl.hidden  = false;
+  tabScrollLeftEl.disabled  = !canScrollLeft;
+  tabScrollRightEl.disabled = !canScrollRight;
 }
 
 function scrollTabsBy(direction) {
-  // Step ~80% of visible width so the user can see a new tab leading in
-  // without losing spatial context of where they were.
-  const step = Math.max(120, Math.round(tabBarEl.clientWidth * 0.8));
-  tabBarEl.scrollBy({ left: direction * step, behavior: 'smooth' });
+  // Advance by exactly one tab: find the first tab whose edge is clipped
+  // by the viewport on the target side and scroll it into view against
+  // that edge. Tab widths vary (min 84, max 210), so work from live rects.
+  const tabs = Array.from(tabBarEl.querySelectorAll('.tab'));
+  if (!tabs.length) return;
+  const area = tabBarEl.getBoundingClientRect();
+
+  if (direction > 0) {
+    const next = tabs.find(t => t.getBoundingClientRect().right > area.right + 1);
+    if (!next) return;
+    const delta = next.getBoundingClientRect().right - area.right;
+    tabBarEl.scrollBy({ left: delta, behavior: 'smooth' });
+  } else {
+    let prev = null;
+    for (const t of tabs) {
+      if (t.getBoundingClientRect().left < area.left - 1) prev = t;
+      else break;
+    }
+    if (!prev) return;
+    const delta = prev.getBoundingClientRect().left - area.left;
+    tabBarEl.scrollBy({ left: delta, behavior: 'smooth' });
+  }
 }
 
 tabScrollLeftEl.addEventListener('click', () => scrollTabsBy(-1));

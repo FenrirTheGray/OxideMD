@@ -371,25 +371,34 @@ body.maximized {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
+  align-self: center;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
+  margin: 0 2px;
   background: transparent;
-  border: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
   color: var(--fg-muted);
   cursor: pointer;
   padding: 0;
   -webkit-app-region: no-drag;
   transition: background var(--dur-sm) var(--ease),
               color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease),
               transform var(--dur-xs) var(--ease);
 }
 .tab-scroll-btn[hidden] { display: none; }
 .tab-scroll-btn svg { width: 14px; height: 14px; display: block; }
-.tab-scroll-btn:hover {
+.tab-scroll-btn:hover:not(:disabled) {
   background: var(--bg-btn-hover);
   color: var(--accent);
 }
-.tab-scroll-btn:active { transform: scale(0.94); }
+.tab-scroll-btn:active:not(:disabled) { transform: scale(0.94); }
+.tab-scroll-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .tab-scroll-btn:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: -2px;
