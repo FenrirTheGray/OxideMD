@@ -21,13 +21,10 @@
     <button id="tab-scroll-left" class="tab-scroll-btn" title="Scroll tabs left" aria-label="Scroll tabs left" aria-controls="tab-area" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
-    <div id="tab-area" role="tablist" aria-label="Open files"></div>
+    <div id="tab-area" role="tablist" aria-label="Open files" data-tauri-drag-region></div>
     <button id="tab-scroll-right" class="tab-scroll-btn" title="Scroll tabs right" aria-label="Scroll tabs right" aria-controls="tab-area" hidden>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
-
-    <!-- Drag spacer between tabs and buttons -->
-    <div id="toolbar-spacer" data-tauri-drag-region></div>
 
     <!-- Action buttons -->
     <div id="toolbar-buttons" data-tauri-drag-region>
