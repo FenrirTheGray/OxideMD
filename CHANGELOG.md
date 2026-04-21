@@ -4,6 +4,23 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.1.0] - 2026-04-21
+
+### Added
+
+- Double-click the sidebar divider to fit its width to the longest tree row, capped at 50% of the current window width
+- Tab scroll buttons now step exactly one tab at a time instead of a fixed viewport-relative chunk
+- Tab scroll buttons stay mounted in a dimmed disabled state when at an edge rather than disappearing, and gained a bordered square frame for consistency with other toolbar controls
+
+### Changed
+
+- `#tab-area` now spans the entire empty toolbar width and doubles as a drag region so the titlebar can be grabbed from anywhere around the tabs
+
+### Fixed
+
+- Edit-view scroll sync no longer drifts upward on its own: the programmatic-scroll lock was released before the browser fired the mirrored event, so fractional-pixel rounding accumulated on each bounce; replaced with a per-event suppression set tied to the actual scroll event
+- Custom titlebar drag on Linux restored — the `core:window:allow-start-dragging` capability was missing, so `data-tauri-drag-region` had no IPC path to start a window move on WebKitGTK
+
 ## [3.0.0] - 2026-04-20
 
 ### Added
