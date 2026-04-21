@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "oxidemd"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
  "base64 0.22.1",
  "directories",
