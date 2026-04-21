@@ -22,7 +22,7 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 - **Rebindable shortcuts** — all actions are configurable from Settings → Shortcuts with conflict detection and a per-action key-capture flow
 - **Settings** — tabbed dialog (Reading / Colors / Shortcuts / About) with persistent configuration saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Reading layout** — configurable line height (1.0–2.4) and reading width (480–1400 px) that scales with zoom
-- **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs; expand-all / collapse-all toolbar buttons; case-insensitive filename filter that auto-expands matching folders and highlights matched characters
+- **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs; expand-all / collapse-all toolbar buttons; case-insensitive filename filter that auto-expands matching folders and highlights matched characters; drag the divider to resize, or double-click it to fit the widest row (capped at 50% of the window)
 - **Right-click context menus** — contextual menus for the sidebar tree and tab bar
 - **Live file watching** — opened files and folders are monitored for changes; tabs automatically reload when modified externally
 - **Tab overflow scrolling** — left/right chevron buttons appear in the toolbar when the tab strip overflows
