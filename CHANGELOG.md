@@ -4,6 +4,22 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.1.2] - 2026-04-25
+
+### Added
+
+- Settings now previews the chosen theme live: switching the theme dropdown flips the editor body class and re-resolves the code/note background swatches before Save, and reverts on Cancel
+
+### Changed
+
+- Toolbar mode toggle is now a single Edit button with a pressed state instead of swapping its label between Edit and View
+- Code and note background defaults follow the active theme so switching to Light no longer leaves dark-on-dark text; values matching the other theme's default auto-adapt, while custom picks pass through unchanged
+- Regenerated all platform app icons from updated source artwork
+
+### Fixed
+
+- Disabled webview devtools in release builds
+
 ## [3.1.1] - 2026-04-22
 
 ### Changed
