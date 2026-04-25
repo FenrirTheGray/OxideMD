@@ -53,7 +53,7 @@ export function syncToolbar() {
   if (zoomControls) zoomControls.classList.toggle('hidden', !hasTab);
 
   // Mode toggle enabled only for file-backed tabs (welcome screen has
-  // no file to edit). The button's icon/label flips via body.editing in CSS.
+  // no file to edit). aria-pressed drives the pressed visual via CSS.
   const canToggle = hasTab && !!tab?.path;
   btnModeToggle.disabled = !canToggle;
   btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
