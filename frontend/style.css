@@ -2629,14 +2629,14 @@ body:not(.editing) #status-counts { display: none; }
 #settings-dialog.on-about #settings-reset { display: none; }
 #settings-dialog.on-about #settings-cancel { margin-left: auto; }
 
-/* ── Mode toggle (single button: View ⇄ Edit) ─────────────────────── */
-/* Inherits #toolbar-buttons button styling. Two icons + two labels live
-   in the DOM; body.editing flips which is visible so syncToolbar doesn't
-   need to swap markup. Default (not editing) shows the destination =
-   "Edit"; while editing it shows "View". */
-.mode-icon-view, .mode-label-view { display: none; }
-body.editing .mode-icon-edit, body.editing .mode-label-edit { display: none; }
-body.editing .mode-icon-view, body.editing .mode-label-view { display: inline-flex; }
+/* ── Edit toggle ───────────────────────────────────────────────────── */
+/* Inherits #toolbar-buttons button styling. aria-pressed reflects whether
+   the active tab is in edit mode; the pressed visual reuses the .active
+   treatment from the toolbar rules above. */
+#btn-mode-toggle[aria-pressed="true"]:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
 
 /* ── Tab dirty indicator ──────────────────────────────────────────── */
 .tab.dirty .tab-title::before {
