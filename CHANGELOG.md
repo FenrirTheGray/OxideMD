@@ -4,6 +4,12 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [3.1.3] - 2026-04-25
+
+### Fixed
+
+- Titlebar logo and Settings → About icon now use the refreshed app artwork; `cargo tauri icon` regenerates only `src-tauri/icons/`, so the frontend's own copy at `frontend/icon.png` had stayed on the previous design
+
 ## [3.1.2] - 2026-04-25
 
 ### Added
