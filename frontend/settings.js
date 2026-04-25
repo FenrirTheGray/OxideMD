@@ -17,6 +17,29 @@ function resolvedTheme(theme) {
   return systemDarkMQ.matches ? 'dark' : 'light';
 }
 
+// Code/note backgrounds are the only colors where the dark defaults
+// produce dark-on-dark text in light mode (text uses --fg, which is
+// dark in light theme). Headings and accents read fine on either
+// background, so they stay theme-agnostic.
+const BG_DEFAULTS = {
+  dark:  { code_bg_color: '#1e2127', note_bg_color: '#2a2f3a' },
+  light: { code_bg_color: '#f0f0f0', note_bg_color: '#eaeef8' },
+};
+
+// If the saved value matches the *other* theme's default, swap to the
+// resolved theme's default. Custom user picks pass through unchanged.
+// Edge case: a user who deliberately chose the other theme's default
+// hex sees it auto-swap on theme flip — accepted to avoid carrying a
+// "this is custom" flag through the data model.
+function effectiveBgColor(savedValue, field, resolved) {
+  const other = resolved === 'dark' ? 'light' : 'dark';
+  const lower = (savedValue || '').toLowerCase();
+  if (lower === BG_DEFAULTS[other][field].toLowerCase()) {
+    return BG_DEFAULTS[resolved][field];
+  }
+  return savedValue;
+}
+
 export async function loadCustomFont(filename) {
   if (state.activeFontFilename === filename) return;
   try {
@@ -38,7 +61,8 @@ export async function loadCustomFont(filename) {
 }
 
 export function applyConfig(cfg) {
-  document.body.className = `theme-${resolvedTheme(cfg.theme)}`;
+  const resolved = resolvedTheme(cfg.theme);
+  document.body.className = `theme-${resolved}`;
   if (cfg.font_family.startsWith('custom:')) {
     const filename = cfg.font_family.slice(7);
     if (state.activeFontFilename !== filename) loadCustomFont(filename);
@@ -53,9 +77,9 @@ export function applyConfig(cfg) {
   document.body.style.setProperty('--h2-color', cfg.h2_color);
   document.body.style.setProperty('--h3-color', cfg.h3_color);
   document.body.style.setProperty('--bullet-color', cfg.bullet_color);
-  document.body.style.setProperty('--code-bg', cfg.code_bg_color);
+  document.body.style.setProperty('--code-bg', effectiveBgColor(cfg.code_bg_color, 'code_bg_color', resolved));
   document.body.style.setProperty('--code-accent', cfg.code_accent_color);
-  document.body.style.setProperty('--note-bg', cfg.note_bg_color);
+  document.body.style.setProperty('--note-bg', effectiveBgColor(cfg.note_bg_color, 'note_bg_color', resolved));
   document.body.style.setProperty('--note-accent', cfg.note_accent_color);
   document.body.style.setProperty('--sidebar-width', `${cfg.sidebar_width}px`);
   document.getElementById('toolbar-buttons').classList.toggle('compact', !!cfg.toolbar_compact);
@@ -78,10 +102,12 @@ document.querySelectorAll('.custom-select').forEach(sel => {
   Object.defineProperty(sel, 'value', {
     get() { return sel.dataset.value || ''; },
     set(v) {
+      const old = sel.dataset.value;
       sel.dataset.value = v;
       const match = sel.querySelector(`.custom-select-option[data-value="${CSS.escape(v)}"]`);
       trigger.textContent = match ? match.textContent : v;
       options.forEach(o => o.classList.toggle('selected', o.dataset.value === v));
+      if (old !== v) sel.dispatchEvent(new Event('change'));
     }
   });
 
@@ -643,6 +669,11 @@ async function checkForUpdates() {
   }
 }
 
+// Suppress the theme-select change handler while openSettings is
+// populating inputs programmatically — otherwise the first setter
+// would flip body class and swap bg inputs before they're populated.
+let populatingSettings = false;
+
 export function openSettings() {
   // Close the search bar first so Settings can open over it.
   if (!searchBar.classList.contains('hidden')) closeSearch();
@@ -651,6 +682,8 @@ export function openSettings() {
   window.__TAURI__.app.getVersion().then(v => {
     document.getElementById('settings-version').textContent = 'v' + v;
   });
+  populatingSettings = true;
+  const resolved = resolvedTheme(state.config.theme);
   document.getElementById('setting-theme').value         = state.config.theme;
   rebuildFontDropdown();
   fontSelect.value = state.config.font_family;
@@ -661,11 +694,12 @@ export function openSettings() {
   document.getElementById('setting-h2').value            = state.config.h2_color;
   document.getElementById('setting-h3').value            = state.config.h3_color;
   document.getElementById('setting-bullet').value        = state.config.bullet_color;
-  document.getElementById('setting-code-bg').value       = state.config.code_bg_color;
+  document.getElementById('setting-code-bg').value       = effectiveBgColor(state.config.code_bg_color, 'code_bg_color', resolved);
   document.getElementById('setting-code-accent').value   = state.config.code_accent_color;
-  document.getElementById('setting-note-bg').value       = state.config.note_bg_color;
+  document.getElementById('setting-note-bg').value       = effectiveBgColor(state.config.note_bg_color, 'note_bg_color', resolved);
   document.getElementById('setting-note-accent').value   = state.config.note_accent_color;
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
+  populatingSettings = false;
   updatePreviewColors();
   // Seed the shortcuts working copy from the saved overrides so edits are
   // only committed on Save. Plain object, not state.config.keybindings
@@ -712,6 +746,10 @@ export function closeSettings() {
   endShortcutCapture();
   if (state.releaseFocusTrap) { state.releaseFocusTrap(); state.releaseFocusTrap = null; }
   if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
+  // Revert any live theme-preview class change. If Save ran, state.config
+  // already reflects the new theme so this is a no-op; on Cancel it
+  // restores the original theme class.
+  document.body.className = `theme-${resolvedTheme(state.config.theme)}`;
   settingsOverlay.classList.add('closing');
   settingsOverlay.addEventListener('animationend', () => {
     settingsOverlay.classList.add('hidden');
@@ -774,9 +812,12 @@ async function resetSettings() {
     document.getElementById('setting-h2').value     = defaults.h2_color;
     document.getElementById('setting-h3').value     = defaults.h3_color;
     document.getElementById('setting-bullet').value = defaults.bullet_color;
-    document.getElementById('setting-code-bg').value     = defaults.code_bg_color;
+    // Bg defaults follow the currently-selected theme so Reset under
+    // Light leaves readable light backgrounds rather than dark-on-dark.
+    const resolved = resolvedTheme(document.getElementById('setting-theme').value);
+    document.getElementById('setting-code-bg').value     = BG_DEFAULTS[resolved].code_bg_color;
     document.getElementById('setting-code-accent').value = defaults.code_accent_color;
-    document.getElementById('setting-note-bg').value     = defaults.note_bg_color;
+    document.getElementById('setting-note-bg').value     = BG_DEFAULTS[resolved].note_bg_color;
     document.getElementById('setting-note-accent').value = defaults.note_accent_color;
     updatePreviewColors();
   } else if (activeTabName === 'shortcuts') {
@@ -814,6 +855,22 @@ document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
 // Live preview updates
 ['setting-h1', 'setting-h2', 'setting-h3', 'setting-bullet', 'setting-code-bg', 'setting-code-accent', 'setting-note-bg', 'setting-note-accent'].forEach(id => {
   document.getElementById(id).addEventListener('input', updatePreviewColors);
+});
+
+// Keep body class and bg defaults in sync with the in-flight theme
+// pick so the preview's --fg contrast and the bg swatches match what
+// the user will see after Save. closeSettings reverts the class if
+// Save isn't clicked.
+document.getElementById('setting-theme').addEventListener('change', () => {
+  if (populatingSettings) return;
+  const resolved = resolvedTheme(document.getElementById('setting-theme').value);
+  document.body.className = `theme-${resolved}`;
+  for (const field of ['code_bg_color', 'note_bg_color']) {
+    const id = field === 'code_bg_color' ? 'setting-code-bg' : 'setting-note-bg';
+    const input = document.getElementById(id);
+    input.value = effectiveBgColor(input.value, field, resolved);
+  }
+  updatePreviewColors();
 });
 
 // About panel external link
