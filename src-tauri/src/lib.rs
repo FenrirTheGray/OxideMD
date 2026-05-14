@@ -59,6 +59,7 @@ pub fn run() {
             commands::render_preview,
             commands::get_cli_files,
             commands::pick_file,
+            commands::create_file,
             commands::pick_folder,
             commands::read_folder_tree,
             commands::resolve_md_path,

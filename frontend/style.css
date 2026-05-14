@@ -1865,6 +1865,31 @@ body:not(.editing) #status-counts { display: none; }
   letter-spacing: 0.01em;
 }
 
+/* Small "i in a circle" affordance next to a settings label — hover or
+   focus surfaces the explanatory `title`. Sits inline with the label
+   text; uses the help cursor so it reads as informational, not clickable. */
+.settings-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  color: var(--fg-muted);
+  cursor: help;
+  border-radius: 50%;
+}
+.settings-info-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.settings-info-icon:hover { color: var(--accent); }
+.settings-info-icon:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
 /* Custom number input */
 .custom-number {
   flex: 1;
@@ -3252,6 +3277,70 @@ body.resizing-split, body.resizing-split * { cursor: col-resize !important; user
   height: 1px;
   background: var(--border-subtle);
   margin: 4px 2px;
+}
+
+/* ── Print to PDF ─────────────────────────────────────────────────── */
+/* print.js renders the active tab's Markdown into #print-root and calls
+   window.print(). On screen the element is never visible; the @media
+   print block below isolates it so only the rendered Markdown reaches
+   the PDF. */
+#print-root { display: none; }
+
+/* "Printer Friendly PDFs" = on: override the markdown-relevant CSS
+   custom properties on the print subtree to the Atom One Light values
+   (copied from `body.theme-light`), so the PDF is dark-on-white
+   regardless of the app's current theme. --code-bg / --note-bg are
+   normally set inline on <body> per-theme, so they're overridden here
+   too. With the class absent (printer-friendly off), #print-root
+   inherits the live theme variables from <body> and prints in the
+   exact current style. */
+#print-root.print-light {
+  --bg:            #fafafa;
+  --fg:            #383a42;
+  --fg-dim:        #696c77;
+  --fg-muted:      #6a7387;
+  --fg-toolbar:    #4a4a4f;
+  --border:        #d8d8d8;
+  --border-subtle: rgba(216, 216, 216, 0.7);
+  --bg-table-hd:   #e8e8e8;
+  --bg-table-row:  #f5f5f5;
+  --bg-code:       #f0f0f0;
+  --code-bg:       #f0f0f0;
+  --note-bg:       #eaeef8;
+  background: #fff;
+}
+
+@media print {
+  /* Isolate #print-root: hide every other top-level node so only the
+     rendered Markdown reaches the page — no toolbar, sidebar, tabs,
+     status bar, overlays, or popovers. */
+  body > *:not(#print-root) { display: none !important; }
+  html, body {
+    height: auto;
+    overflow: visible;
+    background: #fff;
+  }
+  #print-root {
+    display: block;
+    position: static;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  /* Keep colors, syntax highlighting and theme backgrounds in the PDF. */
+  #print-root, #print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Page-break hygiene: don't orphan headings or split atomic blocks. */
+  #print-root h1, #print-root h2, #print-root h3,
+  #print-root h4, #print-root h5, #print-root h6 { break-after: avoid; }
+  #print-root pre, #print-root blockquote, #print-root table,
+  #print-root img, #print-root tr { break-inside: avoid; }
+  @page { margin: 1.6cm; }
 }
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */

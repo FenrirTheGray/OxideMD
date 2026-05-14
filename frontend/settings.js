@@ -699,6 +699,7 @@ export function openSettings() {
   document.getElementById('setting-note-bg').value       = effectiveBgColor(state.config.note_bg_color, 'note_bg_color', resolved);
   document.getElementById('setting-note-accent').value   = state.config.note_accent_color;
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
+  document.getElementById('setting-printer-friendly').value = state.config.printer_friendly ? 'true' : 'false';
   populatingSettings = false;
   updatePreviewColors();
   // Seed the shortcuts working copy from the saved overrides so edits are
@@ -774,6 +775,7 @@ async function saveSettings() {
     note_bg_color:  document.getElementById('setting-note-bg').value,
     note_accent_color: document.getElementById('setting-note-accent').value,
     toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
+    printer_friendly: document.getElementById('setting-printer-friendly').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
   };
   setLoading();
@@ -806,6 +808,7 @@ async function resetSettings() {
     document.getElementById('setting-line-height').value   = defaults.line_height;
     document.getElementById('setting-reading-width').value = defaults.reading_width;
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
+    document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;

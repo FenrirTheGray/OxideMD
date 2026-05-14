@@ -3,8 +3,8 @@ import {
   isMarkdownPath, hasMod,
   tabs, state,
   contentEl, contentScroll, previewPane,
-  btnOpen, btnOpenFolder, btnReload, btnSearch, btnSettings,
-  btnModeToggle, btnSave,
+  btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnSettings,
+  btnPrint, btnModeToggle, btnSave,
   btnMinimize, btnMaximize, btnWinClose,
   filePathEl,
   btnZoomOut, btnZoomIn, zoomLabel,
@@ -24,11 +24,12 @@ import {
   switchToTab, closeTab,
   zoomIn, zoomOut, resetZoom,
   renderTabBar, updateTabOverflow,
-  loadFile, reloadFile, handleAnchorClick, openFilePicker,
+  loadFile, reloadFile, handleAnchorClick, openFilePicker, createNewFile,
 } from './tabs.js';
 import { loadCustomFont, applyConfig, openSettings, closeSettings } from './settings.js';
 import { enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch } from './editor.js';
 import { activeTab } from './tabs.js';
+import { printActiveTab } from './print.js';
 import './contextmenu.js';
 import './window-size.js';
 import './outline.js';
@@ -179,6 +180,7 @@ window.addEventListener('resize', () => {
   positionShortcutsPopover();
 });
 
+btnNew.addEventListener('click', () => createNewFile());
 btnOpen.addEventListener('click', openFilePicker);
 btnOpenFolder.addEventListener('click', openFolder);
 sidebarCloseBtn.addEventListener('click', closeFolder);
@@ -239,6 +241,7 @@ filePathEl.addEventListener('keydown', (e) => {
 // anchor (re-created on every tab switch / search render). A single listener
 // survives all DOM replacements inside contentEl.
 contentEl.addEventListener('click', (e) => {
+  if (e.target.closest('#welcome-new'))         { createNewFile(); return; }
   if (e.target.closest('#welcome-open-folder')) { openFolder(); return; }
   if (e.target.closest('#welcome-open'))        { openFilePicker(); return; }
   const anchor = e.target.closest('a');
@@ -261,6 +264,7 @@ if (previewPane) {
 }
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
+btnPrint.addEventListener('click', printActiveTab);
 btnSettings.addEventListener('click', openSettings);
 btnModeToggle.addEventListener('click', () => {
   const tab = activeTab();
@@ -312,6 +316,7 @@ function switchTabBy(direction) {
   switchToTab(tabs[next].id);
 }
 
+registerHandler('newFile',     (e) => { e?.preventDefault(); createNewFile(); });
 registerHandler('openFile',    (e) => { e?.preventDefault(); openFilePicker(); });
 registerHandler('openFolder',  (e) => { e?.preventDefault(); openFolder(); });
 registerHandler('closeFolder', (e) => {
@@ -325,6 +330,7 @@ registerHandler('save', (e) => {
   if (tab?.editing) saveActiveFile();
 });
 registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
+registerHandler('print',  (e) => { e?.preventDefault(); printActiveTab(); });
 
 registerHandler('toggleEdit', (e) => {
   e?.preventDefault();

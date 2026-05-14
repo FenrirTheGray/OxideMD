@@ -9,6 +9,8 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 - **Full Markdown rendering** — headings, bold, italic, strikethrough, inline code, code blocks, blockquotes, ordered and unordered lists, tables, horizontal rules, links, and local images
 - **Syntax highlighting** — powered by [syntect](https://github.com/trishume/syntect) with support for hundreds of languages
 - **Edit mode** — [CodeMirror 6](https://codemirror.net/) editor with syntax-aware Markdown highlighting; toggle per tab between read and edit mode
+- **Create new files** — make a new Markdown file from the toolbar, `Ctrl+N`, the welcome screen, or the folder tree's right-click menu; the location is picked with the native save dialog and the file opens straight into edit mode
+- **Print to PDF** — print the rendered document through the platform's native print dialog (Save as PDF); a "Printer Friendly PDFs" setting prints light-on-white for readability, or turn it off to match the app's current theme exactly
 - **Split view** — side-by-side editor and live HTML preview with a draggable divider; layout state saved per tab
 - **Formatting toolbar** — bold, italic, strikethrough, inline code, H1–H3, ordered list, unordered list, task list, link, image, indent, and outdent
 - **Smart Enter** — continues list and blockquote markers on Enter; double-Enter exits the block
@@ -40,6 +42,7 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 
 | Shortcut              | Action                            |
 | --------------------- | --------------------------------- |
+| `Ctrl+N`              | New file                          |
 | `Ctrl+O`              | Open file(s)                      |
 | `Ctrl+W`              | Close current tab                 |
 | `Ctrl+Tab`            | Switch to next tab                |
@@ -49,6 +52,7 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 | `Ctrl+Shift+Right`    | Move tab right                    |
 | `Ctrl+E`              | Toggle edit mode                  |
 | `Ctrl+S`              | Save file                         |
+| `Ctrl+P`              | Print to PDF                      |
 | `Ctrl+F`              | Toggle search (read) / find (edit)|
 | `Enter`               | Next search match                 |
 | `Shift+Enter`         | Previous search match             |
@@ -135,6 +139,7 @@ OxideMD/
 │   ├── settings.js           # Settings dialog (fonts, colors, shortcuts, update check)
 │   ├── shortcuts-display.js  # Shortcuts tab UI: list actions, capture new bindings
 │   ├── contextmenu.js        # Right-click context menus for sidebar and tabs
+│   ├── print.js              # Print the active document to PDF via the native print dialog
 │   └── window-size.js        # Persistent window size and position
 ├── src-tauri/                # Rust backend (Tauri)
 │   ├── src/
