@@ -327,6 +327,9 @@
       <div id="sidebar-header">
         <span id="sidebar-folder-name" title=""></span>
         <div class="sidebar-header-actions">
+          <button id="sidebar-search-toggle" class="sidebar-header-btn hidden" title="Search in folder" aria-label="Search in folder" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
           <button id="sidebar-expand-all" class="sidebar-header-btn" title="Expand all folders" aria-label="Expand all folders">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 6 12 11 17 6"/><polyline points="7 13 12 18 17 13"/></svg>
           </button>
@@ -345,6 +348,20 @@
         <button id="sidebar-filter-clear" class="hidden" title="Clear filter" aria-label="Clear filter">&#x2715;</button>
       </div>
       <div id="sidebar-tree" role="tree"></div>
+      <!-- Project-wide content search — swapped in for the tree by the
+           header's search toggle. Greps every Markdown file in the open
+           folder; results are grouped per file. -->
+      <div id="sidebar-search-panel" class="hidden">
+        <div id="sidebar-search-input-wrap">
+          <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="sidebar-search-input" placeholder="Search in folder…" autocomplete="off" spellcheck="false" aria-label="Search file contents in folder">
+          <button id="sidebar-search-clear" class="hidden" title="Clear search" aria-label="Clear search">&#x2715;</button>
+        </div>
+        <div id="sidebar-search-results"></div>
+      </div>
     </aside>
 
     <div id="sidebar-divider" role="separator" aria-orientation="vertical"

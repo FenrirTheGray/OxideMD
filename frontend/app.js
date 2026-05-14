@@ -20,6 +20,7 @@ import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
 } from './search.js';
 import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange } from './folder.js';
+import { openProjectSearch } from './search-project.js';
 import {
   switchToTab, closeTab,
   zoomIn, zoomOut, resetZoom,
@@ -379,6 +380,11 @@ registerHandler('closeFolder', (e) => {
   if (!state.currentFolder) return;   // no folder → let the key pass through
   e?.preventDefault();
   closeFolder();
+});
+registerHandler('searchInFolder', (e) => {
+  if (!state.currentFolder) return;   // no folder → let the key pass through
+  e?.preventDefault();
+  openProjectSearch();
 });
 registerHandler('save', (e) => {
   e?.preventDefault();

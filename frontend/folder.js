@@ -9,6 +9,7 @@ import {
 } from './state.js';
 import { activeTab, loadFile, renderContent } from './tabs.js';
 import { saveRecentlyFor } from './editor.js';
+import { updateProjectSearchAvailability, closeProjectSearch } from './search-project.js';
 
 const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
 const SVG_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -109,6 +110,7 @@ export function setFolder(tree) {
   sidebarFolderName.title = tree.root;
   sidebarEl.classList.remove('hidden');
   renderFolderTree();
+  updateProjectSearchAvailability();
   syncWatcher();
 }
 
@@ -181,10 +183,12 @@ export function closeFolder() {
   state.currentFolder = null;
   expandedFolders.clear();
   resetFilter();
+  closeProjectSearch();
   sidebarTreeEl.innerHTML = '';
   sidebarFolderName.textContent = '';
   sidebarFolderName.title = '';
   sidebarEl.classList.add('hidden');
+  updateProjectSearchAvailability();
   syncWatcher();
 }
 
