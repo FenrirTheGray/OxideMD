@@ -467,7 +467,14 @@ pub fn get_default_config() -> Config {
 
 #[tauri::command]
 pub fn save_config_cmd(config: Config) -> Result<(), String> {
-    save_config(&config)
+    save_config(&config)?;
+    // Mirror the line-break setting into the renderer's atomic so it
+    // takes effect immediately (live preview, reopened files) without a
+    // restart. Only after a successful save — a failed write shouldn't
+    // leave the renderer reflecting an unpersisted setting.
+    crate::markdown::PRESERVE_LINE_BREAKS
+        .store(config.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 #[tauri::command]

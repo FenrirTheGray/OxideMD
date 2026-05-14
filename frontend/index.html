@@ -546,6 +546,22 @@
           </div>
 
           <div class="settings-row">
+            <label>Preserve line breaks<span class="settings-info-icon" tabindex="0"
+                   aria-label="When on, a single newline in your Markdown becomes a line break. When off (standard CommonMark), single newlines join into one paragraph — use a blank line or two trailing spaces to force a break.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <div class="segmented" id="setting-preserve-line-breaks" role="radiogroup"
+                 aria-label="Preserve line breaks">
+              <button type="button" data-value="true" aria-pressed="false">On</button>
+              <button type="button" data-value="false" aria-pressed="true">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
             <label>Toolbar</label>
             <div class="segmented" id="setting-toolbar-compact" role="radiogroup"
                  aria-label="Toolbar button style">

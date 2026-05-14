@@ -1,9 +1,10 @@
 import {
-  invoke, state, systemDarkMQ, isLinux,
+  invoke, state, systemDarkMQ, isLinux, tabs,
   statusText, statusIndicator, settingsOverlay, searchBar,
   hasActiveOverlay,
 } from './state.js';
-import { activeTab, applyZoom, setLoading, clearStatus } from './tabs.js';
+import { activeTab, applyZoom, setLoading, clearStatus, renderContent } from './tabs.js';
+import { setPreviewHtml } from './editor.js';
 import { closeSearch } from './search.js';
 import {
   ACTIONS, effectiveBindings, findActionByAccel, eventToAccel,
@@ -700,6 +701,7 @@ export function openSettings() {
   document.getElementById('setting-note-accent').value   = state.config.note_accent_color;
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
   document.getElementById('setting-printer-friendly').value = state.config.printer_friendly ? 'true' : 'false';
+  document.getElementById('setting-preserve-line-breaks').value = state.config.preserve_line_breaks ? 'true' : 'false';
   populatingSettings = false;
   updatePreviewColors();
   // Seed the shortcuts working copy from the saved overrides so edits are
@@ -759,6 +761,9 @@ export function closeSettings() {
 }
 
 async function saveSettings() {
+  // Captured before state.config is replaced — preserve_line_breaks
+  // changes the rendered HTML, so a change needs open docs re-rendered.
+  const prevPreserveLineBreaks = state.config.preserve_line_breaks;
   const newConfig = {
     ...state.config,
     theme:          document.getElementById('setting-theme').value,
@@ -776,6 +781,7 @@ async function saveSettings() {
     note_accent_color: document.getElementById('setting-note-accent').value,
     toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
     printer_friendly: document.getElementById('setting-printer-friendly').value === 'true',
+    preserve_line_breaks: document.getElementById('setting-preserve-line-breaks').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
   };
   setLoading();
@@ -790,6 +796,27 @@ async function saveSettings() {
     applyConfig(state.config);
     const tab = activeTab();
     if (tab) applyZoom(tab.zoom);
+    // preserve_line_breaks changes the rendered HTML itself (a <br> vs a
+    // space for single newlines), not just CSS — so unlike the other
+    // reading settings the open documents must be re-rendered for the
+    // change to show. Re-render every tab's cached HTML from its source
+    // buffer, then refresh whatever's currently on screen.
+    if (prevPreserveLineBreaks !== newConfig.preserve_line_breaks) {
+      for (const t of tabs) {
+        if (!t.path && !(t.raw ?? '')) continue;
+        try {
+          t.html = await invoke('render_preview', { content: t.raw ?? '', path: t.path ?? '' });
+        } catch (e) {
+          // Keep the stale render for this tab rather than aborting the
+          // loop; the active tab still gets refreshed below if it rendered.
+          console.warn('Failed to re-render tab after line-break setting change:', t.path ?? '(untitled)', e);
+        }
+      }
+      if (tab) {
+        if (tab.editing) setPreviewHtml(tab.html);
+        else renderContent(tab.html);
+      }
+    }
     closeSettings();
   } catch (e) {
     alert('Failed to save settings: ' + e);
@@ -809,6 +836,7 @@ async function resetSettings() {
     document.getElementById('setting-reading-width').value = defaults.reading_width;
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
     document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
+    document.getElementById('setting-preserve-line-breaks').value = defaults.preserve_line_breaks ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;

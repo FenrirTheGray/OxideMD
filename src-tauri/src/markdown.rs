@@ -5,6 +5,7 @@ use pulldown_cmark::{
 };
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 /// Result of resolving an image src.
@@ -21,7 +22,20 @@ pub enum ResolvedImage {
 
 static HIGHLIGHTER: OnceLock<Highlighter> = OnceLock::new();
 
+/// Whether a single newline inside a paragraph (a CommonMark "soft
+/// break") is rendered as a `<br>` rather than a space. Mirrors the
+/// `preserve_line_breaks` config field; seeded at startup by `lib.rs`
+/// and updated by `save_config_cmd`, so the live preview and reopened
+/// files pick up a change without a restart.
+pub static PRESERVE_LINE_BREAKS: AtomicBool = AtomicBool::new(false);
+
 pub fn render(source: &str, base_dir: Option<&Path>) -> String {
+    render_with(source, base_dir, PRESERVE_LINE_BREAKS.load(Ordering::Relaxed))
+}
+
+/// Core renderer. Split from `render` so tests can pass the soft-break
+/// mode explicitly instead of racing on the global atomic.
+fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool) -> String {
     let highlighter = HIGHLIGHTER.get_or_init(Highlighter::new);
 
     let options = Options::ENABLE_TABLES
@@ -256,7 +270,16 @@ pub fn render(source: &str, base_dir: Option<&Path>) -> String {
                 if in_image.is_some() {
                     image_alt_buf.push(' ');
                 } else {
-                    html.push(' ');
+                    // A single newline inside a paragraph. CommonMark
+                    // renders it as a space; with "Preserve line breaks"
+                    // on we emit a <br> so each source line stays on its
+                    // own line. The slug always uses a space — a heading
+                    // can't span a soft break, but keep IDs <br>-free.
+                    if preserve_line_breaks {
+                        html.push_str("<br>");
+                    } else {
+                        html.push(' ');
+                    }
                     if current_heading.is_some() {
                         heading_slug_buf.push(' ');
                     }
@@ -520,6 +543,29 @@ mod tests {
     fn render_strikethrough() {
         let out = render("~~gone~~", None);
         assert!(out.contains("<del>gone</del>"));
+    }
+
+    #[test]
+    fn render_soft_break_is_space_by_default() {
+        // A single newline inside a paragraph is CommonMark "soft break"
+        // territory: rendered as a space, so the two lines join.
+        let out = render_with("line one\nline two", None, false);
+        assert!(out.contains("line one line two"));
+        assert!(!out.contains("<br>"));
+    }
+
+    #[test]
+    fn render_soft_break_is_br_when_preserve_line_breaks() {
+        let out = render_with("line one\nline two", None, true);
+        assert!(out.contains("line one<br>line two"));
+    }
+
+    #[test]
+    fn render_hard_break_is_br_regardless_of_setting() {
+        // Two trailing spaces force a hard break — always a <br>, whether
+        // or not soft breaks are being preserved.
+        assert!(render_with("a  \nb", None, false).contains("a<br>b"));
+        assert!(render_with("a  \nb", None, true).contains("a<br>b"));
     }
 
     #[test]
