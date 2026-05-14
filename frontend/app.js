@@ -460,10 +460,28 @@ document.addEventListener('keydown', (e) => {
   if (state.confirmDialogOpen) return;
 
   if (e.key === 'Escape') {
-    if (!confirmOverlay.classList.contains('hidden')) { /* handled in editor.js */ return; }
-    if (!shortcutsPopover.classList.contains('hidden')) { closeShortcutsPopover(); btnLogo.focus(); return; }
-    if (!settingsOverlay.classList.contains('hidden')) { closeSettings(); return; }
-    if (!searchBar.classList.contains('hidden'))       { closeSearch();   return; }
+    // Escape closes exactly one thing: the topmost open overlay, in
+    // strict precedence order. Each branch consumes the event
+    // (preventDefault + stopPropagation) so it can't also reach a
+    // lower-priority handler or the edit-mode toggle. With nothing
+    // open, Escape is a no-op here and falls through untouched.
+    //   confirm dialog > shortcuts popover > settings > search bar
+    // The confirm dialog is handled in editor.js (it owns the
+    // resolve-on-key promise); we just stop here so settings/search
+    // below don't also fire.
+    if (!confirmOverlay.classList.contains('hidden')) { return; }
+    if (!shortcutsPopover.classList.contains('hidden')) {
+      e.preventDefault(); e.stopPropagation();
+      closeShortcutsPopover(); btnLogo.focus(); return;
+    }
+    if (!settingsOverlay.classList.contains('hidden')) {
+      e.preventDefault(); e.stopPropagation();
+      closeSettings(); return;
+    }
+    if (!searchBar.classList.contains('hidden')) {
+      e.preventDefault(); e.stopPropagation();
+      closeSearch(); return;
+    }
     return;
   }
   if (e.key === 'Home' && document.activeElement === document.body) {
