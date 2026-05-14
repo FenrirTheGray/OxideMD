@@ -1728,6 +1728,49 @@ body:not(.editing) #status-counts { display: none; }
   box-shadow: var(--shadow-md);
 }
 
+/* ── Footnotes ────────────────────────────────────────────────────── */
+/* Reference superscript: a small raised number linking to the
+   definition. Kept tight so it doesn't disturb the prose baseline. */
+.md-rendered .footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  margin-left: 0.15em;
+}
+.md-rendered .footnote-ref a {
+  border-bottom: none;
+  padding: 0 0.2em;
+}
+
+/* The definitions list, flushed to the end of the document and set
+   apart with a top rule and muted, slightly smaller text. */
+.md-rendered .footnotes {
+  margin-top: 2.5em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.9em;
+  color: var(--fg-muted);
+}
+.md-rendered .footnotes ol {
+  margin: 0;
+}
+.md-rendered .footnotes li {
+  margin: 0.4em 0;
+}
+.md-rendered .footnotes li p {
+  margin: 0.3em 0;
+}
+
+/* Back-reference arrow: returns the reader to the call site. */
+.md-rendered .footnote-backref {
+  margin-left: 0.4em;
+  border-bottom: none;
+  text-decoration: none;
+  color: var(--link);
+}
+.md-rendered .footnote-backref:hover {
+  color: var(--link-hover);
+}
+
 /* ── Search highlights ──────────────────────────────────────────────
    Painted via the CSS Custom Highlight API — no <mark> wrapper is
    inserted into the DOM. ::highlight() only honours a limited subset

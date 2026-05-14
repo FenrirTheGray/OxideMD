@@ -41,7 +41,9 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_SMART_PUNCTUATION
-        | Options::ENABLE_TASKLISTS;
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_HEADING_ATTRIBUTES;
 
     let parser = Parser::new_ext(source, options);
 
@@ -67,16 +69,37 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let mut heading_start: usize = 0;
     let mut heading_slug_buf = String::new();
     let mut current_heading: Option<HeadingLevel> = None;
+    // An explicit `{#id}` heading attribute, if the source supplied one.
+    // When present it overrides the auto-generated slug for the heading's
+    // `id`, but still flows through `heading_counts` so a later collision
+    // (with another explicit id or an auto-slug) gets disambiguated.
+    let mut heading_explicit_id: Option<String> = None;
     let mut in_image: Option<(String, String)> = None; // (src, title)
     let mut image_alt_buf = String::new();
+    // Footnotes. Definitions are numbered by encounter order: the label
+    // (`[^foo]`) is the lookup key, the `usize` its display number. A
+    // reference or a definition — whichever the parser emits first —
+    // claims the next number. A definition's inner events (paragraphs,
+    // spans) render into `html` like any other block; at the definition's
+    // end we `split_off` that content — same idiom as headings — and
+    // stash it in `footnote_defs`, which flushes into a
+    // `<section class="footnotes">` after the loop.
+    let mut footnote_numbers: HashMap<String, usize> = HashMap::new();
+    let mut footnote_defs: Vec<(usize, String)> = Vec::new();
+    // While inside a definition: (its number, the `html` offset its body
+    // started at).
+    let mut footnote_def: Option<(usize, usize)> = None;
 
     for event in parser {
         match event {
             // ── Blocks ──────────────────────────────────────────────────────
-            Event::Start(Tag::Heading { level, .. }) => {
+            Event::Start(Tag::Heading { level, id, .. }) => {
                 current_heading = Some(level);
                 heading_start = html.len();
                 heading_slug_buf.clear();
+                // An explicit `{#id}` attribute, when present, becomes the
+                // heading's `id` instead of the auto-generated slug.
+                heading_explicit_id = id.map(|s| s.to_string());
             }
             Event::End(TagEnd::Heading(level)) => {
                 let tag = match level {
@@ -88,12 +111,17 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     HeadingLevel::H6 => "h6",
                 };
                 let content = html.split_off(heading_start);
-                let slug = slugify(&heading_slug_buf);
-                let count = heading_counts.entry(slug.clone()).or_insert(0);
+                // An explicit `{#id}` wins over the slug, but still runs
+                // through `heading_counts` so a later collision (with
+                // another explicit id or an auto-slug) is disambiguated.
+                let base = heading_explicit_id
+                    .take()
+                    .unwrap_or_else(|| slugify(&heading_slug_buf));
+                let count = heading_counts.entry(base.clone()).or_insert(0);
                 let id = if *count == 0 {
-                    slug.clone()
+                    base.clone()
                 } else {
-                    format!("{}-{}", slug, count)
+                    format!("{}-{}", base, count)
                 };
                 *count += 1;
                 html.push_str(&format!(
@@ -173,6 +201,34 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 html.push_str(&format!(
                     "<input type=\"checkbox\" class=\"task-list-checkbox\" disabled{}>",
                     if checked { " checked" } else { "" }
+                ));
+            }
+
+            // ── Footnotes ────────────────────────────────────────────────────
+            // The definition's inner content renders into `html` as usual;
+            // we record where it starts so the matching End can `split_off`
+            // the rendered body and divert it into the footnotes section.
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                let next = footnote_numbers.len() + 1;
+                let num = *footnote_numbers
+                    .entry(label.to_string())
+                    .or_insert(next);
+                footnote_def = Some((num, html.len()));
+            }
+            Event::End(TagEnd::FootnoteDefinition) => {
+                if let Some((num, start)) = footnote_def.take() {
+                    let body = html.split_off(start);
+                    footnote_defs.push((num, body));
+                }
+            }
+            Event::FootnoteReference(label) => {
+                let next = footnote_numbers.len() + 1;
+                let num = *footnote_numbers
+                    .entry(label.to_string())
+                    .or_insert(next);
+                html.push_str(&format!(
+                    "<sup class=\"footnote-ref\"><a id=\"fnref{}\" href=\"#fn{}\">{}</a></sup>",
+                    num, num, num
                 ));
             }
 
@@ -329,6 +385,33 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
 
             _ => {}
         }
+    }
+
+    // Flush the collected footnote definitions into a trailing section.
+    // Definitions are ordered by their display number so the list reads
+    // 1, 2, 3 regardless of the order they appeared in the source. Each
+    // definition gets a back-reference arrow linking to its `[^label]`
+    // call site; the body is rendered HTML, so the arrow is spliced just
+    // before the closing `</p>` of the last paragraph when there is one,
+    // otherwise simply appended.
+    if !footnote_defs.is_empty() {
+        footnote_defs.sort_by_key(|(num, _)| *num);
+        html.push_str("<section class=\"footnotes\">\n<ol>\n");
+        for (num, body) in &footnote_defs {
+            let backref = format!(
+                "<a href=\"#fnref{}\" class=\"footnote-backref\" aria-label=\"Back to reference {}\">\u{21a9}</a>",
+                num, num
+            );
+            let body = match body.rfind("</p>\n") {
+                Some(pos) => format!("{}{}{}", &body[..pos], backref, &body[pos..]),
+                None => format!("{}{}", body, backref),
+            };
+            html.push_str(&format!(
+                "<li id=\"fn{}\">{}</li>\n",
+                num, body
+            ));
+        }
+        html.push_str("</ol>\n</section>\n");
     }
 
     html
@@ -763,6 +846,54 @@ mod tests {
         let out = render("# Hello <script>alert(1)</script>\n", None);
         assert!(!out.contains("<script>"));
         assert!(out.contains("&lt;script&gt;"));
+    }
+
+    #[test]
+    fn render_footnote_links_reference_and_definition() {
+        let out = render("Text[^1].\n\n[^1]: The note.\n", None);
+        // Reference site: a superscript anchor pointing at the definition.
+        assert!(
+            out.contains("<sup class=\"footnote-ref\"><a id=\"fnref1\" href=\"#fn1\">1</a></sup>"),
+            "missing footnote reference markup: {out}"
+        );
+        // Definitions flush into a trailing <section class="footnotes">.
+        assert!(out.contains("<section class=\"footnotes\">"), "missing footnotes section: {out}");
+        assert!(out.contains("<li id=\"fn1\">"), "missing footnote definition item: {out}");
+        assert!(out.contains("The note."), "footnote body lost: {out}");
+        // And a back-reference arrow links the definition to its call site.
+        assert!(
+            out.contains("href=\"#fnref1\" class=\"footnote-backref\""),
+            "missing footnote back-reference: {out}"
+        );
+    }
+
+    #[test]
+    fn render_heading_explicit_id_overrides_slug() {
+        let out = render("# Hello World {#custom}\n", None);
+        // The explicit `{#id}` wins over the auto-generated slug.
+        assert!(out.contains("<h1 id=\"custom\">"), "explicit id not used: {out}");
+        assert!(!out.contains("id=\"hello-world\""), "auto slug leaked: {out}");
+        assert!(out.contains("Hello World"));
+    }
+
+    #[test]
+    fn render_heading_explicit_id_still_disambiguates() {
+        // An explicit `{#custom}` still flows through `heading_counts`, so a
+        // later auto-slug that collides with it gets a `-1` suffix.
+        let out = render("# A {#custom}\n\n# Custom\n", None);
+        assert!(out.contains("<h1 id=\"custom\">"), "explicit id not used: {out}");
+        assert!(out.contains("<h1 id=\"custom-1\">"), "collision not disambiguated: {out}");
+    }
+
+    #[test]
+    fn render_autolink_angle_bracket_is_clickable() {
+        // pulldown-cmark 0.12.2 has no GFM bare-URL autolink option, but
+        // CommonMark angle-bracket autolinks work with no options at all.
+        let out = render("Visit <https://example.com> today.\n", None);
+        assert!(
+            out.contains("href=\"https://example.com\""),
+            "angle-bracket autolink not rendered as a link: {out}"
+        );
     }
 
 }
