@@ -25,6 +25,7 @@ import {
   zoomIn, zoomOut, resetZoom,
   renderTabBar, updateTabOverflow,
   loadFile, reloadFile, handleAnchorClick, openFilePicker, createNewFile,
+  applyRecentFiles,
 } from './tabs.js';
 import { loadCustomFont, applyConfig, openSettings, closeSettings } from './settings.js';
 import { enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch } from './editor.js';
@@ -44,6 +45,8 @@ async function init() {
     await loadCustomFont(state.config.font_family.slice(7));
   }
   applyConfig(state.config);
+
+  invoke('list_recent_files').then(applyRecentFiles).catch(() => {});
 
   // Open every file passed on the command line (Explorer "Open with…" can
   // pass multiple paths in a single launch).
@@ -244,12 +247,65 @@ contentEl.addEventListener('click', (e) => {
   if (e.target.closest('#welcome-new'))         { createNewFile(); return; }
   if (e.target.closest('#welcome-open-folder')) { openFolder(); return; }
   if (e.target.closest('#welcome-open'))        { openFilePicker(); return; }
+  const recentClear = e.target.closest('#welcome-recent-clear');
+  if (recentClear) {
+    invoke('clear_recent_files')
+      .then(() => applyRecentFiles([]))
+      .catch(() => {});
+    return;
+  }
+  const recentForget = e.target.closest('.welcome-recent-forget');
+  if (recentForget) {
+    e.stopPropagation();
+    invoke('forget_recent_file', { path: recentForget.dataset.path })
+      .then(applyRecentFiles)
+      .catch(() => {});
+    return;
+  }
+  const recentLink = e.target.closest('.welcome-recent-link');
+  if (recentLink) {
+    loadFile(recentLink.dataset.path);
+    return;
+  }
+  const copyBtn = e.target.closest('.codeblock-copy');
+  if (copyBtn) {
+    e.preventDefault();
+    copyCodeBlock(copyBtn);
+    return;
+  }
   const anchor = e.target.closest('a');
   if (anchor && contentEl.contains(anchor)) {
     e.preventDefault();
     handleAnchorClick(anchor);
   }
 });
+
+if (previewPane) {
+  previewPane.addEventListener('click', (e) => {
+    const copyBtn = e.target.closest('.codeblock-copy');
+    if (copyBtn) {
+      e.preventDefault();
+      copyCodeBlock(copyBtn);
+    }
+  }, true);
+}
+
+async function copyCodeBlock(btn) {
+  const block = btn.closest('.codeblock');
+  if (!block) return;
+  // The Rust renderer stuffs the raw source into data-code so we don't
+  // have to reverse syntect spans to get copy-friendly text. The
+  // browser already decoded the attribute's HTML entities for us, so
+  // dataset.code is the original bytes.
+  const raw = block.dataset.code || '';
+  try {
+    await navigator.clipboard.writeText(raw);
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 1200);
+  } catch (err) {
+    console.error('[oxidemd] copy failed', err);
+  }
+}
 // Same treatment for anchors inside the live preview pane — without this,
 // clicking a link would let the webview navigate away and take the whole
 // app with it.
@@ -331,6 +387,27 @@ registerHandler('save', (e) => {
 });
 registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
 registerHandler('print',  (e) => { e?.preventDefault(); printActiveTab(); });
+registerHandler('exportHtml', async (e) => {
+  e?.preventDefault();
+  const tab = activeTab();
+  if (!tab?.path) return;
+  // Use the live editor buffer when one is mounted so the export
+  // includes unsaved edits — otherwise tab.raw equals savedRaw.
+  const source = tab.raw ?? '';
+  const baseName = (tab.title || 'document').replace(/\.(md|markdown|mdown|mkd)$/i, '');
+  try {
+    const outPath = await invoke('pick_export_path', { suggestedName: `${baseName}.html` });
+    if (!outPath) return;
+    await invoke('export_html', {
+      source,
+      basePath: tab.path,
+      outPath,
+      title: baseName,
+    });
+  } catch (err) {
+    console.error('[oxidemd] export failed', err);
+  }
+});
 
 registerHandler('toggleEdit', (e) => {
   e?.preventDefault();

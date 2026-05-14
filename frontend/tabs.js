@@ -237,6 +237,7 @@ export function showWelcome() {
   // HTML — fill them from the registry so platform symbols and any user
   // rebinds are reflected.
   renderShortcutsUI();
+  renderRecentFiles();
   contentEl.style.fontSize = '';
   state.originalContent = '';
   appWindow.setTitle('OxideMD');
@@ -454,6 +455,15 @@ export async function loadFile(path) {
     // an already-open tab just switches to it and shouldn't re-prompt.
     const wasAlreadyOpen = !!tabs.find(t => t.path === realPath);
     openInNewTab(realPath, result.title, result.html, result.raw ?? '');
+    invoke('mark_recent_file', { path: realPath })
+      .then(applyRecentFiles)
+      .catch(() => {});
+    invoke('file_sha256', { path: realPath })
+      .then((hash) => {
+        const tab = tabs.find(t => t.path === realPath);
+        if (tab) tab.diskHash = hash;
+      })
+      .catch(() => {});
     if (!wasAlreadyOpen) await maybeOfferDraftRecovery(realPath, result.raw ?? '');
   } catch (e) {
     showError(String(e));
@@ -467,19 +477,83 @@ export async function loadFile(path) {
 // into tab.raw (savedRaw stays as disk content so isDirty=true and Save
 // re-enables) and auto-enter edit mode. 'discard' clears the draft.
 // 'cancel' (Escape / overlay click) leaves the draft for next time.
+//
+// If the on-disk hash differs from the hash recorded when the draft was
+// last written, the disk content has changed since the draft was saved
+// — likely an external edit. We pass that signal through to
+// promptRecoverDraft so the dialog can warn the user before they choose
+// to overwrite the newer disk content with their (older) draft.
 async function maybeOfferDraftRecovery(path, diskRaw) {
   const draft = readDraft(path);
   if (!draft) return;
   if (draft.content === diskRaw) { clearDraft(path); return; }
   const tab = tabs.find(t => t.path === path);
   if (!tab) return;
-  const decision = await promptRecoverDraft(tab, draft);
+  let conflict = false;
+  if (draft.diskHashAtWrite) {
+    try {
+      const liveHash = await invoke('file_sha256', { path });
+      if (liveHash && liveHash !== draft.diskHashAtWrite) conflict = true;
+    } catch {}
+  }
+  const decision = await promptRecoverDraft(tab, draft, { conflict });
   if (decision === 'save') {
     tab.raw = draft.content;
     await enterEditMode();
   } else if (decision === 'discard') {
     clearDraft(path);
   }
+}
+
+// ── Recent files ──────────────────────────────────────────────────────
+// Rendered into the welcome screen's #welcome-recent panel. The Rust
+// command returns the cap-trimmed list; we just paint it.
+export function applyRecentFiles(entries) {
+  state.recentFiles = Array.isArray(entries) ? entries : [];
+  renderRecentFiles();
+}
+
+function renderRecentFiles() {
+  const root = document.getElementById('welcome-recent');
+  const list = document.getElementById('welcome-recent-list');
+  if (!root || !list) return;
+  const entries = state.recentFiles ?? [];
+  if (entries.length === 0) { root.hidden = true; list.innerHTML = ''; return; }
+  root.hidden = false;
+  list.innerHTML = '';
+  for (const entry of entries) {
+    const li = document.createElement('li');
+    li.className = 'welcome-recent-item' + (entry.exists ? '' : ' missing');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'welcome-recent-link';
+    open.dataset.path = entry.path;
+    open.title = entry.path;
+    const name = document.createElement('span');
+    name.className = 'welcome-recent-name';
+    name.textContent = entry.name;
+    const dir = document.createElement('span');
+    dir.className = 'welcome-recent-dir';
+    dir.textContent = parentDir(entry.path);
+    open.appendChild(name);
+    open.appendChild(dir);
+    li.appendChild(open);
+    const forget = document.createElement('button');
+    forget.type = 'button';
+    forget.className = 'welcome-recent-forget';
+    forget.dataset.path = entry.path;
+    forget.setAttribute('aria-label', `Remove ${entry.name} from recent files`);
+    forget.title = 'Remove from recent';
+    forget.innerHTML = '✕';
+    li.appendChild(forget);
+    list.appendChild(li);
+  }
+}
+
+function parentDir(p) {
+  if (!p) return '';
+  const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  return idx === -1 ? '' : p.slice(0, idx);
 }
 
 export async function reloadFile() {

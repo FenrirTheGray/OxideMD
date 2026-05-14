@@ -4,14 +4,15 @@
 // savedAt timestamp used both for the recovery prompt copy and for
 // quota-eviction (oldest goes first).
 //
+// `diskHashAtWrite` records the SHA-256 of the on-disk file at the
+// moment the draft was last written. On recovery, tabs.js compares it
+// to the live on-disk hash; a mismatch means the file changed under us
+// (another tool, another machine) and we surface that to the user
+// before potentially clobbering their external edit with a stale draft.
+//
 // Lifecycle: editor.js debounces writes per input, calls clearDraft after
 // a successful save, and tabs.js prompts the user via promptRecoverDraft
 // when a draft exists for a freshly-opened file.
-//
-// v2 gaps: no conflict detection (we don't compare against the on-disk
-// hash at write time), and a single shared debounce timer across tabs
-// means rapid switching can drop one tab's pending write — acceptable
-// for v1 since tab.raw is still authoritative until the app exits.
 
 const PREFIX = 'oxidemd:draft:';
 const keyFor = (path) => PREFIX + path;
@@ -26,15 +27,20 @@ export function readDraft(path) {
     return {
       content: parsed.content,
       savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : Date.now(),
+      diskHashAtWrite: typeof parsed.diskHashAtWrite === 'string' ? parsed.diskHashAtWrite : null,
     };
   } catch {
     return null;
   }
 }
 
-export function writeDraft(path, content) {
+export function writeDraft(path, content, diskHashAtWrite = null) {
   if (!path) return;
-  const payload = JSON.stringify({ content, savedAt: Date.now() });
+  const payload = JSON.stringify({
+    content,
+    savedAt: Date.now(),
+    diskHashAtWrite: diskHashAtWrite || null,
+  });
   try {
     localStorage.setItem(keyFor(path), payload);
   } catch (e) {

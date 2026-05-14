@@ -702,6 +702,8 @@ export function openSettings() {
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
   document.getElementById('setting-printer-friendly').value = state.config.printer_friendly ? 'true' : 'false';
   document.getElementById('setting-preserve-line-breaks').value = state.config.preserve_line_breaks ? 'true' : 'false';
+  document.getElementById('setting-word-wrap').value = state.config.editor_word_wrap !== false ? 'true' : 'false';
+  document.getElementById('setting-spell-check').value = state.config.editor_spell_check ? 'true' : 'false';
   populatingSettings = false;
   updatePreviewColors();
   // Seed the shortcuts working copy from the saved overrides so edits are
@@ -782,6 +784,8 @@ async function saveSettings() {
     toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
     printer_friendly: document.getElementById('setting-printer-friendly').value === 'true',
     preserve_line_breaks: document.getElementById('setting-preserve-line-breaks').value === 'true',
+    editor_word_wrap: document.getElementById('setting-word-wrap').value === 'true',
+    editor_spell_check: document.getElementById('setting-spell-check').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
   };
   setLoading();
@@ -837,6 +841,8 @@ async function resetSettings() {
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
     document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
     document.getElementById('setting-preserve-line-breaks').value = defaults.preserve_line_breaks ? 'true' : 'false';
+    document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
+    document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;

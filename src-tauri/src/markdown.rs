@@ -40,7 +40,8 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
 
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_SMART_PUNCTUATION;
+        | Options::ENABLE_SMART_PUNCTUATION
+        | Options::ENABLE_TASKLISTS;
 
     let parser = Parser::new_ext(source, options);
 
@@ -129,9 +130,23 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 } else {
                     format!(" class=\"language-{}\"", html_escape_attr(&code_lang))
                 };
+                let lang_label = if code_lang.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<span class=\"codeblock-lang\">{}</span>",
+                        html_escape(&code_lang)
+                    )
+                };
+                // HTML5 attribute parsing collapses literal CR/LF to spaces.
+                // Encode them as numeric entities so the JS-side copy
+                // handler reads the original whitespace.
+                let raw_attr = html_escape_attr(&code_buf)
+                    .replace('\n', "&#10;")
+                    .replace('\r', "&#13;");
                 html.push_str(&format!(
-                    "<pre><code{}>{}</code></pre>\n",
-                    lang_class, highlighted
+                    "<div class=\"codeblock\" data-code=\"{}\">{}<button type=\"button\" class=\"codeblock-copy\" aria-label=\"Copy code\" title=\"Copy code\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg></button><pre><code{}>{}</code></pre></div>\n",
+                    raw_attr, lang_label, lang_class, highlighted
                 ));
                 code_buf.clear();
                 code_lang.clear();
@@ -153,6 +168,13 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             }
             Event::Start(Tag::Item) => html.push_str("<li>"),
             Event::End(TagEnd::Item) => html.push_str("</li>\n"),
+
+            Event::TaskListMarker(checked) => {
+                html.push_str(&format!(
+                    "<input type=\"checkbox\" class=\"task-list-checkbox\" disabled{}>",
+                    if checked { " checked" } else { "" }
+                ));
+            }
 
             // ── Tables ──────────────────────────────────────────────────────
             Event::Start(Tag::Table(alignments)) => {
@@ -566,6 +588,42 @@ mod tests {
         // or not soft breaks are being preserved.
         assert!(render_with("a  \nb", None, false).contains("a<br>b"));
         assert!(render_with("a  \nb", None, true).contains("a<br>b"));
+    }
+
+    #[test]
+    fn render_task_list_unchecked_emits_disabled_checkbox() {
+        let out = render("- [ ] todo\n", None);
+        assert!(
+            out.contains("task-list-checkbox") && out.contains("disabled"),
+            "task list missing checkbox markup: {out}"
+        );
+        assert!(!out.contains("checked"), "unchecked task should not have `checked`: {out}");
+    }
+
+    #[test]
+    fn render_task_list_checked_emits_checked_checkbox() {
+        let out = render("- [x] done\n", None);
+        assert!(out.contains("task-list-checkbox"));
+        assert!(out.contains("checked"));
+    }
+
+    #[test]
+    fn render_code_block_wraps_with_codeblock_div_and_data_code() {
+        let out = render("```\nhello\nworld\n```\n", None);
+        assert!(out.contains("class=\"codeblock\""), "missing wrapper: {out}");
+        assert!(out.contains("data-code=\""), "missing data-code: {out}");
+        // Newlines get encoded as numeric entities so HTML5 attribute
+        // parsing doesn't normalize them to spaces.
+        assert!(out.contains("hello&#10;world&#10;"), "newlines not encoded: {out}");
+        // And the original <pre><code> structure is still there.
+        assert!(out.contains("<pre><code>"), "lost pre/code: {out}");
+    }
+
+    #[test]
+    fn render_code_block_with_language_emits_lang_label() {
+        let out = render("```rust\nfn x() {}\n```\n", None);
+        assert!(out.contains("codeblock-lang"), "missing lang label span: {out}");
+        assert!(out.contains(">rust</span>"), "lang text wrong: {out}");
     }
 
     #[test]

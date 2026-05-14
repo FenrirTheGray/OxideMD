@@ -418,6 +418,14 @@
           <span class="welcome-hero-cta">Browse&hellip;</span>
         </button>
 
+        <div class="welcome-recent" id="welcome-recent" hidden>
+          <div class="welcome-col-title">
+            Recent files
+            <button id="welcome-recent-clear" type="button" class="welcome-recent-clear" title="Clear recent files">Clear</button>
+          </div>
+          <ul class="welcome-recent-list" id="welcome-recent-list" role="list"></ul>
+        </div>
+
         <div class="welcome-shortcuts-section">
           <div class="welcome-col-title">Keyboard shortcuts</div>
           <!-- Filled by shortcuts-display.js renderShortcutsUI() from the
@@ -583,6 +591,24 @@
                  aria-label="Printer friendly PDFs">
               <button type="button" data-value="true" aria-pressed="true">On</button>
               <button type="button" data-value="false" aria-pressed="false">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Word wrap</label>
+            <div class="segmented" id="setting-word-wrap" role="radiogroup"
+                 aria-label="Editor word wrap">
+              <button type="button" data-value="true" aria-pressed="true">On</button>
+              <button type="button" data-value="false" aria-pressed="false">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Spell check</label>
+            <div class="segmented" id="setting-spell-check" role="radiogroup"
+                 aria-label="Editor spell check">
+              <button type="button" data-value="true" aria-pressed="false">On</button>
+              <button type="button" data-value="false" aria-pressed="true">Off</button>
             </div>
           </div>
         </div>
