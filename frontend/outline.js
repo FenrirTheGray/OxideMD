@@ -1,8 +1,10 @@
-// Document outline popover. Lists the active tab's headings (ATX
+// Document outline sidebar. Lists the active tab's headings (ATX
 // `#`..`######` and setext text/underline pairs) and jumps the editor
-// or preview when one is clicked. Anchored to btn-outline in the top
-// toolbar; toggled open by click and closed by outside click /
-// Escape / a heading selection.
+// or preview when one is clicked. Docked on the right side of the
+// window (the folder browser is the left sidebar); the btn-outline
+// toolbar button toggles it open/closed in read mode. In edit mode
+// that same button is repurposed to show/hide the live preview pane —
+// see syncToolbar() in tabs.js and togglePreviewPane() in editor.js.
 //
 // Parsing: scan tab.raw line-by-line tracking fenced-code state so
 // `# foo` inside a ``` block isn't mistaken for a heading. Setext-style
@@ -13,11 +15,13 @@
 // so jump-to-editor lands the cursor on the heading itself.
 
 import {
+  invoke,
+  state,
   contentEl, contentScroll,
-  btnOutline, outlinePopover,
+  btnOutline, outlineSidebar, outlineSidebarBody, outlineSidebarCloseBtn,
 } from './state.js';
-import { activeTab } from './tabs.js';
-import { getEditorView } from './editor.js';
+import { activeTab, syncToolbar } from './tabs.js';
+import { getEditorView, togglePreviewPane } from './editor.js';
 import { EditorSelection } from '@codemirror/state';
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
@@ -115,86 +119,97 @@ function renderOutline(entries) {
 }
 
 let isOpen = false;
-let outsideClickBound = false;
 
-function positionPopover() {
-  const r = btnOutline.getBoundingClientRect();
-  outlinePopover.style.position = 'fixed';
-  outlinePopover.style.top = `${Math.round(r.bottom + 6)}px`;
-  // Right-align under the button so longer headings flow leftward.
-  outlinePopover.style.right = `${Math.round(window.innerWidth - r.right)}px`;
-  outlinePopover.style.left = 'auto';
+export function isOutlineOpen() {
+  return isOpen;
 }
 
-function onOutsideClick(e) {
+// Repaint the outline list from the active tab's current buffer. Cheap
+// enough to call on every open, tab switch, edit-mode change, and
+// (debounced) doc edit — skips entirely while the sidebar is hidden.
+export function refreshOutline() {
   if (!isOpen) return;
-  if (outlinePopover.contains(e.target)) return;
-  if (btnOutline.contains(e.target)) return;
-  closeOutline();
+  const tab = activeTab();
+  const entries = tab ? parseOutline(tab.raw ?? '') : [];
+  outlineSidebarBody.innerHTML = renderOutline(entries);
 }
 
-function onEscape(e) {
-  if (!isOpen) return;
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    closeOutline();
-    btnOutline.focus();
-  }
+// Persist the open/closed state the way sidebar_width is persisted —
+// debounced write through save_config_cmd so a rapid toggle doesn't
+// thrash the config file.
+let pendingVisibilitySave = null;
+function persistOutlineVisible(visible) {
+  if (!state.config) return;
+  state.config.outline_visible = visible;
+  if (pendingVisibilitySave) clearTimeout(pendingVisibilitySave);
+  pendingVisibilitySave = setTimeout(() => {
+    pendingVisibilitySave = null;
+    invoke('save_config_cmd', { config: state.config }).catch(() => {});
+  }, 150);
 }
 
 export function openOutline() {
-  const tab = activeTab();
-  if (!tab) return;
-  const entries = parseOutline(tab.raw ?? '');
-  outlinePopover.innerHTML = renderOutline(entries);
-  outlinePopover.classList.remove('hidden');
-  outlinePopover.setAttribute('aria-hidden', 'false');
-  btnOutline.setAttribute('aria-expanded', 'true');
-  positionPopover();
+  if (isOpen) return;
   isOpen = true;
-  if (!outsideClickBound) {
-    document.addEventListener('mousedown', onOutsideClick, true);
-    document.addEventListener('keydown', onEscape, true);
-    window.addEventListener('resize', positionPopover);
-    outsideClickBound = true;
-  }
-  // Focus first item for keyboard nav.
-  requestAnimationFrame(() => {
-    const first = outlinePopover.querySelector('.outline-item');
-    if (first) first.focus();
-  });
+  outlineSidebar.classList.remove('hidden');
+  refreshOutline();
+  syncToolbar();
 }
 
 export function closeOutline() {
   if (!isOpen) return;
-  outlinePopover.classList.add('hidden');
-  outlinePopover.setAttribute('aria-hidden', 'true');
-  btnOutline.setAttribute('aria-expanded', 'false');
   isOpen = false;
-  if (outsideClickBound) {
-    document.removeEventListener('mousedown', onOutsideClick, true);
-    document.removeEventListener('keydown', onEscape, true);
-    window.removeEventListener('resize', positionPopover);
-    outsideClickBound = false;
-  }
+  outlineSidebar.classList.add('hidden');
+  syncToolbar();
 }
 
 export function toggleOutline() {
   if (isOpen) closeOutline();
   else openOutline();
+  persistOutlineVisible(isOpen);
 }
 
-if (btnOutline && outlinePopover) {
+// Restore the persisted open/closed state at startup. Called from
+// app.js init() after state.config is loaded; doesn't persist (the
+// value already came from config).
+export function applyOutlineVisibility() {
+  if (state.config?.outline_visible) openOutline();
+  else closeOutline();
+}
+
+// The outline button is mode-aware: in read mode it toggles this
+// right-side sidebar; in edit mode it toggles the existing split
+// preview pane (delegated to editor.js, which owns the split state).
+// Both paths repaint the button's label / aria-pressed via
+// syncToolbar() — toggleOutline() does it itself; the preview path
+// needs the explicit call.
+if (btnOutline) {
   btnOutline.addEventListener('click', (e) => {
     e.preventDefault();
-    toggleOutline();
+    const tab = activeTab();
+    if (tab?.editing) {
+      togglePreviewPane();
+      syncToolbar();
+    } else {
+      toggleOutline();
+    }
   });
-  outlinePopover.addEventListener('click', (e) => {
+}
+
+if (outlineSidebarCloseBtn) {
+  outlineSidebarCloseBtn.addEventListener('click', () => {
+    closeOutline();
+    persistOutlineVisible(false);
+    btnOutline.focus();
+  });
+}
+
+if (outlineSidebar) {
+  outlineSidebar.addEventListener('click', (e) => {
     const item = e.target.closest('.outline-item');
     if (!item) return;
     const tab = activeTab();
     if (!tab) return;
-    closeOutline();
     if (tab.editing) {
       const line = parseInt(item.dataset.line, 10);
       if (Number.isFinite(line)) jumpToHeadingInEditor(line);

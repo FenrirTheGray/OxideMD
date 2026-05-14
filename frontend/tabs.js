@@ -13,7 +13,8 @@ import {
 } from './state.js';
 import { clearSearch } from './search.js';
 import { syncWatcher, highlightActiveTreeItem } from './folder.js';
-import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop } from './editor.js';
+import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, isPreviewVisible } from './editor.js';
+import { isOutlineOpen, refreshOutline } from './outline.js';
 import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
 import { readDraft, clearDraft } from './draft-store.js';
 
@@ -44,7 +45,29 @@ export function syncToolbar() {
   const editing = !!tab?.editing;
   btnReload.disabled = !hasTab || editing;
   btnSearch.disabled = !hasTab || editing;
-  if (btnOutline) btnOutline.disabled = !hasTab;
+  // Outline button is mode-aware (see outline.js): read mode toggles the
+  // right-side outline sidebar; edit mode toggles the split preview pane.
+  // Repaint its label / tooltip / aria-pressed for the current mode so
+  // the affordance never lies about what the next click will do.
+  if (btnOutline) {
+    btnOutline.disabled = !hasTab;
+    const labelEl = btnOutline.querySelector('.btn-label');
+    if (editing) {
+      const previewing = isPreviewVisible();
+      btnOutline.setAttribute('aria-pressed', previewing ? 'true' : 'false');
+      btnOutline.setAttribute('aria-label', previewing ? 'Hide preview pane' : 'Show preview pane');
+      btnOutline.title = previewing ? 'Hide preview pane' : 'Show preview pane';
+      btnOutline.removeAttribute('aria-controls');
+      if (labelEl) labelEl.textContent = 'Preview';
+    } else {
+      const open = isOutlineOpen();
+      btnOutline.setAttribute('aria-pressed', open ? 'true' : 'false');
+      btnOutline.setAttribute('aria-label', 'Toggle document outline');
+      btnOutline.title = 'Document outline';
+      btnOutline.setAttribute('aria-controls', 'outline-sidebar');
+      if (labelEl) labelEl.textContent = 'Outline';
+    }
+  }
   // Printing works in both read and edit mode — print.js renders the
   // live buffer fresh — so this only gates on having a tab at all.
   btnPrint.disabled = !hasTab;
@@ -223,6 +246,9 @@ export function applyActiveTab() {
   setStatusFilePath(tab.path || '');
   applyZoom(tab.zoom);
   highlightActiveTreeItem();
+  // Keep the outline sidebar in sync with whichever document is now
+  // active (no-op while the sidebar is hidden).
+  refreshOutline();
 
   if (!tab.editing) {
     requestAnimationFrame(() => {
@@ -246,6 +272,8 @@ export function showWelcome() {
   zoomLabel.textContent = '100%';
   highlightActiveTreeItem();
   clearStatus();
+  // No active document — clear the outline list (no-op while hidden).
+  refreshOutline();
 }
 
 export function setStatusFilePath(path) {
