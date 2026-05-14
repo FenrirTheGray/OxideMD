@@ -17,9 +17,11 @@ import {
 } from './state.js';
 import {
   loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
+  createNewFile,
 } from './tabs.js';
 import { applyFormat } from './editor-format.js';
 import { getEditorView } from './editor.js';
+import { printActiveTab } from './print.js';
 import { EditorSelection } from '@codemirror/state';
 
 // ── Menu renderer ────────────────────────────────────────────────────────
@@ -226,6 +228,11 @@ function buildTreeMenu(nodeEl) {
   if (!isDir) {
     items.push({ label: 'Open in New Tab', action: () => loadFile(path) });
     items.push({ separator: true });
+  } else {
+    // Right-clicking a folder offers "New File…" rooted at that folder,
+    // so the save dialog opens inside the directory the user clicked.
+    items.push({ label: 'New File…', action: () => createNewFile(path) });
+    items.push({ separator: true });
   }
   items.push({ label: 'Copy Path', action: () => copyText(path) });
   return items;
@@ -310,6 +317,8 @@ function buildMarkdownMenu(root, target) {
 
   if (hasSelection) items.push({ label: 'Copy', action: () => document.execCommand('copy') });
   items.push({ label: 'Select All', action: () => selectAllIn(root) });
+  items.push({ separator: true });
+  items.push({ label: 'Print…', action: () => printActiveTab() });
   return items;
 }
 

@@ -101,6 +101,66 @@ pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/// Opens a native save dialog and creates a new, empty markdown file at
+/// the chosen location, returning it as an `OpenResult` so the frontend
+/// can open it in a tab exactly like `open_file`. `dir`, when provided
+/// and non-empty, seeds the dialog's starting directory — used by the
+/// sidebar's "New File…" entry so the file lands inside the folder the
+/// user right-clicked. Returns `Ok(None)` when the user cancels.
+///
+/// The native save dialog handles the overwrite confirmation itself, so
+/// writing an empty string here is the expected, user-approved outcome.
+#[tauri::command]
+pub async fn create_file(
+    app: tauri::AppHandle,
+    dir: Option<String>,
+) -> Result<Option<OpenResult>, String> {
+    let window = app.get_webview_window("main").unwrap();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let mut builder = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
+            .set_file_name("untitled.md");
+        if let Some(d) = dir.as_deref() {
+            if !d.is_empty() {
+                builder = builder.set_directory(d);
+            }
+        }
+        builder.blocking_save_file().map(|p| p.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let chosen = match picked {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = ensure_md_extension(PathBuf::from(&chosen));
+        fs::write(&path, "").map_err(|e| e.to_string())?;
+        let canonical = fs::canonicalize(&path).unwrap_or(path);
+        let canonical = strip_windows_verbatim(canonical);
+        let base_dir = canonical.parent();
+        let html = markdown::render("", base_dir);
+        let title = canonical
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("OxideMD")
+            .to_string();
+        Ok(Some(OpenResult {
+            html,
+            title,
+            path: canonical.to_string_lossy().into_owned(),
+            raw: String::new(),
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 pub struct FolderTree {
     pub root: String,
@@ -134,6 +194,22 @@ fn is_md_file(path: &std::path::Path) -> bool {
         .and_then(|e| e.to_str())
         .map(|e| MD_EXTS.contains(&e.to_lowercase().as_str()))
         .unwrap_or(false)
+}
+
+/// Normalizes a path chosen from the "new file" save dialog so it ends
+/// with a markdown extension. If it already has a recognized markdown
+/// extension it is left alone; otherwise `.md` is appended (covers a
+/// bare name typed with no extension). A non-markdown extension is kept
+/// and `.md` appended rather than replaced, so the user's intent is
+/// never silently discarded.
+fn ensure_md_extension(path: PathBuf) -> PathBuf {
+    if is_md_file(&path) {
+        path
+    } else {
+        let mut s = path.into_os_string();
+        s.push(".md");
+        PathBuf::from(s)
+    }
 }
 
 /// Descends into every non-hidden directory under `dir` and appends any
@@ -577,6 +653,39 @@ mod tests {
         assert!(is_md_file(std::path::Path::new("a.mkd")));
         assert!(!is_md_file(std::path::Path::new("a.txt")));
         assert!(!is_md_file(std::path::Path::new("a")));
+    }
+
+    #[test]
+    fn ensure_md_extension_appends_when_missing() {
+        assert_eq!(
+            ensure_md_extension(PathBuf::from("notes")).to_string_lossy(),
+            "notes.md"
+        );
+    }
+
+    #[test]
+    fn ensure_md_extension_keeps_existing_markdown_extensions() {
+        assert_eq!(
+            ensure_md_extension(PathBuf::from("notes.md")).to_string_lossy(),
+            "notes.md"
+        );
+        assert_eq!(
+            ensure_md_extension(PathBuf::from("notes.markdown")).to_string_lossy(),
+            "notes.markdown"
+        );
+        assert_eq!(
+            ensure_md_extension(PathBuf::from("notes.MKD")).to_string_lossy(),
+            "notes.MKD"
+        );
+    }
+
+    #[test]
+    fn ensure_md_extension_appends_to_non_markdown_extension() {
+        // A non-markdown extension is preserved, not replaced.
+        assert_eq!(
+            ensure_md_extension(PathBuf::from("notes.txt")).to_string_lossy(),
+            "notes.txt.md"
+        );
     }
 
     #[test]

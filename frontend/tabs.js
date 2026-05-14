@@ -6,7 +6,7 @@ import {
   tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
   editorPane, previewPane,
   btnReload, btnSearch, btnOutline, btnZoomIn, btnZoomOut, zoomLabel,
-  btnModeToggle, btnSave, btnDiscard, editToolbar,
+  btnModeToggle, btnSave, btnDiscard, btnPrint, editToolbar,
   filePathEl, statusIndicator, statusText,
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
@@ -45,6 +45,9 @@ export function syncToolbar() {
   btnReload.disabled = !hasTab || editing;
   btnSearch.disabled = !hasTab || editing;
   if (btnOutline) btnOutline.disabled = !hasTab;
+  // Printing works in both read and edit mode — print.js renders the
+  // live buffer fresh — so this only gates on having a tab at all.
+  btnPrint.disabled = !hasTab;
   btnZoomIn.disabled  = !hasTab;
   btnZoomOut.disabled = !hasTab;
   zoomLabel.disabled  = !hasTab;
@@ -576,6 +579,31 @@ export async function openFilePicker() {
   try {
     const paths = await invoke('pick_file');
     for (const path of paths) await loadFile(path);
+  } catch {} finally {
+    pickerBackdrop.classList.add('hidden');
+    state.filePickerOpen = false;
+  }
+}
+
+// Create a brand-new Markdown file: the Rust `create_file` command shows
+// a native save dialog (optionally rooted at `dir` — used by the folder
+// tree's "New File…" item so it lands inside the right-clicked folder),
+// writes an empty file, and returns it in the same shape as open_file.
+// On success we open it in a fresh tab and drop straight into edit mode
+// so the user can start typing immediately — a freshly-created file has
+// nothing to read. The picker backdrop mirrors openFilePicker so the
+// app dims while the native dialog is up.
+export async function createNewFile(dir = null) {
+  if (hasActiveOverlay()) return;
+  state.filePickerOpen = true;
+  pickerBackdrop.classList.remove('hidden');
+  try {
+    const result = await invoke('create_file', { dir });
+    if (result) {
+      openInNewTab(result.path, result.title, result.html, result.raw ?? '');
+      // openInNewTab made the new tab active, so enterEditMode() acts on it.
+      await enterEditMode();
+    }
   } catch {} finally {
     pickerBackdrop.classList.add('hidden');
     state.filePickerOpen = false;

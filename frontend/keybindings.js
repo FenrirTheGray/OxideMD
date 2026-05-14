@@ -190,11 +190,13 @@ export function accelToTokens(str) {
 // Linux users can rebind tab navigation too.
 
 export const ACTIONS = [
+  { id: 'newFile',       category: 'File', label: 'New file',         defaultAccel: 'Mod+N' },
   { id: 'openFile',      category: 'File', label: 'Open file',        defaultAccel: 'Mod+O' },
   { id: 'openFolder',    category: 'File', label: 'Open folder',      defaultAccel: 'Mod+Shift+O' },
   { id: 'closeFolder',   category: 'File', label: 'Close folder',     defaultAccel: 'Mod+Shift+W' },
   { id: 'save',          category: 'File', label: 'Save file',        defaultAccel: 'Mod+S' },
   { id: 'reload',        category: 'File', label: 'Reload file',      defaultAccel: 'Mod+R' },
+  { id: 'print',         category: 'File', label: 'Print to PDF',     defaultAccel: 'Mod+P' },
 
   { id: 'toggleEdit',    category: 'View', label: 'Toggle edit mode', defaultAccel: 'Mod+E' },
   { id: 'cycleSplitMode',category: 'View', label: 'Cycle split layout', defaultAccel: 'Mod+\\' },

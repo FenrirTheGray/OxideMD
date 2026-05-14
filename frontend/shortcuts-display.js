@@ -10,7 +10,8 @@ import { ACTIONS, getAction, accelToTokens } from './keybindings.js';
 import {
   state,
   shortcutsPopover, contentEl,
-  btnOpen, btnOpenFolder, btnReload, btnSearch, btnModeToggle, btnSave,
+  btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnPrint,
+  btnModeToggle, btnSave,
   btnZoomOut, btnZoomIn, zoomLabel, sidebarCloseBtn, tabBarEl,
 } from './state.js';
 
@@ -30,9 +31,11 @@ const WELCOME_STATIC = [
 // combo. The registry's `label` is sometimes too generic ("Search" vs
 // "Search in document"), so we keep tooltip strings local.
 const TOOLBAR_LABELS = {
+  newFile:      'New file',
   openFile:     'Open file',
   openFolder:   'Open folder',
   reload:       'Reload file',
+  print:        'Print to PDF',
   toggleSearch: 'Search',
   toggleEdit:   'Edit Markdown source',
   save:         'Save file',
@@ -143,9 +146,11 @@ function renderWelcome() {
 
 function renderToolbarTooltips() {
   const map = [
+    [btnNew,          'newFile'],
     [btnOpen,         'openFile'],
     [btnOpenFolder,   'openFolder'],
     [btnReload,       'reload'],
+    [btnPrint,        'print'],
     [btnSearch,       'toggleSearch'],
     [btnModeToggle,   'toggleEdit'],
     [btnSave,         'save'],
