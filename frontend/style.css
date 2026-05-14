@@ -2152,7 +2152,7 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
 #settings-dialog {
   background: var(--bg-settings);
   border-radius: 14px;
-  width: 428px;
+  width: 520px;
   box-shadow: var(--shadow-dialog);
   display: flex;
   flex-direction: column;
@@ -3150,8 +3150,9 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
   border-radius: 3px;
 }
 
-/* Hide reset button when About tab is active; keep Cancel/Save right-aligned */
-#settings-dialog.on-about #settings-reset { display: none; }
+/* About tab has no resettable/persisted settings: Reset and Save are
+   hidden via `el.hidden` in activateSettingsTab. The `on-about` class
+   still drives Cancel's right-alignment so it sits flush on that tab. */
 #settings-dialog.on-about #settings-cancel { margin-left: auto; }
 
 /* ── Edit toggle ───────────────────────────────────────────────────── */

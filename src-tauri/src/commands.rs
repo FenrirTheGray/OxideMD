@@ -1,4 +1,6 @@
-use crate::config::{add_recent_file, fonts_dir, load_config, save_config, Config, MD_EXTS_DEFAULT};
+use crate::config::{
+    add_recent_file, fonts_dir, load_config, save_config, themes_dir, Config, MD_EXTS_DEFAULT,
+};
 use crate::markdown;
 use base64::Engine;
 use std::fs;
@@ -919,15 +921,26 @@ pub async fn export_theme(
     .map_err(|e| e.to_string())?
 }
 
+/// The result of a successful theme import: the picked file's stem (its
+/// name without the `.json` extension) plus the parsed flat color map.
+/// The stem is surfaced so the frontend can pre-fill the "save as" name
+/// when persisting the imported theme via `save_custom_theme`.
+#[derive(serde::Serialize)]
+pub struct ImportedTheme {
+    pub name: String,
+    pub colors: std::collections::HashMap<String, String>,
+}
+
 /// Imports a color configuration from a `.json` file the user picks via
-/// a native open dialog. Returns the parsed flat map (see `export_theme`
-/// for the shape) on success, or `Ok(None)` when the user cancels. A
-/// file that isn't a flat JSON object of strings is surfaced as `Err`.
-/// The frontend validates the field names and values before applying.
+/// a native open dialog. Returns the picked file's stem plus the parsed
+/// flat map (see `export_theme` for the shape) on success, or `Ok(None)`
+/// when the user cancels. A file that isn't a flat JSON object of strings
+/// is surfaced as `Err`. The frontend validates the field names and
+/// values before applying.
 #[tauri::command]
 pub async fn import_theme(
     app: tauri::AppHandle,
-) -> Result<Option<std::collections::HashMap<String, String>>, String> {
+) -> Result<Option<ImportedTheme>, String> {
     let window = app.get_webview_window("main").unwrap();
     let picked = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
@@ -946,14 +959,145 @@ pub async fn import_theme(
     };
 
     tauri::async_runtime::spawn_blocking(move || {
+        let path = PathBuf::from(&chosen);
+        let name = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or("theme")
+            .to_string();
         let content =
-            fs::read_to_string(&chosen).map_err(|e| format!("Failed to read theme: {e}"))?;
-        let map: std::collections::HashMap<String, String> = serde_json::from_str(&content)
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read theme: {e}"))?;
+        let colors: std::collections::HashMap<String, String> = serde_json::from_str(&content)
             .map_err(|e| format!("Not a valid theme file: {e}"))?;
-        Ok(Some(map))
+        Ok(Some(ImportedTheme { name, colors }))
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+pub struct ThemeInfo {
+    pub name: String,
+    pub filename: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct CustomTheme {
+    pub name: String,
+    pub filename: String,
+    pub colors: std::collections::HashMap<String, String>,
+}
+
+/// Sanitizes a user-supplied theme name into a safe filename stem: drops
+/// every char outside `[A-Za-z0-9 _-]` (which removes path separators and
+/// `.` along the way, so `..` and `foo/bar` can't escape the directory),
+/// trims, and collapses internal whitespace runs to a single space. Falls
+/// back to `"theme"` if nothing usable remains.
+fn sanitize_theme_stem(name: &str) -> String {
+    let filtered: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '_' | '-'))
+        .collect();
+    let collapsed = filtered.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        "theme".to_string()
+    } else {
+        collapsed
+    }
+}
+
+/// Persists a color theme into the custom-themes directory so it appears
+/// in the frontend's custom-themes dropdown across restarts. `name` is
+/// sanitized into a safe filename stem; an existing file with that stem
+/// is overwritten. Mirrors `install_font`.
+#[tauri::command]
+pub async fn save_custom_theme(
+    name: String,
+    theme: std::collections::HashMap<String, String>,
+) -> Result<ThemeInfo, String> {
+    let stem = sanitize_theme_stem(&name);
+    let dir = themes_dir().ok_or("Could not determine themes directory")?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let filename = format!("{stem}.json");
+    let dest = dir.join(&filename);
+    let json = serde_json::to_string_pretty(&theme)
+        .map_err(|e| format!("Failed to serialize theme: {e}"))?;
+    fs::write(&dest, json).map_err(|e| format!("Failed to write theme: {e}"))?;
+
+    Ok(ThemeInfo {
+        name: stem,
+        filename,
+    })
+}
+
+/// Lists every persisted custom theme by reading `themes_dir()`. Files
+/// that don't parse as a flat string map are skipped rather than aborting
+/// the listing. Sorted by name. Mirrors `list_custom_fonts`.
+#[tauri::command]
+pub fn list_custom_themes() -> Vec<CustomTheme> {
+    let dir = match themes_dir() {
+        Some(d) => d,
+        None => return vec![],
+    };
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    let mut themes = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_json = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("json"))
+            .unwrap_or(false);
+        if !is_json {
+            continue;
+        }
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let colors: std::collections::HashMap<String, String> =
+            match serde_json::from_str(&content) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let name = path
+            .file_stem()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&filename)
+            .to_string();
+        themes.push(CustomTheme {
+            name,
+            filename,
+            colors,
+        });
+    }
+    themes.sort_by(|a, b| a.name.cmp(&b.name));
+    themes
+}
+
+/// Removes a persisted custom theme by filename. Rejects any `filename`
+/// containing a path separator or `..` so the call can't escape the
+/// themes directory. Mirrors `remove_font`.
+#[tauri::command]
+pub fn delete_custom_theme(filename: String) -> Result<(), String> {
+    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+        return Err("Invalid theme filename".to_string());
+    }
+    let dir = themes_dir().ok_or("Could not determine themes directory")?;
+    let path = dir.join(&filename);
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| format!("Failed to remove theme: {e}"))?;
+    }
+    Ok(())
 }
 
 /// Returns true if `url` uses a scheme we're willing to hand off to the

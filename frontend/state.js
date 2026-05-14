@@ -78,6 +78,7 @@ export const state = {
   searchCaseSensitive: false,
   originalContent: '',
   customFonts: [],
+  customThemes: [],
   fontStyleEl: null,
   activeFontFilename: null,
   copyResetTimer: null,

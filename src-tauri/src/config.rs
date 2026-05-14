@@ -74,8 +74,8 @@ impl Default for Config {
             preserve_line_breaks: false,
             sidebar_width: 240,
             outline_visible: false,
-            window_width: 600,
-            window_height: 700,
+            window_width: 900,
+            window_height: 760,
             window_maximized: false,
             keybindings: HashMap::new(),
             editor_word_wrap: true,
@@ -103,6 +103,11 @@ fn config_path() -> Option<PathBuf> {
 pub fn fonts_dir() -> Option<PathBuf> {
     ProjectDirs::from("com", "oxidemd", "OxideMD")
         .map(|dirs| dirs.config_dir().join("fonts"))
+}
+
+pub fn themes_dir() -> Option<PathBuf> {
+    ProjectDirs::from("com", "oxidemd", "OxideMD")
+        .map(|dirs| dirs.config_dir().join("themes"))
 }
 
 pub fn load_config() -> Config {
