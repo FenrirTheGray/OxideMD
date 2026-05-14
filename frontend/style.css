@@ -2795,6 +2795,24 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
   letter-spacing: 0.01em;
 }
 
+/* Section headings inside the Colors panel — split the content swatches
+   from the interface-palette swatches, with sub-labels per palette
+   group. Styled after .settings-preview-label. */
+.color-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+  margin-top: 6px;
+}
+.color-subsection-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.01em;
+}
+
 #settings-footer {
   display: flex;
   align-items: center;

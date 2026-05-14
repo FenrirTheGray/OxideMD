@@ -20,6 +20,13 @@ pub struct Config {
     pub code_accent_color: String,
     pub note_bg_color: String,
     pub note_accent_color: String,
+    // Sparse overrides for the app's base UI palette, keyed by the CSS
+    // custom-property name without the leading `--` (e.g. "bg",
+    // "bg-toolbar", "fg-dim"). Missing entries fall back to the
+    // theme-dark / theme-light defaults in style.css, so existing
+    // configs (and the built-in themes) are unchanged. Populated when
+    // the user customizes Interface colors or imports a full theme.
+    pub palette: HashMap<String, String>,
     pub toolbar_compact: bool,
     pub printer_friendly: bool,
     pub preserve_line_breaks: bool,
@@ -69,6 +76,7 @@ impl Default for Config {
             code_accent_color: "#61afef".into(),
             note_bg_color: "#2a2f3a".into(),
             note_accent_color: "#c678dd".into(),
+            palette: HashMap::new(),
             toolbar_compact: false,
             printer_friendly: true,
             preserve_line_breaks: false,
