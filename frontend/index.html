@@ -80,7 +80,7 @@
         <span class="btn-label">Search</span>
       </button>
 
-      <button id="btn-outline" title="Document outline" aria-label="Open document outline" aria-haspopup="true" aria-expanded="false" disabled>
+      <button id="btn-outline" type="button" title="Document outline" aria-label="Toggle document outline" aria-pressed="false" aria-controls="outline-sidebar" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="3" y1="6"  x2="21" y2="6"/>
           <line x1="7" y1="12" x2="21" y2="12"/>
@@ -133,12 +133,6 @@
        registry, so rebinds in Settings → Shortcuts are reflected here. -->
   <div id="shortcuts-popover" class="hidden" role="dialog"
        aria-label="Keyboard shortcuts" aria-hidden="true"></div>
-
-  <!-- ── Outline popover (anchored to btn-outline) ──────────────────── -->
-  <!-- Filled live by outline.js when opened; lists the active document's
-       markdown headings and jumps the editor/preview when one is clicked. -->
-  <div id="outline-popover" class="hidden" role="dialog"
-       aria-label="Document outline" aria-hidden="true"></div>
 
   <!-- ── Search bar ─────────────────────────────────────────────────── -->
   <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
@@ -452,6 +446,17 @@
       </div>
     </main>
     </div><!-- /#content-scroll -->
+
+    <!-- Document outline sidebar (docked right; toggled by btn-outline in
+         read mode). Filled live by outline.js — lists the active document's
+         markdown headings and jumps the editor/preview when one is clicked. -->
+    <aside id="outline-sidebar" class="hidden" aria-label="Document outline">
+      <div id="outline-sidebar-header">
+        <span id="outline-sidebar-title">Outline</span>
+        <button id="outline-sidebar-close" title="Close outline" aria-label="Close outline">&#x2715;</button>
+      </div>
+      <div id="outline-sidebar-body"></div>
+    </aside>
   </div>
 
   <!-- ── Status bar ─────────────────────────────────────────────────── -->

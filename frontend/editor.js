@@ -22,6 +22,7 @@ import { closeSearch } from './search.js';
 import { applyFormat } from './editor-format.js';
 import { registerHandler, dispatchKey } from './keybindings.js';
 import { writeDraft, clearDraft } from './draft-store.js';
+import { refreshOutline } from './outline.js';
 
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec } from '@codemirror/state';
@@ -233,6 +234,9 @@ function buildView(tab) {
     updateCounts(newDoc);
     scheduleDraftWrite(cur);
     schedulePreviewRender();
+    // Headings may have been added/removed/edited — keep the outline
+    // sidebar fresh. Cheap parse, and a no-op while it's hidden.
+    refreshOutline();
   };
 
   const updateListener = EditorView.updateListener.of((u) => {
@@ -491,6 +495,9 @@ export async function enterEditMode() {
   applyZoom(tab.zoom);
   syncToolbar();
   renderTabBar();
+  // Outline jump targets differ by mode (editor lines vs. preview
+  // headings); repaint so clicks route correctly.
+  refreshOutline();
 }
 
 export function exitEditMode({ keepHtml = true } = {}) {
@@ -507,6 +514,7 @@ export function exitEditMode({ keepHtml = true } = {}) {
   applyZoom(tab.zoom);
   syncToolbar();
   renderTabBar();
+  refreshOutline();
   requestAnimationFrame(() => { contentScroll.scrollTop = tab.scrollTop || 0; });
 }
 
@@ -884,4 +892,35 @@ registerHandler('cycleSplitMode', (e) => {
   const cur = tab.splitMode || 'split';
   const next = SPLIT_MODES[(SPLIT_MODES.indexOf(cur) + 1) % SPLIT_MODES.length];
   applySplitMode(next, true);
+  // The outline button mirrors split state in edit mode (aria-pressed /
+  // tooltip / label) — repaint it so a Mod+\ cycle doesn't leave it stale.
+  syncToolbar();
 });
+
+// Edit-mode repurposing of the outline button: show/hide the existing
+// split preview pane. There's no parallel "preview visible" flag —
+// `tab.splitMode` stays the single source of truth. "Hidden" means
+// the editor-only mode; toggling back restores whichever previewing
+// mode the user last had ('split' or 'preview', tracked per-tab so a
+// preview-only user doesn't snap to split). `cycleSplitMode` keeps
+// cycling all three modes independently — both write through
+// applySplitMode, so they never disagree.
+export function togglePreviewPane() {
+  const tab = activeTab();
+  if (!tab?.editing) return;
+  const cur = tab.splitMode || 'split';
+  if (cur === 'editor') {
+    applySplitMode(tab.lastPreviewMode || 'split', true);
+  } else {
+    tab.lastPreviewMode = cur;
+    applySplitMode('editor', true);
+  }
+}
+
+// Whether the live preview pane is currently visible — drives the
+// outline button's edit-mode aria-pressed / tooltip in syncToolbar().
+export function isPreviewVisible() {
+  const tab = activeTab();
+  if (!tab?.editing) return false;
+  return (tab.splitMode || 'split') !== 'editor';
+}

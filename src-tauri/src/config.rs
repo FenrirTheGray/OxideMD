@@ -24,6 +24,10 @@ pub struct Config {
     pub printer_friendly: bool,
     pub preserve_line_breaks: bool,
     pub sidebar_width: u32,
+    // Whether the right-side document outline sidebar is shown. Toggled
+    // by the toolbar's outline button in read mode; persisted so the
+    // layout choice survives a restart, mirroring sidebar_width.
+    pub outline_visible: bool,
     pub window_width: u32,
     pub window_height: u32,
     pub window_maximized: bool,
@@ -68,6 +72,7 @@ impl Default for Config {
             printer_friendly: true,
             preserve_line_breaks: false,
             sidebar_width: 240,
+            outline_visible: false,
             window_width: 600,
             window_height: 700,
             window_maximized: false,

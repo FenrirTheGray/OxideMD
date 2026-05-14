@@ -221,27 +221,95 @@ body.maximized {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Outline popover ──────────────────────────────────────────────────
-   Anchored to btn-outline; positioning is set inline by outline.js
-   (top + right) so the popover stays under the button as the window
-   resizes. Indentation per-row is also inline (depends on min heading
-   level in the doc). Visuals match the shortcuts-popover idiom. */
-#outline-popover {
-  position: fixed;
-  z-index: 180;
-  width: 320px;
-  max-height: calc(100vh - 80px);
+/* ── Outline sidebar ──────────────────────────────────────────────────
+   Docked on the right side of #main-container (the folder browser is
+   the left sidebar). Toggled by btn-outline in read mode; structure
+   and visuals mirror #sidebar so the two panels feel like a pair.
+   Per-row indentation is inline (depends on the min heading level in
+   the doc). */
+#outline-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-toolbar);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+}
+#outline-sidebar.hidden { display: none; }
+
+#outline-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+#outline-sidebar-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#outline-sidebar-close {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease),
+              box-shadow var(--dur-sm) var(--ease);
+}
+#outline-sidebar-close:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#outline-sidebar-close:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#outline-sidebar-body {
+  flex: 1;
   overflow-y: auto;
-  background: var(--bg-settings);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow-md);
   padding: 6px 0;
   font-size: 12.5px;
   color: var(--fg);
-  animation: shortcuts-pop var(--dur) var(--ease-out);
 }
-#outline-popover.hidden { display: none; }
+#outline-sidebar-body::-webkit-scrollbar { width: 10px; }
+#outline-sidebar-body::-webkit-scrollbar-track { background: transparent; }
+#outline-sidebar-body::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+#outline-sidebar-body:hover::-webkit-scrollbar-thumb { background-color: var(--fg-muted); }
+
 .outline-empty {
   padding: 14px 16px;
   color: var(--fg-muted, var(--fg-toolbar));

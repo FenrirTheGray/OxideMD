@@ -34,7 +34,7 @@ import { activeTab } from './tabs.js';
 import { printActiveTab } from './print.js';
 import './contextmenu.js';
 import './window-size.js';
-import './outline.js';
+import { applyOutlineVisibility } from './outline.js';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -46,6 +46,8 @@ async function init() {
     await loadCustomFont(state.config.font_family.slice(7));
   }
   applyConfig(state.config);
+  // Restore the right-side outline sidebar's persisted open/closed state.
+  applyOutlineVisibility();
 
   invoke('list_recent_files').then(applyRecentFiles).catch(() => {});
 
