@@ -98,6 +98,96 @@ function setBodyTheme(resolved) {
   document.body.classList.add(`theme-${resolved}`);
 }
 
+// ── Base UI palette ────────────────────────────────────────────────────────
+// Every hex-valued token in the `body.theme-dark` / `body.theme-light`
+// blocks of style.css, in display order and grouped for the Colors tab.
+// `Config.palette` holds sparse overrides keyed by these same keys (the
+// CSS custom-property name minus the leading `--`); a missing key falls
+// back to DEFAULT_PALETTE below.
+const BASE_PALETTE_GROUPS = [
+  { name: 'Backgrounds', tokens: [
+    ['bg',             'Page background'],
+    ['bg-toolbar',     'Toolbar & tabs'],
+    ['bg-elevated',    'Panels & popovers'],
+    ['bg-code',        'Code block surface'],
+    ['bg-table-hd',    'Table header'],
+    ['bg-table-row',   'Table row'],
+    ['bg-search',      'Search bar'],
+    ['bg-settings',    'Settings panel'],
+    ['bg-settings-hd', 'Settings header'],
+    ['bg-settings-ft', 'Settings footer'],
+  ] },
+  { name: 'Text', tokens: [
+    ['fg',         'Body text'],
+    ['fg-dim',     'Dim text'],
+    ['fg-muted',   'Muted text'],
+    ['fg-toolbar', 'Toolbar text'],
+  ] },
+  { name: 'Borders & accents', tokens: [
+    ['border',       'Borders'],
+    ['border-focus', 'Focus ring'],
+    ['accent',       'Accent'],
+    ['accent-2',     'Secondary accent'],
+    ['danger',       'Danger'],
+    ['quote-border', 'Blockquote bar'],
+  ] },
+  { name: 'Links', tokens: [
+    ['link',       'Link'],
+    ['link-hover', 'Link hover'],
+  ] },
+  { name: 'Highlights & UI', tokens: [
+    ['mark-current',    'Current search match'],
+    ['mark-current-fg', 'Current match text'],
+    ['scrollbar-thumb', 'Scrollbar'],
+    ['scrollbar-hover', 'Scrollbar hover'],
+    ['status-ok',       'Status OK'],
+  ] },
+];
+// Flat ordered list of the 27 palette token keys.
+const BASE_PALETTE_TOKENS = BASE_PALETTE_GROUPS.flatMap(g => g.tokens.map(t => t[0]));
+// Built-in defaults — these MUST stay in sync with the `body.theme-dark`
+// and `body.theme-light` blocks in style.css. 6-digit hex so values
+// round-trip cleanly through <input type="color">.
+const DEFAULT_PALETTE = {
+  dark: {
+    'bg': '#282c34', 'bg-toolbar': '#21252b', 'bg-elevated': '#2c313c',
+    'bg-code': '#1e2127', 'bg-table-hd': '#2a2f3a', 'bg-table-row': '#272b33',
+    'bg-search': '#21252b', 'bg-settings': '#2c313c', 'bg-settings-hd': '#31363f',
+    'bg-settings-ft': '#21252b',
+    'fg': '#abb2bf', 'fg-dim': '#7a8799', 'fg-muted': '#8994a5', 'fg-toolbar': '#9da5b4',
+    'border': '#3b4048', 'border-focus': '#61afef', 'accent': '#61afef',
+    'accent-2': '#56b6c2', 'danger': '#e06c75', 'quote-border': '#c678dd',
+    'link': '#56b6c2', 'link-hover': '#80cad1',
+    'mark-current': '#61afef', 'mark-current-fg': '#282c34',
+    'scrollbar-thumb': '#3b4048', 'scrollbar-hover': '#4b5263', 'status-ok': '#98c379',
+  },
+  light: {
+    'bg': '#fafafa', 'bg-toolbar': '#f0f0f0', 'bg-elevated': '#ffffff',
+    'bg-code': '#f0f0f0', 'bg-table-hd': '#e8e8e8', 'bg-table-row': '#f5f5f5',
+    'bg-search': '#f0f0f0', 'bg-settings': '#ffffff', 'bg-settings-hd': '#f0f0f0',
+    'bg-settings-ft': '#fafafa',
+    'fg': '#383a42', 'fg-dim': '#696c77', 'fg-muted': '#6a7387', 'fg-toolbar': '#4a4a4f',
+    'border': '#d8d8d8', 'border-focus': '#4078f2', 'accent': '#4078f2',
+    'accent-2': '#0184bc', 'danger': '#e45649', 'quote-border': '#a626a4',
+    'link': '#0184bc', 'link-hover': '#005f8a',
+    'mark-current': '#4078f2', 'mark-current-fg': '#ffffff',
+    'scrollbar-thumb': '#cccccc', 'scrollbar-hover': '#b8b8b8', 'status-ok': '#50a14f',
+  },
+};
+
+// Merge a config's sparse palette overrides over the resolved theme's
+// built-in defaults — an empty/missing override map reproduces the
+// built-in look exactly.
+function effectivePalette(resolved, palette) {
+  return { ...DEFAULT_PALETTE[resolved], ...(palette || {}) };
+}
+// Push a full palette map onto <body> as `--<token>` custom properties.
+function applyPaletteToBody(pal) {
+  for (const [key, value] of Object.entries(pal)) {
+    document.body.style.setProperty(`--${key}`, value);
+  }
+}
+
 export function applyConfig(cfg) {
   const resolved = resolvedTheme(cfg.theme);
   setBodyTheme(resolved);
@@ -120,6 +210,8 @@ export function applyConfig(cfg) {
   document.body.style.setProperty('--note-bg', effectiveBgColor(cfg.note_bg_color, 'note_bg_color', resolved));
   document.body.style.setProperty('--note-accent', cfg.note_accent_color);
   document.body.style.setProperty('--sidebar-width', `${cfg.sidebar_width}px`);
+  // Base UI palette — sparse overrides merged over the theme defaults.
+  applyPaletteToBody(effectivePalette(resolved, cfg.palette));
   document.getElementById('toolbar-buttons').classList.toggle('compact', !!cfg.toolbar_compact);
 }
 
@@ -598,6 +690,15 @@ customThemeOptionsContainer.addEventListener('click', async (e) => {
       }
       recognized++;
     }
+    for (const key of BASE_PALETTE_TOKENS) {
+      if (!(key in colors)) continue;
+      const value = colors[key];
+      if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
+        showSettingsError(`Invalid theme file: bad color for ${key}.`);
+        return;
+      }
+      recognized++;
+    }
     // A file with no recognized keys would persist a junk entry that
     // applies nothing visible — reject it rather than save an empty theme.
     if (recognized === 0) {
@@ -966,8 +1067,14 @@ export function openSettings(tabName) {
   document.getElementById('setting-word-wrap').value = state.config.editor_word_wrap !== false ? 'true' : 'false';
   document.getElementById('setting-spell-check').value = state.config.editor_spell_check ? 'true' : 'false';
   document.getElementById('setting-line-numbers').value = state.config.editor_line_numbers ? 'true' : 'false';
+  // Interface-palette swatches — saved overrides over the theme defaults.
+  const effPalette = effectivePalette(resolved, state.config.palette);
+  for (const key of BASE_PALETTE_TOKENS) {
+    document.getElementById(`setting-${key}`).value = effPalette[key];
+  }
   populatingSettings = false;
   updatePreviewColors();
+  updatePaletteHexLabels();
   // Seed the shortcuts working copy from the saved overrides so edits are
   // only committed on Save. Plain object, not state.config.keybindings
   // itself, so cancel leaves state untouched.
@@ -1022,6 +1129,31 @@ function updatePreviewColors() {
   });
 }
 
+// Refresh the hex caption under every interface-palette swatch. The
+// swatches themselves apply live to <body> (see the input listeners
+// below), so unlike the content swatches there's no separate preview.
+function updatePaletteHexLabels() {
+  for (const key of BASE_PALETTE_TOKENS) {
+    const hex = document.getElementById(`setting-${key}-hex`);
+    if (hex) hex.textContent = document.getElementById(`setting-${key}`).value.toLowerCase();
+  }
+}
+
+// Reads the 27 interface swatches into a palette map. When every value
+// still equals the built-in default for `resolved`, returns {} so an
+// untouched palette keeps following dark/light mode switches; otherwise
+// returns the full explicit map.
+function collectPaletteFromInputs(resolved) {
+  const map = {};
+  let allDefault = true;
+  for (const key of BASE_PALETTE_TOKENS) {
+    const v = document.getElementById(`setting-${key}`).value;
+    map[key] = v;
+    if (v.toLowerCase() !== DEFAULT_PALETTE[resolved][key].toLowerCase()) allDefault = false;
+  }
+  return allDefault ? {} : map;
+}
+
 // ── Custom theme import/export ─────────────────────────────────────────────
 // Maps each color-config field name (as persisted in config.toml and used
 // in the exported JSON) to the id of the Colors-tab control that holds it.
@@ -1057,6 +1189,11 @@ async function exportTheme() {
   for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
     theme[field] = document.getElementById(id).value;
   }
+  // Carry the full base UI palette too, so an exported theme is a
+  // complete skin rather than just the content colors.
+  for (const key of BASE_PALETTE_TOKENS) {
+    theme[key] = document.getElementById(`setting-${key}`).value;
+  }
   try {
     await invoke('export_theme', { theme });
   } catch (e) {
@@ -1088,20 +1225,34 @@ function applyThemeToControls(colors) {
       document.getElementById(id).value = value.trim();
     }
   }
+  // Base UI palette tokens. Setting an <input type="color"> .value
+  // doesn't fire `input`, so live-apply each one onto <body> here so the
+  // window reskins immediately (closeSettings reverts on Cancel).
+  for (const key of BASE_PALETTE_TOKENS) {
+    const value = colors[key];
+    if (typeof value === 'string' && THEME_HEX_RE.test(value.trim())) {
+      const input = document.getElementById(`setting-${key}`);
+      input.value = value.trim();
+      document.body.style.setProperty(`--${key}`, input.value);
+    }
+  }
   populatingSettings = false;
   updatePreviewColors();
+  updatePaletteHexLabels();
 }
 
 export function closeSettings() {
   endShortcutCapture();
   if (state.releaseFocusTrap) { state.releaseFocusTrap(); state.releaseFocusTrap = null; }
   if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
-  // Revert any live theme-preview class change. If Save ran, state.config
-  // already reflects the new theme so this is a no-op; on Cancel it
-  // restores the original theme class. Only the `theme-*` class is
-  // swapped — `editing`/`maximized`/etc. on <body> must survive, or
-  // closing Settings while editing would silently drop edit mode.
-  setBodyTheme(resolvedTheme(state.config.theme));
+  // Revert any live preview changes — the theme-class swap and the
+  // interface-palette swatches both apply live to <body> while the
+  // dialog is open. Re-running applyConfig from the saved config undoes
+  // them on Cancel; if Save ran, state.config already holds the new
+  // values so it's a correct no-op. (applyConfig only swaps the
+  // `theme-*` class, not the other <body> state classes, so
+  // `editing`/`maximized`/etc. survive closing Settings mid-edit.)
+  applyConfig(state.config);
   settingsOverlay.classList.add('closing');
   settingsOverlay.addEventListener('animationend', () => {
     settingsOverlay.classList.add('hidden');
@@ -1136,6 +1287,11 @@ async function saveSettings() {
     editor_spell_check: document.getElementById('setting-spell-check').value === 'true',
     editor_line_numbers: document.getElementById('setting-line-numbers').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
+    // Compared against the theme being saved, so an in-dialog mode flip
+    // is handled; an all-default palette collapses to {} (keeps tracking
+    // dark/light), otherwise the full explicit map is stored.
+    palette: collectPaletteFromInputs(
+      resolvedTheme(document.getElementById('setting-theme').value)),
   };
   setLoading();
   try {
@@ -1232,6 +1388,13 @@ async function resetSettings() {
     document.getElementById('setting-note-bg').value     = BG_DEFAULTS[resolved].note_bg_color;
     document.getElementById('setting-note-accent').value = defaults.note_accent_color;
     updatePreviewColors();
+    // Interface palette back to the built-in defaults for the resolved
+    // theme, applied live so the reset is visible immediately.
+    for (const key of BASE_PALETTE_TOKENS) {
+      document.getElementById(`setting-${key}`).value = DEFAULT_PALETTE[resolved][key];
+    }
+    updatePaletteHexLabels();
+    applyPaletteToBody(DEFAULT_PALETTE[resolved]);
   } else if (activeTabName === 'shortcuts') {
     // Drop every override so every action falls back to its registry
     // default. Still a pending change until the user hits Save.
@@ -1270,6 +1433,17 @@ document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
   document.getElementById(id).addEventListener('input', updatePreviewColors);
 });
 
+// Interface-palette swatches apply live to <body> as you drag them —
+// the live app behind the dialog is their preview. closeSettings
+// re-applies the saved config, so a Cancel reverts these edits.
+for (const key of BASE_PALETTE_TOKENS) {
+  document.getElementById(`setting-${key}`).addEventListener('input', (e) => {
+    document.body.style.setProperty(`--${key}`, e.target.value);
+    const hex = document.getElementById(`setting-${key}-hex`);
+    if (hex) hex.textContent = e.target.value.toLowerCase();
+  });
+}
+
 // Keep body class and bg defaults in sync with the in-flight theme
 // pick so the preview's --fg contrast and the bg swatches match what
 // the user will see after Save. closeSettings reverts the class if
@@ -1284,6 +1458,19 @@ document.getElementById('setting-theme').addEventListener('change', () => {
     input.value = effectiveBgColor(input.value, field, resolved);
   }
   updatePreviewColors();
+  // If the interface swatches are still at a built-in default (either
+  // mode's, untouched), swap them to the new mode's defaults so the
+  // palette tracks the theme; a customized palette is left alone.
+  const matchesMode = mode => BASE_PALETTE_TOKENS.every(k =>
+    document.getElementById(`setting-${k}`).value.toLowerCase()
+      === DEFAULT_PALETTE[mode][k].toLowerCase());
+  if (matchesMode('dark') || matchesMode('light')) {
+    for (const key of BASE_PALETTE_TOKENS) {
+      document.getElementById(`setting-${key}`).value = DEFAULT_PALETTE[resolved][key];
+      document.body.style.setProperty(`--${key}`, DEFAULT_PALETTE[resolved][key]);
+    }
+    updatePaletteHexLabels();
+  }
 });
 
 // About panel external link

@@ -693,6 +693,30 @@
             </div>
           </div>
 
+          <div class="settings-row">
+            <label>Custom themes</label>
+            <div class="custom-select" id="setting-custom-theme" aria-label="Custom themes">
+              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+              <div class="custom-select-options" role="listbox"></div>
+            </div>
+          </div>
+
+          <div class="settings-row theme-io-row">
+            <label></label>
+            <div class="theme-io-buttons">
+              <button type="button" id="btn-export-theme" class="settings-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3v12"/>
+                  <polyline points="7 8 12 3 17 8"/>
+                  <path d="M5 21h14"/>
+                </svg>
+                Export theme…
+              </button>
+            </div>
+          </div>
+
+          <div class="color-section-title">Content colors</div>
+
           <div class="color-grid">
             <label class="color-card" for="setting-h1">
               <input type="color" id="setting-h1" class="color-swatch" aria-label="Heading 1 color">
@@ -774,26 +798,237 @@
             </div>
           </div>
 
-          <div class="settings-row">
-            <label>Custom themes</label>
-            <div class="custom-select" id="setting-custom-theme" aria-label="Custom themes">
-              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
-              <div class="custom-select-options" role="listbox"></div>
-            </div>
+          <div class="color-section-title">Interface colors</div>
+
+          <div class="color-subsection-title">Backgrounds</div>
+          <div class="color-grid">
+            <label class="color-card" for="setting-bg">
+              <input type="color" id="setting-bg" class="color-swatch" aria-label="Page background">
+              <div class="color-info">
+                <span class="color-name">Page background</span>
+                <span class="color-hex" id="setting-bg-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-toolbar">
+              <input type="color" id="setting-bg-toolbar" class="color-swatch" aria-label="Toolbar and tabs background">
+              <div class="color-info">
+                <span class="color-name">Toolbar &amp; tabs</span>
+                <span class="color-hex" id="setting-bg-toolbar-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-elevated">
+              <input type="color" id="setting-bg-elevated" class="color-swatch" aria-label="Panels and popovers background">
+              <div class="color-info">
+                <span class="color-name">Panels &amp; popovers</span>
+                <span class="color-hex" id="setting-bg-elevated-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-code">
+              <input type="color" id="setting-bg-code" class="color-swatch" aria-label="Code block surface background">
+              <div class="color-info">
+                <span class="color-name">Code block surface</span>
+                <span class="color-hex" id="setting-bg-code-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-table-hd">
+              <input type="color" id="setting-bg-table-hd" class="color-swatch" aria-label="Table header background">
+              <div class="color-info">
+                <span class="color-name">Table header</span>
+                <span class="color-hex" id="setting-bg-table-hd-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-table-row">
+              <input type="color" id="setting-bg-table-row" class="color-swatch" aria-label="Table row background">
+              <div class="color-info">
+                <span class="color-name">Table row</span>
+                <span class="color-hex" id="setting-bg-table-row-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-search">
+              <input type="color" id="setting-bg-search" class="color-swatch" aria-label="Search bar background">
+              <div class="color-info">
+                <span class="color-name">Search bar</span>
+                <span class="color-hex" id="setting-bg-search-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-settings">
+              <input type="color" id="setting-bg-settings" class="color-swatch" aria-label="Settings panel background">
+              <div class="color-info">
+                <span class="color-name">Settings panel</span>
+                <span class="color-hex" id="setting-bg-settings-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-settings-hd">
+              <input type="color" id="setting-bg-settings-hd" class="color-swatch" aria-label="Settings header background">
+              <div class="color-info">
+                <span class="color-name">Settings header</span>
+                <span class="color-hex" id="setting-bg-settings-hd-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-bg-settings-ft">
+              <input type="color" id="setting-bg-settings-ft" class="color-swatch" aria-label="Settings footer background">
+              <div class="color-info">
+                <span class="color-name">Settings footer</span>
+                <span class="color-hex" id="setting-bg-settings-ft-hex"></span>
+              </div>
+            </label>
           </div>
 
-          <div class="settings-row theme-io-row">
-            <label></label>
-            <div class="theme-io-buttons">
-              <button type="button" id="btn-export-theme" class="settings-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 3v12"/>
-                  <polyline points="7 8 12 3 17 8"/>
-                  <path d="M5 21h14"/>
-                </svg>
-                Export theme…
-              </button>
-            </div>
+          <div class="color-subsection-title">Text</div>
+          <div class="color-grid">
+            <label class="color-card" for="setting-fg">
+              <input type="color" id="setting-fg" class="color-swatch" aria-label="Body text color">
+              <div class="color-info">
+                <span class="color-name">Body text</span>
+                <span class="color-hex" id="setting-fg-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-fg-dim">
+              <input type="color" id="setting-fg-dim" class="color-swatch" aria-label="Dim text color">
+              <div class="color-info">
+                <span class="color-name">Dim text</span>
+                <span class="color-hex" id="setting-fg-dim-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-fg-muted">
+              <input type="color" id="setting-fg-muted" class="color-swatch" aria-label="Muted text color">
+              <div class="color-info">
+                <span class="color-name">Muted text</span>
+                <span class="color-hex" id="setting-fg-muted-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-fg-toolbar">
+              <input type="color" id="setting-fg-toolbar" class="color-swatch" aria-label="Toolbar text color">
+              <div class="color-info">
+                <span class="color-name">Toolbar text</span>
+                <span class="color-hex" id="setting-fg-toolbar-hex"></span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-subsection-title">Borders &amp; accents</div>
+          <div class="color-grid">
+            <label class="color-card" for="setting-border">
+              <input type="color" id="setting-border" class="color-swatch" aria-label="Border color">
+              <div class="color-info">
+                <span class="color-name">Borders</span>
+                <span class="color-hex" id="setting-border-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-border-focus">
+              <input type="color" id="setting-border-focus" class="color-swatch" aria-label="Focus ring color">
+              <div class="color-info">
+                <span class="color-name">Focus ring</span>
+                <span class="color-hex" id="setting-border-focus-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-accent">
+              <input type="color" id="setting-accent" class="color-swatch" aria-label="Accent color">
+              <div class="color-info">
+                <span class="color-name">Accent</span>
+                <span class="color-hex" id="setting-accent-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-accent-2">
+              <input type="color" id="setting-accent-2" class="color-swatch" aria-label="Secondary accent color">
+              <div class="color-info">
+                <span class="color-name">Secondary accent</span>
+                <span class="color-hex" id="setting-accent-2-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-danger">
+              <input type="color" id="setting-danger" class="color-swatch" aria-label="Danger color">
+              <div class="color-info">
+                <span class="color-name">Danger</span>
+                <span class="color-hex" id="setting-danger-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-quote-border">
+              <input type="color" id="setting-quote-border" class="color-swatch" aria-label="Blockquote bar color">
+              <div class="color-info">
+                <span class="color-name">Blockquote bar</span>
+                <span class="color-hex" id="setting-quote-border-hex"></span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-subsection-title">Links</div>
+          <div class="color-grid">
+            <label class="color-card" for="setting-link">
+              <input type="color" id="setting-link" class="color-swatch" aria-label="Link color">
+              <div class="color-info">
+                <span class="color-name">Link</span>
+                <span class="color-hex" id="setting-link-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-link-hover">
+              <input type="color" id="setting-link-hover" class="color-swatch" aria-label="Link hover color">
+              <div class="color-info">
+                <span class="color-name">Link hover</span>
+                <span class="color-hex" id="setting-link-hover-hex"></span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-subsection-title">Highlights &amp; UI</div>
+          <div class="color-grid">
+            <label class="color-card" for="setting-mark-current">
+              <input type="color" id="setting-mark-current" class="color-swatch" aria-label="Current search match color">
+              <div class="color-info">
+                <span class="color-name">Current search match</span>
+                <span class="color-hex" id="setting-mark-current-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-mark-current-fg">
+              <input type="color" id="setting-mark-current-fg" class="color-swatch" aria-label="Current match text color">
+              <div class="color-info">
+                <span class="color-name">Current match text</span>
+                <span class="color-hex" id="setting-mark-current-fg-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-scrollbar-thumb">
+              <input type="color" id="setting-scrollbar-thumb" class="color-swatch" aria-label="Scrollbar color">
+              <div class="color-info">
+                <span class="color-name">Scrollbar</span>
+                <span class="color-hex" id="setting-scrollbar-thumb-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-scrollbar-hover">
+              <input type="color" id="setting-scrollbar-hover" class="color-swatch" aria-label="Scrollbar hover color">
+              <div class="color-info">
+                <span class="color-name">Scrollbar hover</span>
+                <span class="color-hex" id="setting-scrollbar-hover-hex"></span>
+              </div>
+            </label>
+
+            <label class="color-card" for="setting-status-ok">
+              <input type="color" id="setting-status-ok" class="color-swatch" aria-label="Status OK color">
+              <div class="color-info">
+                <span class="color-name">Status OK</span>
+                <span class="color-hex" id="setting-status-ok-hex"></span>
+              </div>
+            </label>
           </div>
         </div>
 
