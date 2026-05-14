@@ -239,29 +239,90 @@ function buildView(tab) {
     if (u.docChanged) onDocChanged(u.state.doc.toString());
   });
 
+  const wordWrap = state.config?.editor_word_wrap !== false;
+  const spellCheck = !!state.config?.editor_spell_check;
+
+  const baseExtensions = [
+    history(),
+    smartListKeymap,
+    search({ top: true }),
+    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+    markdown(),
+    syntaxHighlighting(defaultHighlightStyle),
+    EditorView.contentAttributes.of({
+      'aria-label': `Edit ${tab.title}`,
+      'spellcheck': spellCheck ? 'true' : 'false',
+    }),
+    oxideCmTheme,
+    updateListener,
+  ];
+  if (wordWrap) baseExtensions.push(EditorView.lineWrapping);
+
   const editorState = EditorState.create({
     doc: tab.raw ?? '',
-    extensions: [
-      history(),
-      smartListKeymap,
-      search({ top: true }),
-      keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
-      markdown(),
-      syntaxHighlighting(defaultHighlightStyle),
-      EditorView.lineWrapping,
-      EditorView.contentAttributes.of({
-        'aria-label': `Edit ${tab.title}`,
-        'spellcheck': 'false',
-      }),
-      oxideCmTheme,
-      updateListener,
-    ],
+    extensions: baseExtensions,
   });
 
   const view = new EditorView({ state: editorState });
   view.dom.classList.add('md-editor');
   view.scrollDOM.addEventListener('scroll', () => mirrorScroll(view.scrollDOM, previewPane), { passive: true });
+  installPasteHandler(view);
   return view;
+}
+
+// Image paste: when the clipboard carries an image (Snipping Tool, web
+// drag-paste, Photoshop, etc.) write the bytes to a sibling assets/
+// folder and insert a markdown image reference at the cursor. Plain
+// text paste falls through to CM6's default handler.
+function installPasteHandler(view) {
+  view.dom.addEventListener('paste', async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    let imageItem = null;
+    for (const it of items) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        imageItem = it;
+        break;
+      }
+    }
+    if (!imageItem) return;
+    const tab = activeTab();
+    if (!tab?.path) return;
+    e.preventDefault();
+    const blob = imageItem.getAsFile();
+    if (!blob) return;
+    const ext = (imageItem.type.split('/')[1] || 'png').toLowerCase().replace('jpeg', 'jpg');
+    try {
+      const base64 = await blobToBase64(blob);
+      const result = await invoke('write_pasted_image', {
+        basePath: tab.path,
+        extension: ext,
+        base64Data: base64,
+      });
+      const insertion = `![](${result.relative_href})`;
+      const sel = view.state.selection.main;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: insertion },
+        selection: { anchor: sel.from + insertion.length },
+      });
+    } catch (err) {
+      console.error('[oxidemd] image paste failed', err);
+    }
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+    reader.onload = () => {
+      const result = reader.result || '';
+      const idx = typeof result === 'string' ? result.indexOf(',') : -1;
+      if (idx === -1) reject(new Error('Unexpected data URL'));
+      else resolve(result.slice(idx + 1));
+    };
+    reader.readAsDataURL(blob);
+  });
 }
 
 // Mounts the split editor/preview layout for the given tab. Shared by
@@ -339,7 +400,7 @@ function scheduleDraftWrite(tab) {
     // draft for a still-dirty in-memory buffer. Compare buffers directly.
     const buf = tab.raw ?? '';
     const disk = tab.savedRaw ?? '';
-    if (buf !== disk) writeDraft(tab.path, buf);
+    if (buf !== disk) writeDraft(tab.path, buf, tab.diskHash || null);
     else clearDraft(tab.path);
   }, DRAFT_DEBOUNCE_MS);
 }
@@ -355,15 +416,26 @@ export function cancelPendingDraftWrite() {
 // buffer keeps changing while an invoke is in-flight, so we only commit
 // the HTML if this request is still the newest one when it returns.
 const PREVIEW_DEBOUNCE_MS = 200;
+// Threshold (in characters) above which we slow the preview debounce
+// to LARGE_FILE_DEBOUNCE_MS — re-rendering a 1 MB+ markdown file on
+// every keystroke saturates the IPC pipe.
+const LARGE_FILE_THRESHOLD = 200_000;
+const LARGE_FILE_DEBOUNCE_MS = 600;
 let previewTimer = null;
 let previewRenderSeq = 0;
 
-function schedulePreviewRender(delay = PREVIEW_DEBOUNCE_MS) {
+function schedulePreviewRender(delay) {
   if (previewTimer) clearTimeout(previewTimer);
+  let computed = delay;
+  if (computed === undefined) {
+    const tab = activeTab();
+    const len = (tab?.raw ?? '').length;
+    computed = len > LARGE_FILE_THRESHOLD ? LARGE_FILE_DEBOUNCE_MS : PREVIEW_DEBOUNCE_MS;
+  }
   previewTimer = setTimeout(() => {
     previewTimer = null;
     renderPreviewNow();
-  }, delay);
+  }, computed);
 }
 
 async function renderPreviewNow() {
@@ -452,6 +524,9 @@ export async function saveActiveFile() {
     state.lastSaveAt = Date.now();
     state.lastSavedPath = tab.path;
     clearDraft(tab.path);
+    invoke('file_sha256', { path: tab.path })
+      .then((hash) => { tab.diskHash = hash; })
+      .catch(() => {});
     syncToolbar();
     renderTabBar();
     return true;
@@ -632,15 +707,22 @@ export function promptDiscardChanges(tab) {
 }
 
 // Returns 'save' (restore), 'discard', or 'cancel' (leave draft alone).
-export function promptRecoverDraft(tab, draft) {
+// When `conflict` is true, the on-disk content has changed since the
+// draft was last written — surface that so the user knows restoring the
+// draft will overwrite a newer disk edit.
+export function promptRecoverDraft(tab, draft, { conflict = false } = {}) {
   const when = formatDraftTimestamp(draft.savedAt);
+  const baseHtml = `An unsaved draft of <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span> was found from ${escapeHtml(when)}.`;
+  const conflictHtml = conflict
+    ? ` <strong class="confirm-conflict">The file on disk has changed since this draft was written.</strong> Restoring will overwrite that newer disk content.`
+    : ' Restore it, or open the saved version?';
   setConfirmContents({
-    title: 'Recover unsaved draft',
-    bodyHtml: `An unsaved draft of <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span> was found from ${escapeHtml(when)}. Restore it, or open the saved version?`,
+    title: conflict ? 'Recover draft (file changed on disk)' : 'Recover unsaved draft',
+    bodyHtml: baseHtml + conflictHtml,
     saveLabel: 'Restore',
     discardLabel: 'Discard draft',
-    cancelHidden: true,
-    primary: 'save',
+    cancelHidden: !conflict,
+    primary: conflict ? 'cancel' : 'save',
   });
   return openConfirmDialog();
 }

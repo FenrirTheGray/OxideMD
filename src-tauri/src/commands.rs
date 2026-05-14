@@ -1,4 +1,4 @@
-use crate::config::{fonts_dir, load_config, save_config, Config};
+use crate::config::{add_recent_file, fonts_dir, load_config, save_config, Config};
 use crate::markdown;
 use base64::Engine;
 use std::fs;
@@ -484,6 +484,214 @@ pub fn save_window_geometry(width: u32, height: u32, maximized: bool) -> Result<
     cfg.window_height = height;
     cfg.window_maximized = maximized;
     save_config(&cfg)
+}
+
+#[derive(serde::Serialize)]
+pub struct RecentFile {
+    pub path: String,
+    pub name: String,
+    pub exists: bool,
+}
+
+fn build_recent_entries(paths: &[String]) -> Vec<RecentFile> {
+    paths
+        .iter()
+        .map(|p| {
+            let pb = std::path::Path::new(p);
+            RecentFile {
+                path: p.clone(),
+                name: pb
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(p)
+                    .to_string(),
+                exists: pb.is_file(),
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn list_recent_files() -> Vec<RecentFile> {
+    build_recent_entries(&load_config().recent_files)
+}
+
+#[tauri::command]
+pub fn mark_recent_file(path: String) -> Result<Vec<RecentFile>, String> {
+    let mut cfg = load_config();
+    add_recent_file(&mut cfg, &path);
+    save_config(&cfg)?;
+    Ok(build_recent_entries(&cfg.recent_files))
+}
+
+#[tauri::command]
+pub fn forget_recent_file(path: String) -> Result<Vec<RecentFile>, String> {
+    let mut cfg = load_config();
+    cfg.recent_files.retain(|p| p != &path);
+    save_config(&cfg)?;
+    Ok(build_recent_entries(&cfg.recent_files))
+}
+
+#[tauri::command]
+pub fn clear_recent_files() -> Result<(), String> {
+    let mut cfg = load_config();
+    cfg.recent_files.clear();
+    save_config(&cfg)
+}
+
+/// SHA-256 of a file's bytes, hex-encoded. Used for draft conflict
+/// detection — if the on-disk hash at draft-write time disagrees with
+/// the on-disk hash at recovery time, the file changed externally and
+/// the user is prompted before we replace disk content with the draft.
+#[tauri::command]
+pub async fn file_sha256(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use sha2::{Digest, Sha256};
+        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        let digest = h.finalize();
+        let mut out = String::with_capacity(digest.len() * 2);
+        for b in digest {
+            out.push_str(&format!("{:02x}", b));
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+pub struct PastedImage {
+    pub absolute_path: String,
+    pub relative_href: String,
+}
+
+/// Writes raw image bytes (base64-encoded by the frontend) into an
+/// `assets/` folder beside the markdown file `base_path`. Returns both
+/// the absolute path (for asset:// preview) and the markdown-relative
+/// href the editor should insert.
+#[tauri::command]
+pub async fn write_pasted_image(
+    base_path: String,
+    extension: String,
+    base64_data: String,
+) -> Result<PastedImage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let base = PathBuf::from(&base_path);
+        let parent = base
+            .parent()
+            .ok_or("base_path has no parent directory")?
+            .to_path_buf();
+        let assets = parent.join("assets");
+        fs::create_dir_all(&assets).map_err(|e| format!("Failed to create assets dir: {e}"))?;
+
+        let ext = extension.trim_start_matches('.').to_lowercase();
+        let allowed = matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp");
+        if !allowed {
+            return Err(format!("Unsupported image extension: {ext}"));
+        }
+
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(base64_data.as_bytes())
+            .map_err(|e| format!("Invalid base64: {e}"))?;
+
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let filename = format!("paste-{}.{}", stamp, ext);
+        let abs = assets.join(&filename);
+        fs::write(&abs, &bytes).map_err(|e| format!("Failed to write image: {e}"))?;
+
+        let canonical = fs::canonicalize(&abs).unwrap_or(abs);
+        let canonical = strip_windows_verbatim(canonical);
+        Ok(PastedImage {
+            absolute_path: canonical.to_string_lossy().into_owned(),
+            relative_href: format!("assets/{}", filename),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+const EXPORT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>__TITLE__</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 820px; margin: 2rem auto; padding: 0 1.5rem; color: #1a1a1a; line-height: 1.7; }
+  h1, h2, h3, h4, h5, h6 { margin-top: 1.6em; margin-bottom: 0.6em; line-height: 1.25; }
+  h1 { border-bottom: 1px solid #e0e0e0; padding-bottom: 0.3em; }
+  h2 { border-bottom: 1px solid #efefef; padding-bottom: 0.2em; }
+  pre { background: #f6f8fa; border-radius: 8px; padding: 14px 18px; overflow-x: auto; }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 0.9em; background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 4px solid #d8d8d8; margin: 1em 0; padding: 0.4em 1em; color: #555; background: #fafafa; }
+  table { border-collapse: collapse; width: 100%; margin: 1.2em 0; }
+  th, td { border: 1px solid #e1e4e8; padding: 8px 14px; text-align: left; }
+  th { background: #f6f8fa; }
+  img { max-width: 100%; height: auto; }
+  hr { border: 0; border-top: 1px solid #e0e0e0; margin: 2em 0; }
+  .codeblock { position: relative; }
+  .codeblock-copy, .codeblock-lang { display: none; }
+  .task-list-checkbox { margin-right: 0.4em; }
+  @media print {
+    body { max-width: none; margin: 0; padding: 0; color: #000; }
+    a { color: #000; text-decoration: underline; }
+    pre, blockquote, table { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+__BODY__
+</body>
+</html>
+"#;
+
+/// Renders the markdown source to a self-contained HTML file at
+/// `out_path`. The styling is intentionally minimal and theme-agnostic
+/// so the exported file looks reasonable in any browser without
+/// shipping the editor's design tokens.
+#[tauri::command]
+pub async fn export_html(
+    source: String,
+    base_path: String,
+    out_path: String,
+    title: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let base = PathBuf::from(&base_path);
+        let base_dir = base.parent();
+        let body = markdown::render(&source, base_dir);
+        let document = EXPORT_HTML_TEMPLATE
+            .replace("__TITLE__", &crate::util::html_escape(&title))
+            .replace("__BODY__", &body);
+        fs::write(&out_path, document).map_err(|e| format!("Failed to write HTML: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn pick_export_path(
+    app: tauri::AppHandle,
+    suggested_name: String,
+) -> Option<String> {
+    let window = app.get_webview_window("main").unwrap();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("HTML", &["html", "htm"])
+            .set_file_name(&suggested_name)
+            .blocking_save_file()
+            .map(|p| p.to_string())
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// Returns true if `url` uses a scheme we're willing to hand off to the

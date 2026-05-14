@@ -61,6 +61,10 @@ export const state = {
   // ignored so saving doesn't immediately re-trigger a file reload.
   lastSaveAt: 0,
   lastSavedPath: null,
+  // Last list returned by `list_recent_files` / `mark_recent_file`. The
+  // welcome screen reads this on every showWelcome() so a fresh tab
+  // close repaints with the up-to-date list.
+  recentFiles: [],
 };
 
 // ── Zoom constants ────────────────────────────────────────────────────────

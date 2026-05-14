@@ -31,7 +31,14 @@ pub struct Config {
     // Missing entries fall back to the frontend's default registry, so
     // new actions shipped in updates auto-apply without rewriting config.
     pub keybindings: HashMap<String, String>,
+    pub editor_word_wrap: bool,
+    pub editor_spell_check: bool,
+    // Most-recently-opened files, newest first. Capped at RECENT_FILES_LIMIT
+    // entries by add_recent_file. Surfaced on the welcome screen.
+    pub recent_files: Vec<String>,
 }
+
+pub const RECENT_FILES_LIMIT: usize = 12;
 
 impl Default for Config {
     fn default() -> Self {
@@ -57,7 +64,18 @@ impl Default for Config {
             window_height: 700,
             window_maximized: false,
             keybindings: HashMap::new(),
+            editor_word_wrap: true,
+            editor_spell_check: false,
+            recent_files: Vec::new(),
         }
+    }
+}
+
+pub fn add_recent_file(config: &mut Config, path: &str) {
+    config.recent_files.retain(|p| p != path);
+    config.recent_files.insert(0, path.to_string());
+    if config.recent_files.len() > RECENT_FILES_LIMIT {
+        config.recent_files.truncate(RECENT_FILES_LIMIT);
     }
 }
 

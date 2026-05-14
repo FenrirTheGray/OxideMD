@@ -1527,7 +1527,17 @@ body:not(.editing) #status-counts { display: none; }
 /* ── Code blocks ──────────────────────────────────────────────────── */
 /* `--code-bg` and `--code-accent` are user-configurable via Settings →
    Colors. They fall back to the theme tokens so the block still renders
-   correctly before the config is applied. */
+   correctly before the config is applied.
+   The Rust renderer wraps each fenced code block in <div class="codeblock">
+   so we can stack a language label and a copy button against the same
+   positioning context as the <pre>. */
+.md-rendered .codeblock {
+  position: relative;
+  margin: 1.2em 0;
+}
+.md-rendered .codeblock pre {
+  margin: 0;
+}
 .md-rendered pre {
   background: var(--code-bg, var(--bg-code));
   border-radius: 10px;
@@ -1539,6 +1549,70 @@ body:not(.editing) #status-counts { display: none; }
   border-left: 3px solid var(--code-accent, var(--accent));
   box-shadow: var(--shadow-sm);
   position: relative;
+}
+
+.md-rendered .codeblock-lang {
+  position: absolute;
+  top: 8px;
+  right: 56px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-sm) var(--ease);
+}
+
+.md-rendered .codeblock-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-sm) var(--ease),
+              background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              border-color var(--dur-sm) var(--ease);
+}
+.md-rendered .codeblock-copy svg {
+  width: 14px;
+  height: 14px;
+}
+.md-rendered .codeblock:hover .codeblock-copy,
+.md-rendered .codeblock-copy:focus-visible,
+.md-rendered .codeblock:hover .codeblock-lang {
+  opacity: 1;
+}
+.md-rendered .codeblock-copy:hover {
+  color: var(--accent);
+  border-color: var(--border-focus);
+  background: var(--bg-btn-hover);
+}
+.md-rendered .codeblock-copy:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.md-rendered .codeblock-copy.copied {
+  color: var(--status-ok);
+  border-color: var(--status-ok);
+  opacity: 1;
 }
 
 .md-rendered pre code {
@@ -3252,22 +3326,28 @@ body.resizing-split, body.resizing-split * { cursor: col-resize !important; user
   color: var(--danger);
   border-color: var(--danger);
 }
+/* Solid accent CTA, matching the toolbar Save button. The prior gradient
+   + drop-shadow was the only remaining instance of the marketing-CTA
+   look across the chrome — drop it for visual consistency. */
 #confirm-footer #confirm-save.primary {
-  background: var(--save-btn-bg);
+  background: var(--accent);
   color: #fff;
-  border-color: transparent;
-  box-shadow: var(--save-btn-shadow);
+  border-color: var(--accent);
   font-weight: 700;
   padding: 7px 24px;
 }
 #confirm-footer #confirm-save.primary:hover {
-  opacity: 0.88;
-  transform: translateY(-1px);
+  filter: brightness(1.08);
   color: #fff;
 }
 #confirm-footer #confirm-save.primary:active {
-  transform: translateY(0);
-  opacity: 1;
+  filter: brightness(0.95);
+}
+.confirm-conflict {
+  display: block;
+  margin-top: 0.6em;
+  color: var(--danger);
+  font-weight: 600;
 }
 
 /* ── Context menu ──────────────────────────────────────────────────
@@ -3413,6 +3493,156 @@ body.resizing-split, body.resizing-split * { cursor: col-resize !important; user
   #print-root h4, #print-root h5, #print-root h6 { break-after: avoid; }
   #print-root pre, #print-root blockquote, #print-root table,
   #print-root img, #print-root tr { break-inside: avoid; }
+
+  /* Carried from the pre-3.2.0 branch: #print-root holds the rendered
+     Markdown, so its code blocks carry the copy button + language label
+     chrome — hide both so neither prints into the PDF. */
+  #print-root .codeblock-copy,
+  #print-root .codeblock-lang { display: none !important; }
+}
+
+/* ── GFM task lists ───────────────────────────────────────────────── */
+/* Rendered when pulldown-cmark sees `- [ ]` / `- [x]` markers and emits
+   <input type="checkbox" disabled>. The checkbox sits at start-of-line
+   with negative margin so the bullet position aligns with non-task
+   list items above and below. */
+.md-rendered ul li:has(> .task-list-checkbox) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+.md-rendered .task-list-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 0.55em -2px 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  cursor: default;
+  vertical-align: baseline;
+  position: relative;
+  flex-shrink: 0;
+}
+.md-rendered .task-list-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.md-rendered .task-list-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* ── Welcome screen: recent files ─────────────────────────────────── */
+.welcome-recent {
+  width: 100%;
+  max-width: 560px;
+  margin: 32px auto 8px;
+}
+.welcome-recent[hidden] { display: none; }
+.welcome-recent .welcome-col-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.welcome-recent-clear {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color var(--dur-sm) var(--ease),
+              background var(--dur-sm) var(--ease);
+}
+.welcome-recent-clear:hover {
+  color: var(--accent);
+  background: var(--bg-btn-hover);
+}
+.welcome-recent-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-recent-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 6px;
+  transition: background var(--dur-sm) var(--ease);
+}
+.welcome-recent-item:hover {
+  background: var(--bg-btn-hover);
+}
+.welcome-recent-link {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 18px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+  font: inherit;
+  border-radius: 6px;
+  min-width: 0;
+}
+.welcome-recent-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+.welcome-recent-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.welcome-recent-dir {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: right;
+  min-width: 0;
+}
+.welcome-recent-item.missing .welcome-recent-name { opacity: 0.5; text-decoration: line-through; }
+.welcome-recent-forget {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  width: 28px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease),
+              background var(--dur-sm) var(--ease);
+}
+.welcome-recent-item:hover .welcome-recent-forget,
+.welcome-recent-forget:focus-visible { opacity: 1; }
+.welcome-recent-forget:hover {
+  color: var(--danger);
+  background: var(--bg-danger-hover);
 }
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */

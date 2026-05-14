@@ -74,6 +74,14 @@ pub fn run() {
             commands::get_font_data,
             commands::watch_paths,
             commands::check_for_updates,
+            commands::list_recent_files,
+            commands::mark_recent_file,
+            commands::forget_recent_file,
+            commands::clear_recent_files,
+            commands::file_sha256,
+            commands::write_pasted_image,
+            commands::export_html,
+            commands::pick_export_path,
         ])
         .setup(|app| {
             // Restore saved window geometry

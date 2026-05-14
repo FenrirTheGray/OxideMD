@@ -197,6 +197,7 @@ export const ACTIONS = [
   { id: 'save',          category: 'File', label: 'Save file',        defaultAccel: 'Mod+S' },
   { id: 'reload',        category: 'File', label: 'Reload file',      defaultAccel: 'Mod+R' },
   { id: 'print',         category: 'File', label: 'Print to PDF',     defaultAccel: 'Mod+P' },
+  { id: 'exportHtml',    category: 'File', label: 'Export as HTML…', defaultAccel: 'Mod+Shift+E' },
 
   { id: 'toggleEdit',    category: 'View', label: 'Toggle edit mode', defaultAccel: 'Mod+E' },
   { id: 'cycleSplitMode',category: 'View', label: 'Cycle split layout', defaultAccel: 'Mod+\\' },
