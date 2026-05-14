@@ -29,7 +29,7 @@ import { EditorState, EditorSelection, Prec } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
+import { tags, Tag, styleTags } from '@lezer/highlight';
 import { search, searchKeymap, openSearchPanel, closeSearchPanel } from '@codemirror/search';
 
 // Suppress fs-changed handling for a short window after save — our own
@@ -249,12 +249,23 @@ const oxideCmTheme = EditorView.theme({
   },
 });
 
+// lezer-markdown lumps every markup mark (`#`, `>`, backticks, link
+// brackets *and* list bullets) under a single `processingInstruction`
+// tag, so list bullets can't get their own color out of the box. Define
+// a dedicated tag and re-tag just the `ListMark` node via a
+// MarkdownConfig extension (passed to `markdown({ extensions: [...] })`
+// below); the re-tag is layered on top of the default rule, so the
+// dedicated tag wins for bullets while every other mark stays
+// `processingInstruction`.
+const listMarkTag = Tag.define();
+const oxideMarkdownExt = { props: [styleTags({ ListMark: listMarkTag })] };
+
 // Markdown syntax highlighting for the edit surface. CM6 ships
 // `defaultHighlightStyle`, but that's a generic code palette and reads
 // as foreign against the app's Atom One chrome. Map the markdown tags
 // to the app's own CSS-variable tokens instead, so the editor matches
 // the rendered preview, follows dark/light theme switching, and even
-// picks up the user's custom heading/code colors from Settings.
+// picks up the user's custom Colors-tab tokens from Settings.
 //
 // lezer-markdown tags each heading level separately, so the editor can
 // mirror the preview's per-level colors (h4-h6 share the h3 token —
@@ -262,6 +273,10 @@ const oxideCmTheme = EditorView.theme({
 // punctuation (`#`, `*`, `>`, backticks, link brackets — all
 // `processingInstruction`) is dimmed so prose reads above the syntax;
 // list-item text is left at `--fg`, only the marks are recolored.
+// List bullet markers follow the Colors-tab `--bullet-color` token
+// (via the re-tagged `listMarkTag` above) and blockquote content
+// follows `--note-accent` — both fall back to a sensible default when
+// the user hasn't set a custom color.
 const oxideHighlightStyle = HighlightStyle.define([
   { tag: tags.heading1, color: 'var(--h1-color, var(--accent))', fontWeight: '700' },
   { tag: tags.heading2, color: 'var(--h2-color, var(--accent))', fontWeight: '700' },
@@ -280,8 +295,9 @@ const oxideHighlightStyle = HighlightStyle.define([
   // Inline code and fenced-code text — same accent (and fallback) the
   // preview's code styling uses.
   { tag: tags.monospace, color: 'var(--code-accent, var(--accent))' },
-  { tag: tags.quote, color: 'var(--fg-dim)', fontStyle: 'italic' },
+  { tag: tags.quote, color: 'var(--note-accent, var(--fg-dim))', fontStyle: 'italic' },
   { tag: tags.processingInstruction, color: 'var(--fg-muted)' },
+  { tag: listMarkTag, color: 'var(--bullet-color, var(--accent))' },
   { tag: tags.contentSeparator, color: 'var(--fg-muted)' },
   { tag: tags.escape, color: 'var(--fg-muted)' },
   { tag: tags.comment, color: 'var(--fg-muted)', fontStyle: 'italic' },
@@ -332,7 +348,7 @@ function buildView(tab) {
     smartListKeymap,
     search({ top: true }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
-    markdown(),
+    markdown({ extensions: [oxideMarkdownExt] }),
     syntaxHighlighting(oxideHighlightStyle),
     EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab.title}`,
