@@ -28,7 +28,8 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { search, searchKeymap, openSearchPanel, closeSearchPanel } from '@codemirror/search';
 
 // Suppress fs-changed handling for a short window after save — our own
@@ -248,6 +249,44 @@ const oxideCmTheme = EditorView.theme({
   },
 });
 
+// Markdown syntax highlighting for the edit surface. CM6 ships
+// `defaultHighlightStyle`, but that's a generic code palette and reads
+// as foreign against the app's Atom One chrome. Map the markdown tags
+// to the app's own CSS-variable tokens instead, so the editor matches
+// the rendered preview, follows dark/light theme switching, and even
+// picks up the user's custom heading/code colors from Settings.
+//
+// lezer-markdown tags each heading level separately, so the editor can
+// mirror the preview's per-level colors (h4-h6 share the h3 token —
+// the app only exposes three heading colors). The literal markup
+// punctuation (`#`, `*`, `>`, backticks, link brackets — all
+// `processingInstruction`) is dimmed so prose reads above the syntax;
+// list-item text is left at `--fg`, only the marks are recolored.
+const oxideHighlightStyle = HighlightStyle.define([
+  { tag: tags.heading1, color: 'var(--h1-color, var(--accent))', fontWeight: '700' },
+  { tag: tags.heading2, color: 'var(--h2-color, var(--accent))', fontWeight: '700' },
+  { tag: tags.heading3, color: 'var(--h3-color, var(--accent))', fontWeight: '600' },
+  { tag: tags.heading4, color: 'var(--h3-color, var(--accent))', fontWeight: '600' },
+  { tag: tags.heading5, color: 'var(--h3-color, var(--accent))', fontWeight: '600' },
+  { tag: tags.heading6, color: 'var(--h3-color, var(--accent))', fontWeight: '600' },
+  // Bold / italic / strike mirror the preview: weight or slant --fg
+  // rather than recoloring it.
+  { tag: tags.strong, fontWeight: '700' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.strikethrough, color: 'var(--fg-muted)', textDecoration: 'line-through' },
+  { tag: tags.link, color: 'var(--link)' },
+  { tag: tags.url, color: 'var(--link)' },
+  { tag: tags.labelName, color: 'var(--link)' },
+  // Inline code and fenced-code text — same accent (and fallback) the
+  // preview's code styling uses.
+  { tag: tags.monospace, color: 'var(--code-accent, var(--accent))' },
+  { tag: tags.quote, color: 'var(--fg-dim)', fontStyle: 'italic' },
+  { tag: tags.processingInstruction, color: 'var(--fg-muted)' },
+  { tag: tags.contentSeparator, color: 'var(--fg-muted)' },
+  { tag: tags.escape, color: 'var(--fg-muted)' },
+  { tag: tags.comment, color: 'var(--fg-muted)', fontStyle: 'italic' },
+]);
+
 // Build the EditorView for the given tab. The updateListener is the only
 // channel from CM6 → app state — a transaction with `docChanged` mirrors
 // the new doc into tab.raw, kicks the dirty/draft/preview pipeline, and
@@ -294,7 +333,7 @@ function buildView(tab) {
     search({ top: true }),
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
     markdown(),
-    syntaxHighlighting(defaultHighlightStyle),
+    syntaxHighlighting(oxideHighlightStyle),
     EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab.title}`,
       'spellcheck': spellCheck ? 'true' : 'false',
