@@ -746,6 +746,7 @@ export function openSettings() {
       : MD_EXTS_DEFAULT).join(', ');
   document.getElementById('setting-word-wrap').value = state.config.editor_word_wrap !== false ? 'true' : 'false';
   document.getElementById('setting-spell-check').value = state.config.editor_spell_check ? 'true' : 'false';
+  document.getElementById('setting-line-numbers').value = state.config.editor_line_numbers ? 'true' : 'false';
   populatingSettings = false;
   updatePreviewColors();
   // Seed the shortcuts working copy from the saved overrides so edits are
@@ -829,6 +830,7 @@ async function saveSettings() {
     md_extensions: parseMdExtensions(document.getElementById('setting-md-extensions').value),
     editor_word_wrap: document.getElementById('setting-word-wrap').value === 'true',
     editor_spell_check: document.getElementById('setting-spell-check').value === 'true',
+    editor_line_numbers: document.getElementById('setting-line-numbers').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
   };
   setLoading();
@@ -891,6 +893,7 @@ async function resetSettings() {
   } else if (activeTabName === 'editor') {
     document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
     document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
+    document.getElementById('setting-line-numbers').value = defaults.editor_line_numbers ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;

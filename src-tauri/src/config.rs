@@ -37,6 +37,7 @@ pub struct Config {
     pub keybindings: HashMap<String, String>,
     pub editor_word_wrap: bool,
     pub editor_spell_check: bool,
+    pub editor_line_numbers: bool,
     // File extensions (lowercased, no leading dot) the folder browser
     // treats as Markdown. Normalized on save by the frontend; an empty
     // list falls back to MD_EXTS_DEFAULT at the read sites.
@@ -79,6 +80,7 @@ impl Default for Config {
             keybindings: HashMap::new(),
             editor_word_wrap: true,
             editor_spell_check: false,
+            editor_line_numbers: false,
             md_extensions: MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect(),
             recent_files: Vec::new(),
         }
