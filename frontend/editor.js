@@ -24,7 +24,7 @@ import { registerHandler, dispatchKey } from './keybindings.js';
 import { writeDraft, clearDraft } from './draft-store.js';
 import { refreshOutline } from './outline.js';
 
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
@@ -215,6 +215,17 @@ const oxideCmTheme = EditorView.theme({
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
     background: 'var(--accent-glow)',
   },
+  // Line-number gutter (only mounted when editor_line_numbers is on).
+  // CM6's stock gutter is a light-mode grey — repaint it with the app's
+  // tokens so it reads correctly against the dark editor.
+  '.cm-gutters': {
+    background: 'var(--bg)',
+    color: 'var(--fg-dim)',
+    border: 'none',
+  },
+  '.cm-lineNumbers .cm-gutterElement': {
+    padding: '0 12px 0 16px',
+  },
 });
 
 // Build the EditorView for the given tab. The updateListener is the only
@@ -245,6 +256,7 @@ function buildView(tab) {
 
   const wordWrap = state.config?.editor_word_wrap !== false;
   const spellCheck = !!state.config?.editor_spell_check;
+  const showLineNumbers = !!state.config?.editor_line_numbers;
 
   const baseExtensions = [
     history(),
@@ -261,6 +273,7 @@ function buildView(tab) {
     updateListener,
   ];
   if (wordWrap) baseExtensions.push(EditorView.lineWrapping);
+  if (showLineNumbers) baseExtensions.push(lineNumbers());
 
   const editorState = EditorState.create({
     doc: tab.raw ?? '',
