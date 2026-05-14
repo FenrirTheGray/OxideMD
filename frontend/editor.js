@@ -300,7 +300,7 @@ function unmountEditor() {
   previewPane.innerHTML = '';
 }
 
-function setPreviewHtml(html) {
+export function setPreviewHtml(html) {
   previewPane.innerHTML = html;
   // Local images arrive as `<img data-oxide-src="/abs/path">`; rewrite to
   // asset:// URLs so the webview can actually load them.

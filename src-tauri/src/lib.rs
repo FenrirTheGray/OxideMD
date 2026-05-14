@@ -78,6 +78,10 @@ pub fn run() {
         .setup(|app| {
             // Restore saved window geometry
             let cfg = config::load_config();
+            // Seed the renderer's soft-break mode from saved config so
+            // files opened on launch render with the right setting.
+            crate::markdown::PRESERVE_LINE_BREAKS
+                .store(cfg.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_size(tauri::LogicalSize::new(
                     cfg.window_width as f64,
