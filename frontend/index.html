@@ -380,24 +380,6 @@
           <div class="welcome-wordmark-tag">A lightweight Markdown reader</div>
         </div>
 
-        <button class="welcome-hero" id="welcome-new" type="button">
-          <div class="welcome-hero-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="12" x2="12" y2="18"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-          </div>
-          <div class="welcome-hero-copy">
-            <h2 class="welcome-hero-title">Create a new file</h2>
-            <div class="welcome-hero-sub">
-              Press <span data-shortcut="newFile"></span> to start a fresh Markdown document.
-            </div>
-          </div>
-          <span class="welcome-hero-cta">New&hellip;</span>
-        </button>
-
         <button class="welcome-hero" id="welcome-open" type="button">
           <div class="welcome-hero-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -413,21 +395,30 @@
           <span class="welcome-hero-cta">Browse&hellip;</span>
         </button>
 
-        <button class="welcome-hero" id="welcome-open-folder" type="button">
-          <div class="welcome-hero-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Secondary actions — demoted to a quiet inline row beneath the
+             primary "Open file" hero. IDs are unchanged so app.js's
+             delegated contentEl click handler still routes them, and the
+             data-shortcut spans still get rebuilt by renderShortcutsUI(). -->
+        <div class="welcome-secondary">
+          <button class="welcome-secondary-action" id="welcome-new" type="button">
+            <svg class="welcome-secondary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="12" x2="12" y2="18"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            <span class="welcome-secondary-label">New file</span>
+            <span class="welcome-secondary-keys" data-shortcut="newFile"></span>
+          </button>
+          <button class="welcome-secondary-action" id="welcome-open-folder" type="button">
+            <svg class="welcome-secondary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <path d="M3 11h18"/>
             </svg>
-          </div>
-          <div class="welcome-hero-copy">
-            <h2 class="welcome-hero-title">Open a folder</h2>
-            <div class="welcome-hero-sub">
-              Press <span data-shortcut="openFolder"></span> to browse every <kbd>.md</kbd> file in a project.
-            </div>
-          </div>
-          <span class="welcome-hero-cta">Browse&hellip;</span>
-        </button>
+            <span class="welcome-secondary-label">Open folder</span>
+            <span class="welcome-secondary-keys" data-shortcut="openFolder"></span>
+          </button>
+        </div>
 
         <div class="welcome-recent" id="welcome-recent" hidden>
           <div class="welcome-col-title">

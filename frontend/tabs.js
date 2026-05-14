@@ -13,7 +13,7 @@ import {
 } from './state.js';
 import { clearSearch } from './search.js';
 import { syncWatcher, highlightActiveTreeItem } from './folder.js';
-import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, isPreviewVisible } from './editor.js';
+import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, isPreviewVisible, updateCounts, clearCounts } from './editor.js';
 import { isOutlineOpen, refreshOutline } from './outline.js';
 import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
 import { readDraft, clearDraft } from './draft-store.js';
@@ -235,10 +235,14 @@ export function applyActiveTab() {
   if (tab.editing) {
     // Rebuild the split so it reflects this tab's raw buffer and
     // preview state (another tab may have been editing its own buffer).
+    // mountEditor() refreshes the status-bar counts itself.
     mountEditor(tab);
   } else {
     renderContent(tab.html);
     state.originalContent = tab.html;
+    // Read mode: counts come from the tab's raw markdown source. Runs on
+    // every tab switch and on exiting edit mode (both route through here).
+    updateCounts(tab.raw ?? '');
   }
 
   appWindow.setTitle(tab.title);
@@ -269,6 +273,8 @@ export function showWelcome() {
   appWindow.setTitle('OxideMD');
   document.title = 'OxideMD';
   setStatusFilePath('');
+  // No active document — blank the status-bar counts.
+  clearCounts();
   zoomLabel.textContent = '100%';
   highlightActiveTreeItem();
   clearStatus();

@@ -1447,6 +1447,64 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
   color: #fff;
 }
 
+/* Secondary actions — a quiet inline row beneath the primary hero. These
+   are the demoted "New file" / "Open folder" entry points: same handlers
+   as before, but visually subordinate so the welcome screen no longer
+   reads as three matching "choose-your-path" cards. */
+.welcome-secondary {
+  display: flex;
+  gap: 10px;
+  margin-top: -10px;
+}
+.welcome-secondary-action {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--dur-sm) var(--ease),
+              background var(--dur-sm) var(--ease),
+              color var(--dur-sm) var(--ease);
+}
+.welcome-secondary-action:hover {
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--fg);
+}
+.welcome-secondary-action:active { transform: translateY(1px); }
+.welcome-secondary-action:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.welcome-secondary-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--fg-muted);
+}
+.welcome-secondary-action:hover .welcome-secondary-icon { color: var(--accent); }
+.welcome-secondary-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.welcome-secondary-keys {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
 /* Shortcuts section */
 .welcome-shortcuts-section {
   display: flex;
@@ -1576,6 +1634,11 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
 }
 #status-indicator.hidden { display: none; }
 
+/* Line / word / char counts for the active document — shown in both read
+   and edit mode. JS keeps the text fresh (tab switch, doc change,
+   selection change, mode change) and blanks it on the welcome screen;
+   :empty drops the separator border so a blank element leaves no
+   orphaned divider in the status bar. */
 #status-counts {
   color: var(--fg-dim);
   flex-shrink: 0;
@@ -1587,9 +1650,11 @@ body.resizing-sidebar * { cursor: col-resize !important; user-select: none !impo
   border-left: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
 }
-/* Visibility tracks the editing state of the active tab — switching to a
-   non-editing tab hides counts from the prior tab without per-switch JS. */
-body:not(.editing) #status-counts { display: none; }
+#status-counts:empty {
+  padding: 0;
+  margin-left: 0;
+  border-left: none;
+}
 
 .status-sep {
   width: 1px;
@@ -3099,14 +3164,20 @@ body:not(.editing) #status-counts { display: none; }
 }
 
 /* ── Tab dirty indicator ──────────────────────────────────────────── */
+/* A tab with an unsaved buffer (dirty, or a recovered draft — both set
+   the `.dirty` class via isDirty()) carries an accent dot before its
+   title. Sized + ringed for contrast against both the active tab (body
+   bg) and inactive tabs (toolbar bg); the dot stays full-opacity even
+   though inactive tab text is dimmed, so it never washes out. */
 .tab.dirty .tab-title::before {
   content: '';
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  margin-right: 6px;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+  margin-right: 7px;
   vertical-align: middle;
   flex-shrink: 0;
 }

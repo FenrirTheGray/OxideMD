@@ -95,22 +95,42 @@ function applySplitToTab(tab) {
   applySplitMode(tab.splitMode || 'split', false);
 }
 
-// ── Word + char counts (edit mode) ─────────────────────────────────────
-// Cheap regex pass on the raw buffer; runs on every doc change + on mount.
-// Counts source markdown verbatim (including syntax characters) to avoid
-// tying this to the render pipeline. Visibility is driven by CSS
-// (`body:not(.editing) #status-counts { display: none }`) so we only have
-// to keep the text fresh — switching to a non-editing tab hides the prior
-// tab's counts without needing a hideCounts() call.
-function updateCounts(value) {
+// ── Line / word / char counts (status bar) ─────────────────────────────
+// Cheap synchronous pass over the document text: one regex for words plus
+// a newline split for lines — fast enough to run inline on every doc
+// change and selection change without debouncing (the preview render is
+// the heavy step and is debounced separately). Counts source markdown
+// verbatim (including syntax characters) to avoid tying this to the
+// render pipeline.
+//
+// Used in both modes: edit mode passes the live buffer (and, when a
+// selection is non-empty, the selected text for the trailing "selected"
+// segment); read mode passes the tab's raw source. `showWelcome` clears
+// the element so it blanks out when there's no active document.
+function countsLabel(text) {
+  const chars = text.length;
+  const words = (text.match(/\S+/g) || []).length;
+  const lines = text === '' ? 0 : text.split('\n').length;
+  return `${lines} line${lines === 1 ? '' : 's'} · `
+       + `${words} word${words === 1 ? '' : 's'} · `
+       + `${chars} char${chars === 1 ? '' : 's'}`;
+}
+
+export function updateCounts(value, selectionText) {
   if (!statusCountsEl) return;
   const text = value ?? '';
-  if (!text) {
-    statusCountsEl.textContent = '0 words · 0 chars';
-    return;
+  let label = countsLabel(text);
+  const sel = selectionText ?? '';
+  if (sel) {
+    const selWords = (sel.match(/\S+/g) || []).length;
+    label += `  (${selWords} word${selWords === 1 ? '' : 's'}, `
+           + `${sel.length} char${sel.length === 1 ? '' : 's'} selected)`;
   }
-  const words = (text.match(/\S+/g) || []).length;
-  statusCountsEl.textContent = `${words} word${words === 1 ? '' : 's'} · ${text.length} chars`;
+  statusCountsEl.textContent = label;
+}
+
+export function clearCounts() {
+  if (statusCountsEl) statusCountsEl.textContent = '';
 }
 
 // ── Smart list / quote continuation on Enter ─────────────────────────
@@ -242,7 +262,6 @@ function buildView(tab) {
     if (btnDiscard) btnDiscard.disabled = !dirty;
     const tabEl = document.querySelector(`.tab[data-tab-id="${cur.id}"]`);
     if (tabEl) tabEl.classList.toggle('dirty', dirty);
-    updateCounts(newDoc);
     scheduleDraftWrite(cur);
     schedulePreviewRender();
     // Headings may have been added/removed/edited — keep the outline
@@ -250,8 +269,19 @@ function buildView(tab) {
     refreshOutline();
   };
 
+  // Refresh the status-bar counts from a CM6 state. Called on both doc
+  // changes and selection changes so the trailing "… selected" segment
+  // tracks the cursor live; the selection text is empty for a plain
+  // caret, which collapses the label back to the document totals.
+  const refreshCountsFromState = (cmState) => {
+    const sel = cmState.selection.main;
+    const selectionText = sel.empty ? '' : cmState.sliceDoc(sel.from, sel.to);
+    updateCounts(cmState.doc.toString(), selectionText);
+  };
+
   const updateListener = EditorView.updateListener.of((u) => {
     if (u.docChanged) onDocChanged(u.state.doc.toString());
+    if (u.docChanged || u.selectionSet) refreshCountsFromState(u.state);
   });
 
   const wordWrap = state.config?.editor_word_wrap !== false;
@@ -524,6 +554,9 @@ export function exitEditMode({ keepHtml = true } = {}) {
   document.body.classList.remove('editing');
   unmountEditor();
   if (keepHtml) renderContent(tab.html);
+  // Switch the status-bar counts from the live buffer back to the tab's
+  // raw source (no selection segment in read mode).
+  updateCounts(tab.raw ?? '');
   applyZoom(tab.zoom);
   syncToolbar();
   renderTabBar();
