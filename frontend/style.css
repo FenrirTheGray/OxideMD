@@ -3286,61 +3286,81 @@ body.resizing-split, body.resizing-split * { cursor: col-resize !important; user
    the PDF. */
 #print-root { display: none; }
 
-/* "Printer Friendly PDFs" = on: override the markdown-relevant CSS
-   custom properties on the print subtree to the Atom One Light values
-   (copied from `body.theme-light`), so the PDF is dark-on-white
-   regardless of the app's current theme. --code-bg / --note-bg are
-   normally set inline on <body> per-theme, so they're overridden here
-   too. With the class absent (printer-friendly off), #print-root
-   inherits the live theme variables from <body> and prints in the
-   exact current style. */
-#print-root.print-light {
-  --bg:            #fafafa;
-  --fg:            #383a42;
-  --fg-dim:        #696c77;
-  --fg-muted:      #6a7387;
-  --fg-toolbar:    #4a4a4f;
-  --border:        #d8d8d8;
-  --border-subtle: rgba(216, 216, 216, 0.7);
-  --bg-table-hd:   #e8e8e8;
-  --bg-table-row:  #f5f5f5;
-  --bg-code:       #f0f0f0;
-  --code-bg:       #f0f0f0;
-  --note-bg:       #eaeef8;
-  background: #fff;
-}
-
 @media print {
   /* Isolate #print-root: hide every other top-level node so only the
      rendered Markdown reaches the page — no toolbar, sidebar, tabs,
      status bar, overlays, or popovers. */
   body > *:not(#print-root) { display: none !important; }
+
   html, body {
     height: auto;
     overflow: visible;
-    background: #fff;
   }
+
+  /* @page margin is 0 so the page background reaches every edge of the
+     sheet; the page inset lives on #print-root's padding instead.
+     Without this the @page margin band stays paper-white and a
+     dark-theme PDF prints as a dark card floating in a white border. */
+  @page { margin: 0; }
+
   #print-root {
     display: block;
     position: static;
     width: auto;
     max-width: none;
     margin: 0;
-    padding: 0;
+    padding: 1.6cm;
+    box-sizing: border-box;
+  }
+
+  /* Default (printer-friendly off): the PDF matches the app's current
+     theme. The background is set on <body> too so it propagates to the
+     page canvas (the whole sheet), and #print-root inherits the live
+     theme variables from <body>. */
+  body, #print-root {
     background: var(--bg);
     color: var(--fg);
   }
-  /* Keep colors, syntax highlighting and theme backgrounds in the PDF. */
-  #print-root, #print-root * {
+
+  /* "Printer Friendly PDFs" = on: force a white sheet with dark text
+     regardless of the active theme. print.js puts `.print-friendly` on
+     <body> (not #print-root) so this rule can flip the page canvas too.
+     The markdown-relevant CSS custom properties are overridden to the
+     Atom One Light values (copied from `body.theme-light`); --code-bg /
+     --note-bg are normally set inline on <body> per-theme, so they're
+     overridden here too. */
+  body.print-friendly,
+  body.print-friendly #print-root {
+    background: #fff;
+  }
+  body.print-friendly #print-root {
+    --bg:            #fafafa;
+    --fg:            #383a42;
+    --fg-dim:        #696c77;
+    --fg-muted:      #6a7387;
+    --fg-toolbar:    #4a4a4f;
+    --border:        #d8d8d8;
+    --border-subtle: rgba(216, 216, 216, 0.7);
+    --bg-table-hd:   #e8e8e8;
+    --bg-table-row:  #f5f5f5;
+    --bg-code:       #f0f0f0;
+    --code-bg:       #f0f0f0;
+    --note-bg:       #eaeef8;
+    color: var(--fg);
+  }
+
+  /* Keep colors, syntax highlighting and theme backgrounds in the PDF —
+     including the <body> background that fills the page canvas. */
+  html, body, #print-root, #print-root * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
   /* Page-break hygiene: don't orphan headings or split atomic blocks. */
   #print-root h1, #print-root h2, #print-root h3,
   #print-root h4, #print-root h5, #print-root h6 { break-after: avoid; }
   #print-root pre, #print-root blockquote, #print-root table,
   #print-root img, #print-root tr { break-inside: avoid; }
-  @page { margin: 1.6cm; }
 }
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */
