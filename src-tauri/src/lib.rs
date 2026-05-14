@@ -62,6 +62,7 @@ pub fn run() {
             commands::create_file,
             commands::pick_folder,
             commands::read_folder_tree,
+            commands::search_project,
             commands::resolve_md_path,
             commands::get_config,
             commands::get_default_config,

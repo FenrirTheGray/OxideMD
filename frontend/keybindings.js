@@ -194,6 +194,7 @@ export const ACTIONS = [
   { id: 'openFile',      category: 'File', label: 'Open file',        defaultAccel: 'Mod+O' },
   { id: 'openFolder',    category: 'File', label: 'Open folder',      defaultAccel: 'Mod+Shift+O' },
   { id: 'closeFolder',   category: 'File', label: 'Close folder',     defaultAccel: 'Mod+Shift+W' },
+  { id: 'searchInFolder',category: 'File', label: 'Search in folder', defaultAccel: 'Mod+Shift+F' },
   { id: 'save',          category: 'File', label: 'Save file',        defaultAccel: 'Mod+S' },
   { id: 'reload',        category: 'File', label: 'Reload file',      defaultAccel: 'Mod+R' },
   { id: 'print',         category: 'File', label: 'Print to PDF',     defaultAccel: 'Mod+P' },

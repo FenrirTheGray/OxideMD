@@ -2,6 +2,7 @@ use crate::config::{add_recent_file, fonts_dir, load_config, save_config, Config
 use crate::markdown;
 use base64::Engine;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
@@ -377,6 +378,156 @@ pub async fn read_folder_tree(path: String) -> Result<FolderTree, String> {
         // Load config once here, not per-entry inside the recursive walk.
         let exts = md_extensions(&load_config());
         Ok(build_folder_tree(&p, &exts))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// Per-line text is truncated to this many characters so a minified-JSON
+// line inside a fenced code block can't bloat the result payload. The
+// cut is on a char boundary (chars().take), never a byte index.
+const SEARCH_MAX_LINE_LEN: usize = 200;
+// Hard ceiling on total matches across every file — once crossed the
+// scan stops so a query like "e" against a huge tree can't hang or
+// produce a megabyte of results. `truncated` is surfaced to the UI.
+const SEARCH_MAX_MATCHES: usize = 1000;
+
+#[derive(serde::Serialize)]
+pub struct SearchMatch {
+    pub line_number: usize,
+    pub line_text: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct SearchFileResult {
+    pub path: String,
+    pub name: String,
+    pub matches: Vec<SearchMatch>,
+}
+
+#[derive(serde::Serialize)]
+pub struct SearchResults {
+    pub results: Vec<SearchFileResult>,
+    /// Total number of matches across all files in `results`.
+    pub total: usize,
+    /// True if the scan stopped early — either the folder walk hit
+    /// `WALK_MAX_VISITED` or the match count hit `SEARCH_MAX_MATCHES`.
+    /// The sidebar uses this to warn the results may be incomplete.
+    pub truncated: bool,
+}
+
+/// Truncates `line` to at most `max` characters, cutting on a char
+/// boundary so multibyte UTF-8 is never split. Returns an owned String.
+fn truncate_line(line: &str, max: usize) -> String {
+    if line.chars().count() <= max {
+        line.to_string()
+    } else {
+        line.chars().take(max).collect()
+    }
+}
+
+/// Scans one file's text for a case-insensitive plain-substring match of
+/// `query_lower` (which the caller has already lowercased). Pure string
+/// logic — no filesystem, no regex — kept separate so it's unit-testable.
+/// Stops early once `remaining` matches have been collected and reports
+/// how many were left via the returned count.
+fn scan_lines(content: &str, query_lower: &str, max_line_len: usize, remaining: usize) -> Vec<SearchMatch> {
+    let mut out: Vec<SearchMatch> = Vec::new();
+    if query_lower.is_empty() || remaining == 0 {
+        return out;
+    }
+    for (i, line) in content.lines().enumerate() {
+        if line.to_lowercase().contains(query_lower) {
+            out.push(SearchMatch {
+                line_number: i + 1,
+                line_text: truncate_line(line, max_line_len),
+            });
+            if out.len() >= remaining {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Recursively greps every Markdown file under `root` for `query`.
+/// Case-insensitive plain substring match (no regex). Results are
+/// grouped per file; files that fail to read are skipped rather than
+/// aborting the whole search. Runs on a blocking thread like the other
+/// IO-heavy commands here.
+#[tauri::command]
+pub async fn search_project(query: String, root: String) -> Result<SearchResults, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Ok(SearchResults {
+                results: Vec::new(),
+                total: 0,
+                truncated: false,
+            });
+        }
+        let root_path = PathBuf::from(&root);
+        if !root_path.is_dir() {
+            return Err(format!("Not a directory: {root}"));
+        }
+        // Load config once, then reuse the existing folder walk so the
+        // extension filter and the WALK_MAX_VISITED guard stay shared.
+        let exts = md_extensions(&load_config());
+        let mut md_paths: Vec<PathBuf> = Vec::new();
+        let mut visited: usize = 0;
+        let mut walk_truncated = false;
+        collect_md_paths(&root_path, &exts, &mut md_paths, &mut visited, &mut walk_truncated);
+        md_paths.sort();
+
+        let mut results: Vec<SearchFileResult> = Vec::new();
+        let mut total: usize = 0;
+        let mut truncated = walk_truncated;
+        for path in md_paths {
+            if total >= SEARCH_MAX_MATCHES {
+                truncated = true;
+                break;
+            }
+            let file = match fs::File::open(&path) {
+                Ok(f) => f,
+                Err(_) => continue, // unreadable file — skip, don't abort
+            };
+            let mut content = String::new();
+            // Read line by line so a single huge file can't blow memory;
+            // a read error mid-file just ends that file's scan.
+            for line in BufReader::new(file).lines() {
+                match line {
+                    Ok(l) => {
+                        content.push_str(&l);
+                        content.push('\n');
+                    }
+                    Err(_) => break,
+                }
+            }
+            let matches = scan_lines(
+                &content,
+                &needle,
+                SEARCH_MAX_LINE_LEN,
+                SEARCH_MAX_MATCHES - total,
+            );
+            if matches.is_empty() {
+                continue;
+            }
+            total += matches.len();
+            results.push(SearchFileResult {
+                name: path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string(),
+                path: path.to_string_lossy().into_owned(),
+                matches,
+            });
+        }
+        Ok(SearchResults {
+            results,
+            total,
+            truncated,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1047,6 +1198,70 @@ mod tests {
             md_href_to_decoded_path("my%20notes.md", &exts).as_deref(),
             Some("my notes.md")
         );
+    }
+
+    #[test]
+    fn scan_lines_matches_case_insensitively() {
+        // The caller lowercases the query; scan_lines lowercases each
+        // line, so a mixed-case line matches a lowercased needle and
+        // vice versa.
+        let content = "Hello FOO world\nnothing here\nfoo again\n";
+        let m = scan_lines(content, "foo", 200, 1000);
+        assert_eq!(m.len(), 2);
+        assert_eq!(m[0].line_number, 1);
+        assert_eq!(m[0].line_text, "Hello FOO world");
+        assert_eq!(m[1].line_number, 3);
+        assert_eq!(m[1].line_text, "foo again");
+    }
+
+    #[test]
+    fn scan_lines_treats_query_as_literal_not_regex() {
+        // `.` and `[abc]` are literal characters here — a plain substring
+        // search, never a regex. `a.b` matches only the literal "a.b".
+        let content = "axb should not match\na.b literal match\n[abc] bracket line\n";
+        let dot = scan_lines(content, "a.b", 200, 1000);
+        assert_eq!(dot.len(), 1);
+        assert_eq!(dot[0].line_number, 2);
+        let bracket = scan_lines(content, "[abc]", 200, 1000);
+        assert_eq!(bracket.len(), 1);
+        assert_eq!(bracket[0].line_number, 3);
+    }
+
+    #[test]
+    fn scan_lines_empty_query_yields_nothing() {
+        let content = "anything at all\n";
+        assert!(scan_lines(content, "", 200, 1000).is_empty());
+    }
+
+    #[test]
+    fn truncate_line_cuts_on_char_boundary() {
+        // A line of multibyte chars truncated mid-string must stay valid
+        // UTF-8 — byte slicing would panic here, char-based never does.
+        let line = "héllo wörld ".repeat(40); // well over 200 chars, multibyte
+        let cut = truncate_line(&line, 200);
+        assert_eq!(cut.chars().count(), 200);
+        // Round-tripping through chars() proves it's still valid UTF-8.
+        assert_eq!(cut.chars().count(), cut.chars().collect::<String>().chars().count());
+        // A short line is returned unchanged.
+        assert_eq!(truncate_line("hôla", 200), "hôla");
+    }
+
+    #[test]
+    fn scan_lines_truncates_long_match_lines() {
+        let long = format!("match {}", "x".repeat(500));
+        let content = format!("{long}\n");
+        let m = scan_lines(&content, "match", 200, 1000);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].line_text.chars().count(), 200);
+    }
+
+    #[test]
+    fn scan_lines_stops_at_remaining_cap() {
+        // `remaining` is the global budget left; scan_lines must stop
+        // collecting once it's reached even if more lines would match.
+        let content = "foo\nfoo\nfoo\nfoo\nfoo\n";
+        let m = scan_lines(content, "foo", 200, 3);
+        assert_eq!(m.len(), 3);
     }
 }
 
