@@ -494,6 +494,18 @@
     </div>
   </div>
 
+  <!-- ── Print-to-PDF loader (shown for the whole export duration) ─── -->
+  <!-- print.js shows this while rendering + while the native print
+       dialog is open, and hides it on `afterprint` (or on failure).
+       Must stay a direct child of <body> so the `body > *:not(#print-root)`
+       @media print rule keeps it out of the PDF. -->
+  <div id="print-loader-overlay" class="hidden" role="status" aria-live="polite">
+    <div id="print-loader-card">
+      <div class="print-loader-spinner" aria-hidden="true"></div>
+      <div class="print-loader-label">Exporting to PDF…</div>
+    </div>
+  </div>
+
   <!-- ── Settings modal ─────────────────────────────────────────────── -->
   <div id="settings-overlay" class="hidden"
        role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
@@ -860,6 +872,11 @@
       </div>
     </div>
   </div>
+
+  <!-- ── Toast notifications ────────────────────────────────────────── -->
+  <!-- toast.js appends `.toast` cards here; the container is fixed,
+       bottom-right, and stacks toasts in a column. -->
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
   <script src="dist/bundle.js"></script>
 </body>

@@ -3882,6 +3882,100 @@ body.resizing-split, body.resizing-split * { cursor: col-resize !important; user
   #print-root .codeblock-lang { display: none !important; }
 }
 
+/* ── Print-to-PDF loader overlay ──────────────────────────────────── */
+/* Shown by print.js for the whole export (render → native print dialog),
+   hidden on `afterprint` or on failure. On-screen UI only — kept outside
+   the @media print block above, and the `body > *:not(#print-root)`
+   isolation rule already keeps it out of the PDF. Mirrors the
+   #picker-backdrop > #picker-loader structure. z-index sits above the
+   Settings overlay (200) so it covers everything while exporting. */
+#print-loader-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 300;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+#print-loader-overlay.hidden { display: none; }
+#print-loader-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 28px;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  animation: dialog-appear var(--dur) var(--ease);
+}
+.print-loader-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.print-loader-label { line-height: 1; }
+
+/* ── Toast notifications ──────────────────────────────────────────── */
+/* toast.js appends `.toast` cards into #toast-container; each auto-
+   dismisses after ~4s. The container is click-through (pointer-events:
+   none) so toasts never block the UI underneath; toasts re-enable
+   pointer events on themselves. z-index above the print loader (300)
+   so a finish toast is visible even mid-teardown. */
+#toast-container {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  max-width: 320px;
+  padding: 11px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: toast-in var(--dur) var(--ease-out);
+}
+/* No dedicated --success token in the palette; --accent (blue) reads as
+   the positive accent and keeps dark/light theming intact. */
+.toast.success { border-left-color: var(--accent); }
+.toast.error   { border-left-color: var(--danger); }
+/* Exit transition — toast.js adds `.leaving`, then removes the node
+   after the animation (~260ms, kept in sync with TOAST_EXIT_MS). */
+.toast.leaving {
+  animation: toast-out 0.26s var(--ease) forwards;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(16px); }
+}
+
 /* ── GFM task lists ───────────────────────────────────────────────── */
 /* Rendered when pulldown-cmark sees `- [ ]` / `- [x]` markers and emits
    <input type="checkbox" disabled>. The checkbox sits at start-of-line
