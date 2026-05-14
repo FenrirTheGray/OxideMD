@@ -1,4 +1,4 @@
-use crate::config::{add_recent_file, fonts_dir, load_config, save_config, Config};
+use crate::config::{add_recent_file, fonts_dir, load_config, save_config, Config, MD_EXTS_DEFAULT};
 use crate::markdown;
 use base64::Engine;
 use std::fs;
@@ -86,10 +86,12 @@ pub fn get_cli_files() -> Vec<String> {
 pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
     let window = app.get_webview_window("main").unwrap();
     tauri::async_runtime::spawn_blocking(move || {
+        let exts = md_extensions(&load_config());
+        let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
         app.dialog()
             .file()
             .set_parent(&window)
-            .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
+            .add_filter("Markdown", &ext_refs)
             .add_filter("All Files", &["*"])
             .blocking_pick_files()
             .unwrap_or_default()
@@ -117,11 +119,13 @@ pub async fn create_file(
 ) -> Result<Option<OpenResult>, String> {
     let window = app.get_webview_window("main").unwrap();
     let picked = tauri::async_runtime::spawn_blocking(move || {
+        let exts = md_extensions(&load_config());
+        let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
         let mut builder = app
             .dialog()
             .file()
             .set_parent(&window)
-            .add_filter("Markdown", &["md", "markdown", "mdown", "mkd"])
+            .add_filter("Markdown", &ext_refs)
             .set_file_name("untitled.md");
         if let Some(d) = dir.as_deref() {
             if !d.is_empty() {
@@ -139,7 +143,8 @@ pub async fn create_file(
     };
 
     tauri::async_runtime::spawn_blocking(move || {
-        let path = ensure_md_extension(PathBuf::from(&chosen));
+        let exts = md_extensions(&load_config());
+        let path = ensure_md_extension(PathBuf::from(&chosen), &exts);
         fs::write(&path, "").map_err(|e| e.to_string())?;
         let canonical = fs::canonicalize(&path).unwrap_or(path);
         let canonical = strip_windows_verbatim(canonical);
@@ -187,12 +192,21 @@ pub struct TreeNode {
     pub children: Vec<TreeNode>,
 }
 
-const MD_EXTS: &[&str] = &["md", "markdown", "mdown", "mkd"];
+/// Resolves the effective list of Markdown extensions from a loaded
+/// config, falling back to the canonical defaults when the config's
+/// list is empty (older config files, or a field cleared by hand).
+fn md_extensions(config: &Config) -> Vec<String> {
+    if config.md_extensions.is_empty() {
+        MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect()
+    } else {
+        config.md_extensions.clone()
+    }
+}
 
-fn is_md_file(path: &std::path::Path) -> bool {
+fn is_md_file(path: &std::path::Path, exts: &[String]) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| MD_EXTS.contains(&e.to_lowercase().as_str()))
+        .map(|e| exts.contains(&e.to_lowercase()))
         .unwrap_or(false)
 }
 
@@ -202,8 +216,8 @@ fn is_md_file(path: &std::path::Path) -> bool {
 /// bare name typed with no extension). A non-markdown extension is kept
 /// and `.md` appended rather than replaced, so the user's intent is
 /// never silently discarded.
-fn ensure_md_extension(path: PathBuf) -> PathBuf {
-    if is_md_file(&path) {
+fn ensure_md_extension(path: PathBuf, exts: &[String]) -> PathBuf {
+    if is_md_file(&path, exts) {
         path
     } else {
         let mut s = path.into_os_string();
@@ -218,6 +232,7 @@ fn ensure_md_extension(path: PathBuf) -> PathBuf {
 /// aborts the scan once it crosses `WALK_MAX_VISITED`.
 fn collect_md_paths(
     dir: &std::path::Path,
+    exts: &[String],
     out: &mut Vec<PathBuf>,
     visited: &mut usize,
     truncated: &mut bool,
@@ -248,11 +263,11 @@ fn collect_md_paths(
             Err(_) => continue,
         };
         if ft.is_dir() {
-            collect_md_paths(&path, out, visited, truncated);
+            collect_md_paths(&path, exts, out, visited, truncated);
             if *truncated {
                 return;
             }
-        } else if ft.is_file() && is_md_file(&path) {
+        } else if ft.is_file() && is_md_file(&path, exts) {
             out.push(path);
         }
     }
@@ -315,7 +330,7 @@ fn build_nodes(parent: &std::path::Path, files: &[PathBuf]) -> Vec<TreeNode> {
     nodes
 }
 
-fn build_folder_tree(root: &std::path::Path) -> FolderTree {
+fn build_folder_tree(root: &std::path::Path, exts: &[String]) -> FolderTree {
     let name = root
         .file_name()
         .and_then(|n| n.to_str())
@@ -324,7 +339,7 @@ fn build_folder_tree(root: &std::path::Path) -> FolderTree {
     let mut md_paths: Vec<PathBuf> = Vec::new();
     let mut visited: usize = 0;
     let mut truncated = false;
-    collect_md_paths(root, &mut md_paths, &mut visited, &mut truncated);
+    collect_md_paths(root, exts, &mut md_paths, &mut visited, &mut truncated);
     let entries = build_nodes(root, &md_paths);
     FolderTree {
         root: root.to_string_lossy().into_owned(),
@@ -359,7 +374,9 @@ pub async fn read_folder_tree(path: String) -> Result<FolderTree, String> {
         if !p.is_dir() {
             return Err(format!("Not a directory: {path}"));
         }
-        Ok(build_folder_tree(&p))
+        // Load config once here, not per-entry inside the recursive walk.
+        let exts = md_extensions(&load_config());
+        Ok(build_folder_tree(&p, &exts))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -399,7 +416,7 @@ pub(crate) fn strip_windows_verbatim(p: PathBuf) -> PathBuf {
 /// treated as a potential local .md target. Returns `None` for remote URLs,
 /// fragment-only links, non-markdown extensions, or anything we won't
 /// resolve locally. Pure function — no filesystem access.
-fn md_href_to_decoded_path(href: &str) -> Option<String> {
+fn md_href_to_decoded_path(href: &str, exts: &[String]) -> Option<String> {
     if href.is_empty() || href.starts_with('#') {
         return None;
     }
@@ -424,7 +441,7 @@ fn md_href_to_decoded_path(href: &str) -> Option<String> {
         return None;
     }
     let decoded = percent_decode(target);
-    if !is_md_file(std::path::Path::new(&decoded)) {
+    if !is_md_file(std::path::Path::new(&decoded), exts) {
         return None;
     }
     Some(decoded)
@@ -437,7 +454,8 @@ fn md_href_to_decoded_path(href: &str) -> Option<String> {
 #[tauri::command]
 pub async fn resolve_md_path(base: String, href: String) -> Option<String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let decoded = md_href_to_decoded_path(&href)?;
+        let exts = md_extensions(&load_config());
+        let decoded = md_href_to_decoded_path(&href, &exts)?;
         let candidate = std::path::Path::new(&decoded);
         let resolved = if candidate.is_absolute() {
             PathBuf::from(&decoded)
@@ -859,93 +877,141 @@ mod tests {
         assert_eq!(percent_decode("%2Fa%20b%2Fc"), "/a b/c");
     }
 
+    // Default extension set, as a Vec<String>, for tests that exercise
+    // the extension-aware helpers with today's shipped behaviour.
+    fn default_exts() -> Vec<String> {
+        MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect()
+    }
+
     #[test]
     fn is_md_file_checks_extension_case_insensitively() {
-        assert!(is_md_file(std::path::Path::new("a.md")));
-        assert!(is_md_file(std::path::Path::new("a.MD")));
-        assert!(is_md_file(std::path::Path::new("a.markdown")));
-        assert!(is_md_file(std::path::Path::new("a.MDown")));
-        assert!(is_md_file(std::path::Path::new("a.mkd")));
-        assert!(!is_md_file(std::path::Path::new("a.txt")));
-        assert!(!is_md_file(std::path::Path::new("a")));
+        let exts = default_exts();
+        assert!(is_md_file(std::path::Path::new("a.md"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.MD"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.markdown"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.MDown"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.mkd"), &exts));
+        assert!(!is_md_file(std::path::Path::new("a.txt"), &exts));
+        assert!(!is_md_file(std::path::Path::new("a"), &exts));
+    }
+
+    #[test]
+    fn is_md_file_honors_a_custom_extension_list() {
+        // A user-configured list replaces the defaults entirely: .mdx
+        // matches, the dropped default .mkd no longer does.
+        let exts = vec!["md".to_string(), "mdx".to_string()];
+        assert!(is_md_file(std::path::Path::new("a.mdx"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.MDX"), &exts));
+        assert!(is_md_file(std::path::Path::new("a.md"), &exts));
+        assert!(!is_md_file(std::path::Path::new("a.mkd"), &exts));
+    }
+
+    #[test]
+    fn md_extensions_falls_back_to_defaults_when_empty() {
+        let mut cfg = Config::default();
+        cfg.md_extensions = Vec::new();
+        assert_eq!(md_extensions(&cfg), default_exts());
+        // A non-empty list is returned unchanged.
+        cfg.md_extensions = vec!["mdx".to_string()];
+        assert_eq!(md_extensions(&cfg), vec!["mdx".to_string()]);
     }
 
     #[test]
     fn ensure_md_extension_appends_when_missing() {
+        let exts = default_exts();
         assert_eq!(
-            ensure_md_extension(PathBuf::from("notes")).to_string_lossy(),
+            ensure_md_extension(PathBuf::from("notes"), &exts).to_string_lossy(),
             "notes.md"
         );
     }
 
     #[test]
     fn ensure_md_extension_keeps_existing_markdown_extensions() {
+        let exts = default_exts();
         assert_eq!(
-            ensure_md_extension(PathBuf::from("notes.md")).to_string_lossy(),
+            ensure_md_extension(PathBuf::from("notes.md"), &exts).to_string_lossy(),
             "notes.md"
         );
         assert_eq!(
-            ensure_md_extension(PathBuf::from("notes.markdown")).to_string_lossy(),
+            ensure_md_extension(PathBuf::from("notes.markdown"), &exts).to_string_lossy(),
             "notes.markdown"
         );
         assert_eq!(
-            ensure_md_extension(PathBuf::from("notes.MKD")).to_string_lossy(),
+            ensure_md_extension(PathBuf::from("notes.MKD"), &exts).to_string_lossy(),
             "notes.MKD"
         );
     }
 
     #[test]
     fn ensure_md_extension_appends_to_non_markdown_extension() {
+        let exts = default_exts();
         // A non-markdown extension is preserved, not replaced.
         assert_eq!(
-            ensure_md_extension(PathBuf::from("notes.txt")).to_string_lossy(),
+            ensure_md_extension(PathBuf::from("notes.txt"), &exts).to_string_lossy(),
             "notes.txt.md"
         );
     }
 
     #[test]
     fn md_href_filter_rejects_empty_and_fragments() {
-        assert!(md_href_to_decoded_path("").is_none());
-        assert!(md_href_to_decoded_path("#anchor").is_none());
+        let exts = default_exts();
+        assert!(md_href_to_decoded_path("", &exts).is_none());
+        assert!(md_href_to_decoded_path("#anchor", &exts).is_none());
     }
 
     #[test]
     fn md_href_filter_rejects_remote_schemes() {
-        assert!(md_href_to_decoded_path("http://example.com/a.md").is_none());
-        assert!(md_href_to_decoded_path("HTTPS://example.com/a.md").is_none());
-        assert!(md_href_to_decoded_path("mailto:a@b.c").is_none());
-        assert!(md_href_to_decoded_path("data:text/plain,hi").is_none());
-        assert!(md_href_to_decoded_path("javascript:alert(1)").is_none());
-        assert!(md_href_to_decoded_path("//cdn.example.com/a.md").is_none());
+        let exts = default_exts();
+        assert!(md_href_to_decoded_path("http://example.com/a.md", &exts).is_none());
+        assert!(md_href_to_decoded_path("HTTPS://example.com/a.md", &exts).is_none());
+        assert!(md_href_to_decoded_path("mailto:a@b.c", &exts).is_none());
+        assert!(md_href_to_decoded_path("data:text/plain,hi", &exts).is_none());
+        assert!(md_href_to_decoded_path("javascript:alert(1)", &exts).is_none());
+        assert!(md_href_to_decoded_path("//cdn.example.com/a.md", &exts).is_none());
     }
 
     #[test]
     fn md_href_filter_rejects_non_markdown_extensions() {
-        assert!(md_href_to_decoded_path("page.html").is_none());
-        assert!(md_href_to_decoded_path("./notes.txt").is_none());
-        assert!(md_href_to_decoded_path("image.png").is_none());
+        let exts = default_exts();
+        assert!(md_href_to_decoded_path("page.html", &exts).is_none());
+        assert!(md_href_to_decoded_path("./notes.txt", &exts).is_none());
+        assert!(md_href_to_decoded_path("image.png", &exts).is_none());
     }
 
     #[test]
     fn md_href_filter_accepts_relative_md() {
+        let exts = default_exts();
         assert_eq!(
-            md_href_to_decoded_path("notes.md").as_deref(),
+            md_href_to_decoded_path("notes.md", &exts).as_deref(),
             Some("notes.md")
         );
         assert_eq!(
-            md_href_to_decoded_path("./sub/notes.md").as_deref(),
+            md_href_to_decoded_path("./sub/notes.md", &exts).as_deref(),
             Some("./sub/notes.md")
         );
     }
 
     #[test]
-    fn md_href_filter_strips_query_and_fragment() {
+    fn md_href_filter_honors_custom_extensions() {
+        // With .mdx configured, a relative .mdx link resolves; the
+        // dropped .mkd default no longer does.
+        let exts = vec!["md".to_string(), "mdx".to_string()];
         assert_eq!(
-            md_href_to_decoded_path("notes.md#section").as_deref(),
+            md_href_to_decoded_path("notes.mdx", &exts).as_deref(),
+            Some("notes.mdx")
+        );
+        assert!(md_href_to_decoded_path("notes.mkd", &exts).is_none());
+    }
+
+    #[test]
+    fn md_href_filter_strips_query_and_fragment() {
+        let exts = default_exts();
+        assert_eq!(
+            md_href_to_decoded_path("notes.md#section", &exts).as_deref(),
             Some("notes.md")
         );
         assert_eq!(
-            md_href_to_decoded_path("notes.md?v=2").as_deref(),
+            md_href_to_decoded_path("notes.md?v=2", &exts).as_deref(),
             Some("notes.md")
         );
     }
@@ -976,8 +1042,9 @@ mod tests {
 
     #[test]
     fn md_href_filter_decodes_percent_sequences() {
+        let exts = default_exts();
         assert_eq!(
-            md_href_to_decoded_path("my%20notes.md").as_deref(),
+            md_href_to_decoded_path("my%20notes.md", &exts).as_deref(),
             Some("my notes.md")
         );
     }

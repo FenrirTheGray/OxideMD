@@ -1,7 +1,7 @@
 import {
   invoke, state, systemDarkMQ, isLinux, tabs,
   statusText, statusIndicator, settingsOverlay, searchBar,
-  hasActiveOverlay,
+  hasActiveOverlay, MD_EXTS_DEFAULT,
 } from './state.js';
 import { activeTab, applyZoom, setLoading, clearStatus, renderContent } from './tabs.js';
 import { setPreviewHtml } from './editor.js';
@@ -698,6 +698,21 @@ async function checkForUpdates() {
 // would flip body class and swap bg inputs before they're populated.
 let populatingSettings = false;
 
+// Parses the comma-separated Markdown-extension field into a clean,
+// normalized list: split on commas, trim, lowercase, strip every
+// leading dot, drop empties, and dedupe. A field that normalizes to
+// nothing falls back to the defaults so the folder browser never shows
+// zero files.
+function parseMdExtensions(raw) {
+  const seen = new Set();
+  const out = [];
+  for (const part of String(raw || '').split(',')) {
+    const ext = part.trim().toLowerCase().replace(/^\.+/, '');
+    if (ext && !seen.has(ext)) { seen.add(ext); out.push(ext); }
+  }
+  return out.length ? out : [...MD_EXTS_DEFAULT];
+}
+
 export function openSettings() {
   // Close the search bar first so Settings can open over it.
   if (!searchBar.classList.contains('hidden')) closeSearch();
@@ -725,6 +740,10 @@ export function openSettings() {
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
   document.getElementById('setting-printer-friendly').value = state.config.printer_friendly ? 'true' : 'false';
   document.getElementById('setting-preserve-line-breaks').value = state.config.preserve_line_breaks ? 'true' : 'false';
+  document.getElementById('setting-md-extensions').value =
+    (Array.isArray(state.config.md_extensions) && state.config.md_extensions.length
+      ? state.config.md_extensions
+      : MD_EXTS_DEFAULT).join(', ');
   document.getElementById('setting-word-wrap').value = state.config.editor_word_wrap !== false ? 'true' : 'false';
   document.getElementById('setting-spell-check').value = state.config.editor_spell_check ? 'true' : 'false';
   populatingSettings = false;
@@ -807,6 +826,7 @@ async function saveSettings() {
     toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
     printer_friendly: document.getElementById('setting-printer-friendly').value === 'true',
     preserve_line_breaks: document.getElementById('setting-preserve-line-breaks').value === 'true',
+    md_extensions: parseMdExtensions(document.getElementById('setting-md-extensions').value),
     editor_word_wrap: document.getElementById('setting-word-wrap').value === 'true',
     editor_spell_check: document.getElementById('setting-spell-check').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
@@ -864,6 +884,10 @@ async function resetSettings() {
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
     document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
     document.getElementById('setting-preserve-line-breaks').value = defaults.preserve_line_breaks ? 'true' : 'false';
+    document.getElementById('setting-md-extensions').value =
+      (Array.isArray(defaults.md_extensions) && defaults.md_extensions.length
+        ? defaults.md_extensions
+        : MD_EXTS_DEFAULT).join(', ');
   } else if (activeTabName === 'editor') {
     document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
     document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
