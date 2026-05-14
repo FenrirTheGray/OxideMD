@@ -760,6 +760,24 @@ export function promptDiscardChanges(tab) {
   return openConfirmDialog();
 }
 
+// Confirm before the Settings "Reset defaults" button clobbers config.
+// Reuses the shared confirm overlay as a pure two-button confirm (Save
+// is hidden — there's nothing to save). The "Discard" button is
+// relabelled "Reset" and is the destructive action; Cancel is primary
+// so a stray Enter/Escape leaves the user's settings untouched.
+// Resolves 'discard' to proceed with the reset, 'cancel' otherwise.
+export function promptResetSettings(tabLabel) {
+  setConfirmContents({
+    title: 'Reset to defaults',
+    bodyHtml: `Reset the <span class="confirm-file-name">${escapeHtml(tabLabel || 'current')}</span> settings to their defaults? Your other settings tabs are left untouched. This is applied when you Save.`,
+    discardLabel: 'Reset',
+    cancelHidden: false,
+    saveHidden: true,
+    primary: 'cancel',
+  });
+  return openConfirmDialog();
+}
+
 // Returns 'save' (restore), 'discard', or 'cancel' (leave draft alone).
 // When `conflict` is true, the on-disk content has changed since the
 // draft was last written — surface that so the user knows restoring the

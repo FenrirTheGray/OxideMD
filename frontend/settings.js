@@ -4,7 +4,7 @@ import {
   hasActiveOverlay, MD_EXTS_DEFAULT,
 } from './state.js';
 import { activeTab, applyZoom, setLoading, clearStatus, renderContent } from './tabs.js';
-import { setPreviewHtml } from './editor.js';
+import { setPreviewHtml, promptResetSettings } from './editor.js';
 import { closeSearch } from './search.js';
 import {
   ACTIONS, effectiveBindings, findActionByAccel, eventToAccel,
@@ -84,9 +84,18 @@ export async function loadCustomFont(filename) {
   }
 }
 
+// Swap the body's `theme-*` class without disturbing the other state
+// classes that live on <body> (`editing`, `maximized`, `resizing-split`).
+// A blanket `body.className = ...` would wipe those — which is how an
+// Esc-to-close-Settings while editing used to silently drop edit mode.
+function setBodyTheme(resolved) {
+  document.body.classList.remove('theme-dark', 'theme-light', 'theme-system');
+  document.body.classList.add(`theme-${resolved}`);
+}
+
 export function applyConfig(cfg) {
   const resolved = resolvedTheme(cfg.theme);
-  document.body.className = `theme-${resolved}`;
+  setBodyTheme(resolved);
   if (cfg.font_family.startsWith('custom:')) {
     const filename = cfg.font_family.slice(7);
     if (state.activeFontFilename !== filename) loadCustomFont(filename);
@@ -883,7 +892,7 @@ async function importTheme() {
   populatingSettings = true;
   if (validTheme !== null) {
     document.getElementById('setting-theme').value = validTheme;
-    document.body.className = `theme-${resolvedTheme(validTheme)}`;
+    setBodyTheme(resolvedTheme(validTheme));
   }
   for (const [id, value] of Object.entries(validColors)) {
     document.getElementById(id).value = value;
@@ -898,8 +907,10 @@ export function closeSettings() {
   if (settingsOverlay.classList.contains('hidden') || settingsOverlay.classList.contains('closing')) return;
   // Revert any live theme-preview class change. If Save ran, state.config
   // already reflects the new theme so this is a no-op; on Cancel it
-  // restores the original theme class.
-  document.body.className = `theme-${resolvedTheme(state.config.theme)}`;
+  // restores the original theme class. Only the `theme-*` class is
+  // swapped — `editing`/`maximized`/etc. on <body> must survive, or
+  // closing Settings while editing would silently drop edit mode.
+  setBodyTheme(resolvedTheme(state.config.theme));
   settingsOverlay.classList.add('closing');
   settingsOverlay.addEventListener('animationend', () => {
     settingsOverlay.classList.add('hidden');
@@ -976,9 +987,27 @@ async function saveSettings() {
   }
 }
 
+// Human-readable name for each settings tab, used in the reset confirm
+// copy so the prompt names exactly what's about to be clobbered.
+const SETTINGS_TAB_LABELS = {
+  reading: 'Reading',
+  editor: 'Editor',
+  colors: 'Colors',
+  shortcuts: 'Shortcuts',
+};
+
 async function resetSettings() {
-  const defaults = await invoke('get_default_config');
   const activeTabName = document.querySelector('.settings-tab.active')?.dataset.tab;
+  // The About tab has no resettable settings — nothing to confirm or do.
+  if (!activeTabName || !(activeTabName in SETTINGS_TAB_LABELS)) return;
+
+  // Destructive: gate behind the shared confirm dialog before touching
+  // any inputs. 'discard' = the user pressed "Reset"; anything else
+  // (Cancel / Escape / overlay click) leaves the settings untouched.
+  const decision = await promptResetSettings(SETTINGS_TAB_LABELS[activeTabName]);
+  if (decision !== 'discard') return;
+
+  const defaults = await invoke('get_default_config');
   if (activeTabName === 'reading') {
     rebuildFontDropdown();
     fontSelect.value = defaults.font_family;
@@ -1056,7 +1085,7 @@ document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
 document.getElementById('setting-theme').addEventListener('change', () => {
   if (populatingSettings) return;
   const resolved = resolvedTheme(document.getElementById('setting-theme').value);
-  document.body.className = `theme-${resolved}`;
+  setBodyTheme(resolved);
   for (const field of ['code_bg_color', 'note_bg_color']) {
     const id = field === 'code_bg_color' ? 'setting-code-bg' : 'setting-note-bg';
     const input = document.getElementById(id);
