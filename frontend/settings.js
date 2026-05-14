@@ -13,13 +13,18 @@ import {
 import { renderShortcutsUI } from './shortcuts-display.js';
 
 // ── Settings tab structure & placement convention ──────────────────────────
-// The Settings modal has five tabs. When adding a new setting row, decide
+// The Settings modal has six tabs. When adding a new setting row, decide
 // where it belongs by what the setting actually changes:
 //
+//   General   — app-wide behavior that isn't typography or color: the
+//               toolbar button style, how the folder browser decides which
+//               files are Markdown, and whether exported PDFs are
+//               printer-friendly.
 //   Reading   — the rendered/printed output and reading layout: typography
-//               (font, size, line height), reading width, the toolbar, and
-//               anything that alters rendered HTML or exported PDFs
-//               (preserve line breaks, printer-friendly PDFs).
+//               (font, size, line height), reading width, and preserve
+//               line breaks. It no longer owns the toolbar, the
+//               Markdown-extensions field, or the printer-friendly toggle —
+//               those moved to General.
 //   Editor    — the CodeMirror edit surface itself: word wrap, spell check,
 //               line numbers, and any future option that changes how text
 //               looks or behaves *while editing*.
@@ -30,9 +35,9 @@ import { renderShortcutsUI } from './shortcuts-display.js';
 //
 // Rule of thumb: if it changes the CodeMirror edit surface → Editor; if it
 // changes rendered/printed output or reading layout → Reading; if it's a
-// color token or the theme → Colors. When a setting could plausibly fit two
-// tabs, place it by the surface the user is looking at when the change
-// matters to them.
+// color token or the theme → Colors; if it's app-wide behavior or file
+// handling → General. When a setting could plausibly fit two tabs, place it
+// by the surface the user is looking at when the change matters to them.
 // ───────────────────────────────────────────────────────────────────────────
 
 // ── Config / theme ─────────────────────────────────────────────────────────
@@ -124,9 +129,10 @@ systemDarkMQ.addEventListener('change', () => {
 });
 
 // ── Custom selects ─────────────────────────────────────────────────────────
-// The font select is managed separately (dynamic options), so skip it here.
+// The font and custom-theme selects are managed separately (dynamic
+// options), so skip them here.
 document.querySelectorAll('.custom-select').forEach(sel => {
-  if (sel.id === 'setting-font') return;
+  if (sel.id === 'setting-font' || sel.id === 'setting-custom-theme') return;
   const trigger = sel.querySelector('.custom-select-trigger');
   const options = sel.querySelectorAll('.custom-select-option');
   let focusedIndex = -1;
@@ -414,6 +420,210 @@ fontOptionsContainer.addEventListener('click', async (e) => {
   fontSelect.value = opt.dataset.value;
   fontSelect.classList.remove('open');
   fontTrigger.setAttribute('aria-expanded', 'false');
+});
+
+// ── Custom theme dropdown (dynamic) ───────────────────────────────────────
+// Mirrors the Font dropdown: the options list is rebuilt from
+// state.customThemes, with a remove (×) button per saved theme and an
+// "Import theme…" action row. Unlike the other selects this one has no
+// persisted "selected" value — config stores the raw color fields, not a
+// theme reference — so the trigger always shows a static placeholder and
+// the select exposes no .value property.
+const CUSTOM_THEME_PLACEHOLDER = 'Apply a saved theme…';
+const customThemeSelect = document.getElementById('setting-custom-theme');
+const customThemeTrigger = customThemeSelect.querySelector('.custom-select-trigger');
+const customThemeOptionsContainer = customThemeSelect.querySelector('.custom-select-options');
+customThemeTrigger.textContent = CUSTOM_THEME_PLACEHOLDER;
+
+// ── Custom theme select open/close/keyboard ───────────────────────────────
+function openCustomThemeSelect() {
+  document.querySelectorAll('.custom-select.open').forEach(s => {
+    s.classList.remove('open');
+    s.querySelector('.custom-select-trigger').setAttribute('aria-expanded', 'false');
+  });
+  customThemeSelect.classList.add('open');
+  customThemeTrigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeCustomThemeSelect() {
+  customThemeSelect.classList.remove('open');
+  customThemeTrigger.setAttribute('aria-expanded', 'false');
+  customThemeOptionsContainer.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('focused'));
+}
+
+customThemeTrigger.addEventListener('click', () => {
+  if (customThemeSelect.classList.contains('open')) closeCustomThemeSelect();
+  else openCustomThemeSelect();
+});
+
+customThemeTrigger.addEventListener('keydown', (e) => {
+  const opts = Array.from(customThemeOptionsContainer.querySelectorAll('.custom-select-option'));
+  let focusedIdx = opts.findIndex(o => o.classList.contains('focused'));
+
+  switch (e.key) {
+    case 'Enter': case ' ':
+      e.preventDefault();
+      if (customThemeSelect.classList.contains('open') && focusedIdx >= 0) {
+        opts[focusedIdx].click();
+      } else {
+        openCustomThemeSelect();
+      }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (!customThemeSelect.classList.contains('open')) { openCustomThemeSelect(); break; }
+      focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
+      opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+      if (opts[focusedIdx]) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (!customThemeSelect.classList.contains('open')) { openCustomThemeSelect(); break; }
+      focusedIdx = Math.max(focusedIdx - 1, 0);
+      opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+      if (opts[focusedIdx]) opts[focusedIdx].scrollIntoView({ block: 'nearest' });
+      break;
+    case 'Escape':
+      if (customThemeSelect.classList.contains('open')) { e.preventDefault(); e.stopPropagation(); closeCustomThemeSelect(); customThemeTrigger.focus(); }
+      break;
+    case 'Tab':
+      if (customThemeSelect.classList.contains('open')) closeCustomThemeSelect();
+      break;
+  }
+});
+
+// Rebuilds the options list from state.customThemes. One row per saved
+// theme (label + remove ×), then a separator and the "Import theme…"
+// action; an empty hint stands in when nothing has been imported yet.
+function rebuildCustomThemeDropdown() {
+  customThemeOptionsContainer.innerHTML = '';
+
+  if (state.customThemes.length === 0) {
+    const hint = document.createElement('div');
+    hint.className = 'font-empty-hint';
+    hint.textContent = 'No custom themes imported';
+    customThemeOptionsContainer.appendChild(hint);
+  } else {
+    for (const t of state.customThemes) {
+      const opt = document.createElement('div');
+      opt.className = 'custom-select-option custom-font-option';
+      opt.dataset.value = t.filename;
+      opt.setAttribute('role', 'option');
+
+      const label = document.createElement('span');
+      label.className = 'custom-font-label';
+      label.textContent = t.name;
+      opt.appendChild(label);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'custom-font-remove';
+      removeBtn.setAttribute('aria-label', `Remove ${t.name}`);
+      removeBtn.title = `Remove ${t.name}`;
+      removeBtn.innerHTML = '&#x2715;';
+      opt.appendChild(removeBtn);
+
+      customThemeOptionsContainer.appendChild(opt);
+    }
+  }
+
+  // "Import theme…" action
+  const sep = document.createElement('div');
+  sep.className = 'font-options-sep';
+  customThemeOptionsContainer.appendChild(sep);
+
+  const importOpt = document.createElement('div');
+  importOpt.className = 'custom-select-option font-add-option';
+  importOpt.dataset.value = '__import_theme__';
+  importOpt.setAttribute('role', 'option');
+  importOpt.textContent = 'Import theme…';
+  customThemeOptionsContainer.appendChild(importOpt);
+}
+
+// Event delegation for custom theme dropdown clicks
+customThemeOptionsContainer.addEventListener('click', async (e) => {
+  const removeBtn = e.target.closest('.custom-font-remove');
+  if (removeBtn) {
+    e.stopPropagation();
+    const opt = removeBtn.closest('.custom-select-option');
+    const label = opt.querySelector('.custom-font-label');
+    const themeName = label ? label.textContent : 'this theme';
+    if (!confirm(`Remove "${themeName}"? The saved theme file will be deleted.`)) return;
+    const filename = opt.dataset.value;
+    await invoke('delete_custom_theme', { filename });
+    state.customThemes = await invoke('list_custom_themes');
+    rebuildCustomThemeDropdown();
+    return;
+  }
+
+  const opt = e.target.closest('.custom-select-option');
+  if (!opt) return;
+
+  if (opt.dataset.value === '__import_theme__') {
+    e.stopPropagation();
+    // Close the dropdown, then run the backend's native open dialog.
+    closeCustomThemeSelect();
+    let imported;
+    try {
+      imported = await invoke('import_theme');
+    } catch (err) {
+      showSettingsError('Failed to import theme: ' + err);
+      return;
+    }
+    if (imported == null) return; // user cancelled the dialog
+
+    // Defensive validation: a hand-edited or malformed file must never
+    // corrupt the working config or get persisted. The backend hands us
+    // { name, colors }; validate the flat colors map the same way the
+    // old importTheme() did — unknown keys ignored, bad values reject.
+    const colors = imported.colors;
+    if (typeof colors !== 'object' || colors == null || Array.isArray(colors)) {
+      showSettingsError('Invalid theme file: not a theme object.');
+      return;
+    }
+    let recognized = 0;
+    for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
+      if (!(field in colors)) continue;
+      const value = colors[field];
+      if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
+        showSettingsError(`Invalid theme file: bad color for ${field}.`);
+        return;
+      }
+      recognized++;
+    }
+    if ('theme' in colors) {
+      const t = colors.theme;
+      if (typeof t !== 'string' || !THEME_VALID_THEMES.includes(t)) {
+        showSettingsError('Invalid theme file: unknown theme value.');
+        return;
+      }
+      recognized++;
+    }
+    // A file with no recognized keys would persist a junk entry that
+    // applies nothing visible — reject it rather than save an empty theme.
+    if (recognized === 0) {
+      showSettingsError('Invalid theme file: no recognized color settings.');
+      return;
+    }
+
+    // Persist the theme, refresh the dropdown, and apply it to the
+    // Colors-tab controls + preview (still a pending change until Save).
+    try {
+      await invoke('save_custom_theme', { name: imported.name, theme: colors });
+    } catch (err) {
+      showSettingsError('Failed to save theme: ' + err);
+      return;
+    }
+    state.customThemes = await invoke('list_custom_themes');
+    rebuildCustomThemeDropdown();
+    applyThemeToControls(colors);
+    return;
+  }
+
+  // Normal theme selection: apply the saved theme's colors to the
+  // Colors-tab controls + preview. list_custom_themes results are trusted.
+  const theme = state.customThemes.find(t => t.filename === opt.dataset.value);
+  if (theme) applyThemeToControls(theme.colors);
+  closeCustomThemeSelect();
 });
 
 // Close custom selects when clicking outside
@@ -763,7 +973,15 @@ export function openSettings(tabName) {
   // itself, so cancel leaves state untouched.
   pendingOverrides = Object.assign(Object.create(null), state.config.keybindings || {});
   renderShortcutsPanel();
-  activateSettingsTab(tabName || 'reading');
+  // Render the custom-theme dropdown from whatever's cached, then refresh
+  // the list from disk in the background (mirrors rebuildFontDropdown's
+  // eager-then-lazy pattern). openSettings stays synchronous.
+  rebuildCustomThemeDropdown();
+  invoke('list_custom_themes').then(list => {
+    state.customThemes = list;
+    rebuildCustomThemeDropdown();
+  }).catch(() => {});
+  activateSettingsTab(tabName || 'general');
   settingsOverlay.classList.remove('hidden');
   state.releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
 }
@@ -786,6 +1004,11 @@ function activateSettingsTab(name) {
     p.hidden = !on;
   });
   document.getElementById('settings-dialog').classList.toggle('on-about', name === 'about');
+  // Footer buttons follow the active tab: Reset only where there are
+  // resettable settings (every tab in SETTINGS_TAB_LABELS — i.e. not
+  // About); Save on every tab except About, which persists nothing.
+  document.getElementById('settings-reset').hidden = !(name in SETTINGS_TAB_LABELS);
+  document.getElementById('settings-save').hidden = name === 'about';
 }
 
 function updatePreviewColors() {
@@ -841,61 +1064,29 @@ async function exportTheme() {
   }
 }
 
-// Imports a theme JSON via the backend's native open dialog, validates it
-// defensively, then populates the Colors-tab controls and refreshes the
-// live preview — without saving. The user still confirms with Save (or
-// discards with Cancel) like any other settings change.
-async function importTheme() {
-  let imported;
-  try {
-    imported = await invoke('import_theme');
-  } catch (e) {
-    showSettingsError('Failed to import theme: ' + e);
-    return;
-  }
-  if (imported == null) return; // user cancelled the dialog
-
-  // Defensive validation: a hand-edited or malformed file must never
-  // corrupt the working config. Collect only known fields with plausible
-  // values; unknown keys are ignored, bad values reject the whole file.
-  if (typeof imported !== 'object' || Array.isArray(imported)) {
-    showSettingsError('Invalid theme file: not a theme object.');
-    return;
-  }
-  const validColors = {};
-  for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
-    if (!(field in imported)) continue;
-    const value = imported[field];
-    if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
-      showSettingsError(`Invalid theme file: bad color for ${field}.`);
-      return;
-    }
-    validColors[id] = value.trim();
-  }
-  let validTheme = null;
-  if ('theme' in imported) {
-    const t = imported.theme;
-    if (typeof t !== 'string' || !THEME_VALID_THEMES.includes(t)) {
-      showSettingsError('Invalid theme file: unknown theme value.');
-      return;
-    }
-    validTheme = t;
-  }
-  if (Object.keys(validColors).length === 0 && validTheme === null) {
-    showSettingsError('Invalid theme file: no recognized color settings.');
-    return;
-  }
-
+// Applies a flat theme color map to the Colors-tab controls and refreshes
+// the live preview — without saving. Shared by the import-a-theme and
+// select-a-saved-theme paths; both feed it an already-validated (or
+// trusted, in the case of list_custom_themes results) map.
+//
+// `colors` is the flat field→hex shape (`h1_color`, `code_bg_color`, …)
+// optionally including a `theme` key. Unknown keys are ignored. The user
+// still confirms with Save (or discards with Cancel) like any other
+// settings change.
+function applyThemeToControls(colors) {
   // Apply under the populating flag so the theme select's change handler
   // (which rewrites the bg-color inputs via effectiveBgColor) early-returns
-  // and doesn't clobber the imported background values.
+  // and doesn't clobber the incoming background values.
   populatingSettings = true;
-  if (validTheme !== null) {
-    document.getElementById('setting-theme').value = validTheme;
-    setBodyTheme(resolvedTheme(validTheme));
+  if (typeof colors.theme === 'string' && THEME_VALID_THEMES.includes(colors.theme)) {
+    document.getElementById('setting-theme').value = colors.theme;
+    setBodyTheme(resolvedTheme(colors.theme));
   }
-  for (const [id, value] of Object.entries(validColors)) {
-    document.getElementById(id).value = value;
+  for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
+    const value = colors[field];
+    if (typeof value === 'string' && THEME_HEX_RE.test(value.trim())) {
+      document.getElementById(id).value = value.trim();
+    }
   }
   populatingSettings = false;
   updatePreviewColors();
@@ -990,6 +1181,7 @@ async function saveSettings() {
 // Human-readable name for each settings tab, used in the reset confirm
 // copy so the prompt names exactly what's about to be clobbered.
 const SETTINGS_TAB_LABELS = {
+  general: 'General',
   reading: 'Reading',
   editor: 'Editor',
   colors: 'Colors',
@@ -1008,19 +1200,20 @@ async function resetSettings() {
   if (decision !== 'discard') return;
 
   const defaults = await invoke('get_default_config');
-  if (activeTabName === 'reading') {
+  if (activeTabName === 'general') {
+    document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
+    document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
+    document.getElementById('setting-md-extensions').value =
+      (Array.isArray(defaults.md_extensions) && defaults.md_extensions.length
+        ? defaults.md_extensions
+        : MD_EXTS_DEFAULT).join(', ');
+  } else if (activeTabName === 'reading') {
     rebuildFontDropdown();
     fontSelect.value = defaults.font_family;
     document.getElementById('setting-size').value          = defaults.font_size;
     document.getElementById('setting-line-height').value   = defaults.line_height;
     document.getElementById('setting-reading-width').value = defaults.reading_width;
-    document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
-    document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
     document.getElementById('setting-preserve-line-breaks').value = defaults.preserve_line_breaks ? 'true' : 'false';
-    document.getElementById('setting-md-extensions').value =
-      (Array.isArray(defaults.md_extensions) && defaults.md_extensions.length
-        ? defaults.md_extensions
-        : MD_EXTS_DEFAULT).join(', ');
   } else if (activeTabName === 'editor') {
     document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
     document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
@@ -1054,7 +1247,6 @@ document.getElementById('settings-reset').addEventListener('click', resetSetting
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 document.getElementById('btn-check-updates').addEventListener('click', checkForUpdates);
 document.getElementById('btn-export-theme').addEventListener('click', exportTheme);
-document.getElementById('btn-import-theme').addEventListener('click', importTheme);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
 // Settings tab switching

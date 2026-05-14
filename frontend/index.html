@@ -505,8 +505,11 @@
       </div>
 
       <div id="settings-tabs" role="tablist" aria-label="Settings categories">
-        <button class="settings-tab active" role="tab" data-tab="reading"
-                id="settings-tab-reading" aria-selected="true"
+        <button class="settings-tab active" role="tab" data-tab="general"
+                id="settings-tab-general" aria-selected="true"
+                aria-controls="settings-panel-general">General</button>
+        <button class="settings-tab" role="tab" data-tab="reading"
+                id="settings-tab-reading" aria-selected="false" tabindex="-1"
                 aria-controls="settings-panel-reading">Reading</button>
         <button class="settings-tab" role="tab" data-tab="editor"
                 id="settings-tab-editor" aria-selected="false" tabindex="-1"
@@ -524,9 +527,53 @@
 
       <div id="settings-body">
 
+        <!-- ── General panel ────────────────────────────────────────── -->
+        <div class="settings-panel active" id="settings-panel-general"
+             role="tabpanel" aria-labelledby="settings-tab-general">
+
+          <div class="settings-row">
+            <label>Toolbar</label>
+            <div class="segmented" id="setting-toolbar-compact" role="radiogroup"
+                 aria-label="Toolbar button style">
+              <button type="button" data-value="false" aria-pressed="true">Icons + labels</button>
+              <button type="button" data-value="true" aria-pressed="false">Icons only</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Markdown files<span class="settings-info-icon" tabindex="0"
+                   aria-label="Comma-separated file extensions the folder browser treats as Markdown. Leave blank to use the defaults (md, markdown, mdown, mkd).">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <input type="text" id="setting-md-extensions" class="settings-text-input"
+                   placeholder="md, markdown, mdown, mkd" autocomplete="off" spellcheck="false"
+                   aria-label="Markdown file extensions, comma-separated">
+          </div>
+
+          <div class="settings-row">
+            <label>Printer Friendly PDFs<span class="settings-info-icon" tabindex="0"
+                   aria-label="When on, PDFs use a light background with dark text for readability and to save ink. When off, the PDF matches the app's current theme exactly.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <div class="segmented" id="setting-printer-friendly" role="radiogroup"
+                 aria-label="Printer friendly PDFs">
+              <button type="button" data-value="true" aria-pressed="true">On</button>
+              <button type="button" data-value="false" aria-pressed="false">Off</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Reading panel ────────────────────────────────────────── -->
-        <div class="settings-panel active" id="settings-panel-reading"
-             role="tabpanel" aria-labelledby="settings-tab-reading">
+        <div class="settings-panel" id="settings-panel-reading"
+             role="tabpanel" aria-labelledby="settings-tab-reading" hidden>
 
           <div class="settings-row">
             <label>Font</label>
@@ -582,45 +629,6 @@
                  aria-label="Preserve line breaks">
               <button type="button" data-value="true" aria-pressed="false">On</button>
               <button type="button" data-value="false" aria-pressed="true">Off</button>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <label>Toolbar</label>
-            <div class="segmented" id="setting-toolbar-compact" role="radiogroup"
-                 aria-label="Toolbar button style">
-              <button type="button" data-value="false" aria-pressed="true">Icons + labels</button>
-              <button type="button" data-value="true" aria-pressed="false">Icons only</button>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <label>Markdown files<span class="settings-info-icon" tabindex="0"
-                   aria-label="Comma-separated file extensions the folder browser treats as Markdown. Leave blank to use the defaults (md, markdown, mdown, mkd).">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="11" x2="12" y2="16"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </span></label>
-            <input type="text" id="setting-md-extensions" class="settings-text-input"
-                   placeholder="md, markdown, mdown, mkd" autocomplete="off" spellcheck="false"
-                   aria-label="Markdown file extensions, comma-separated">
-          </div>
-
-          <div class="settings-row">
-            <label>Printer Friendly PDFs<span class="settings-info-icon" tabindex="0"
-                   aria-label="When on, PDFs use a light background with dark text for readability and to save ink. When off, the PDF matches the app's current theme exactly.">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="11" x2="12" y2="16"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </span></label>
-            <div class="segmented" id="setting-printer-friendly" role="radiogroup"
-                 aria-label="Printer friendly PDFs">
-              <button type="button" data-value="true" aria-pressed="true">On</button>
-              <button type="button" data-value="false" aria-pressed="false">Off</button>
             </div>
           </div>
         </div>
@@ -754,8 +762,16 @@
             </div>
           </div>
 
-          <div class="settings-row theme-io-row">
+          <div class="settings-row">
             <label>Custom themes</label>
+            <div class="custom-select" id="setting-custom-theme" aria-label="Custom themes">
+              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
+              <div class="custom-select-options" role="listbox"></div>
+            </div>
+          </div>
+
+          <div class="settings-row theme-io-row">
+            <label></label>
             <div class="theme-io-buttons">
               <button type="button" id="btn-export-theme" class="settings-action-btn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -764,14 +780,6 @@
                   <path d="M5 21h14"/>
                 </svg>
                 Export theme…
-              </button>
-              <button type="button" id="btn-import-theme" class="settings-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 15V3"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <path d="M5 21h14"/>
-                </svg>
-                Import theme…
               </button>
             </div>
           </div>

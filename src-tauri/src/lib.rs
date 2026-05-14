@@ -86,6 +86,9 @@ pub fn run() {
             commands::pick_export_path,
             commands::export_theme,
             commands::import_theme,
+            commands::save_custom_theme,
+            commands::list_custom_themes,
+            commands::delete_custom_theme,
         ])
         .setup(|app| {
             // Restore saved window geometry
