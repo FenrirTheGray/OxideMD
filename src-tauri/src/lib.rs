@@ -83,6 +83,8 @@ pub fn run() {
             commands::write_pasted_image,
             commands::export_html,
             commands::pick_export_path,
+            commands::export_theme,
+            commands::import_theme,
         ])
         .setup(|app| {
             // Restore saved window geometry
