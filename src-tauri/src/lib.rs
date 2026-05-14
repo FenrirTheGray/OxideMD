@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod highlight;
 mod markdown;
+mod menu;
 mod util;
 mod watcher;
 
@@ -102,6 +103,10 @@ pub fn run() {
                     let _ = window.maximize();
                 }
             }
+            // Native File/Edit/View/Tabs/Help menu bar. Items emit
+            // `menu-action` events that the frontend dispatcher routes to
+            // the same handlers as the keyboard shortcuts.
+            menu::build_and_attach(app)?;
             // Some key combos (Ctrl+Shift+Tab, etc.) are swallowed by
             // WebKitGTK before JS can see them. Intercept at the GTK
             // window level so we handle them before the webview does.

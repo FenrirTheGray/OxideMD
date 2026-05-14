@@ -713,7 +713,7 @@ function parseMdExtensions(raw) {
   return out.length ? out : [...MD_EXTS_DEFAULT];
 }
 
-export function openSettings() {
+export function openSettings(tabName) {
   // Close the search bar first so Settings can open over it.
   if (!searchBar.classList.contains('hidden')) closeSearch();
   if (hasActiveOverlay()) return;
@@ -754,7 +754,7 @@ export function openSettings() {
   // itself, so cancel leaves state untouched.
   pendingOverrides = Object.assign(Object.create(null), state.config.keybindings || {});
   renderShortcutsPanel();
-  activateSettingsTab('reading');
+  activateSettingsTab(tabName || 'reading');
   settingsOverlay.classList.remove('hidden');
   state.releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
 }
