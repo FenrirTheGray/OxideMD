@@ -4,13 +4,19 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [3.2.0] - 2026-05-14
 
 ### Added
 
 - Create new files from within OxideMD: a New File toolbar button, `Ctrl/Cmd+N`, a welcome-screen action, and a "New File…" entry in the folder tree's right-click menu. The location is chosen through the platform's native save dialog; an empty `.md` file is created (the extension is appended if omitted) and opened straight into edit mode
 - Print to PDF: a Print toolbar button, `Ctrl/Cmd+P`, and a "Print…" context-menu entry render the active document through the webview's native print dialog (Save as PDF on Windows/macOS, Print to File on Linux). The rendered Markdown is isolated into its own print container so no app chrome reaches the page, with `print-color-adjust` keeping fonts, colors, and syntax highlighting intact
 - New "Printer Friendly PDFs" setting (Reading tab, on by default): prints with a light background and dark text regardless of the active theme; turning it off prints in the app's exact current style
+- New "Preserve line breaks" setting (Reading tab, off by default): renders every single newline in the source as a line break; with it off, OxideMD follows standard CommonMark and joins single newlines into one paragraph. Open documents re-render immediately when the setting changes
+
+### Fixed
+
+- Dark-theme PDFs no longer print as a dark card floating in a white margin band — the page margin is now zero with the inset moved onto the print container, so the theme background reaches every edge of the sheet
+- Settings panel keyboard-focus and layout polish: the info-icon explanation now appears on keyboard focus (not just mouse hover), the number-stepper buttons and segmented toggles render a clean inset focus ring instead of a clipped sliver, and the wider setting labels no longer wrap mid-phrase
 
 ## [3.1.3] - 2026-04-25
 
