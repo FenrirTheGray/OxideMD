@@ -35,7 +35,11 @@ export async function printActiveTab() {
 
   // Printer-friendly = light background / dark text. Default is on, so
   // only an explicit `false` opts into "match the app's current theme".
-  printRoot.classList.toggle('print-light', state.config?.printer_friendly !== false);
+  // The class goes on <body> (see the afterprint handler below) rather
+  // than #print-root so the @media print rules can flip the page-canvas
+  // background too — otherwise a dark-theme PDF prints as a dark block
+  // sitting in a white margin band.
+  const printerFriendly = state.config?.printer_friendly !== false;
 
   // Wait for any not-yet-loaded images to settle before printing so they
   // aren't missing from the PDF, but cap the wait at ~2s so a slow or
@@ -46,13 +50,15 @@ export async function printActiveTab() {
     await Promise.race([Promise.all(pending), new Promise(res => setTimeout(res, 2000))]);
   }
 
-  // `body.printing` lets the stylesheet flip into print-isolation; the
-  // one-shot afterprint listener tears it all back down (whether the
-  // user saved the PDF or cancelled the dialog) so #print-root doesn't
-  // hold a stale render or keep the class around.
+  // `body.printing` lets the stylesheet flip into print-isolation and
+  // `body.print-friendly` selects the light print theme; the one-shot
+  // afterprint listener tears it all back down (whether the user saved
+  // the PDF or cancelled the dialog) so #print-root doesn't hold a
+  // stale render or leave the print classes on <body>.
   document.body.classList.add('printing');
+  document.body.classList.toggle('print-friendly', printerFriendly);
   const onAfterPrint = () => {
-    document.body.classList.remove('printing');
+    document.body.classList.remove('printing', 'print-friendly');
     printRoot.innerHTML = '';
     window.removeEventListener('afterprint', onAfterPrint);
   };
