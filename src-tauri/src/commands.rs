@@ -863,6 +863,99 @@ pub async fn pick_export_path(
     .flatten()
 }
 
+/// Exports the user's color configuration to a `.json` file the user
+/// picks via a native save dialog. `theme` is a flat map of color-config
+/// field names to their values, assembled by the frontend from the
+/// Colors-tab controls. The JSON shape is intentionally flat:
+///
+/// ```json
+/// {
+///   "theme": "dark" | "light" | "system",   // optional
+///   "h1_color": "#rrggbb",
+///   "h2_color": "#rrggbb",
+///   "h3_color": "#rrggbb",
+///   "bullet_color": "#rrggbb",
+///   "code_bg_color": "#rrggbb",
+///   "code_accent_color": "#rrggbb",
+///   "note_bg_color": "#rrggbb",
+///   "note_accent_color": "#rrggbb"
+/// }
+/// ```
+///
+/// Returns `Ok(true)` after a successful write, `Ok(false)` when the user
+/// cancels the dialog. Validation of the field set lives on the frontend
+/// (which owns the canonical color-field list); this command only
+/// serializes whatever map it's handed.
+#[tauri::command]
+pub async fn export_theme(
+    app: tauri::AppHandle,
+    theme: std::collections::HashMap<String, String>,
+) -> Result<bool, String> {
+    let window = app.get_webview_window("main").unwrap();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("JSON", &["json"])
+            .set_file_name("oxidemd-theme.json")
+            .blocking_save_file()
+            .map(|p| p.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let chosen = match picked {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let json = serde_json::to_string_pretty(&theme)
+            .map_err(|e| format!("Failed to serialize theme: {e}"))?;
+        fs::write(&chosen, json).map_err(|e| format!("Failed to write theme: {e}"))?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Imports a color configuration from a `.json` file the user picks via
+/// a native open dialog. Returns the parsed flat map (see `export_theme`
+/// for the shape) on success, or `Ok(None)` when the user cancels. A
+/// file that isn't a flat JSON object of strings is surfaced as `Err`.
+/// The frontend validates the field names and values before applying.
+#[tauri::command]
+pub async fn import_theme(
+    app: tauri::AppHandle,
+) -> Result<Option<std::collections::HashMap<String, String>>, String> {
+    let window = app.get_webview_window("main").unwrap();
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("JSON", &["json"])
+            .blocking_pick_file()
+            .map(|p| p.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let chosen = match picked {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let content =
+            fs::read_to_string(&chosen).map_err(|e| format!("Failed to read theme: {e}"))?;
+        let map: std::collections::HashMap<String, String> = serde_json::from_str(&content)
+            .map_err(|e| format!("Not a valid theme file: {e}"))?;
+        Ok(Some(map))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Returns true if `url` uses a scheme we're willing to hand off to the
 /// OS `open` handler. We restrict to http/https/mailto to avoid turning
 /// link clicks into arbitrary-command execution (`javascript:`, shell

@@ -2801,7 +2801,8 @@ body:not(.editing) #status-counts { display: none; }
   font-weight: 500;
 }
 
-#btn-check-updates {
+#btn-check-updates,
+.settings-action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2819,23 +2820,34 @@ body:not(.editing) #status-counts { display: none; }
               color var(--dur-sm) var(--ease),
               border-color var(--dur-sm) var(--ease);
 }
-#btn-check-updates:hover:not(:disabled) {
+#btn-check-updates:hover:not(:disabled),
+.settings-action-btn:hover:not(:disabled) {
   background: var(--bg-btn-hover);
   color: var(--accent);
   border-color: var(--border-focus);
 }
-#btn-check-updates:disabled {
+#btn-check-updates:disabled,
+.settings-action-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
-#btn-check-updates:focus-visible {
+#btn-check-updates:focus-visible,
+.settings-action-btn:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
-#btn-check-updates svg {
+#btn-check-updates svg,
+.settings-action-btn svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+/* ── Settings: custom theme import/export row ─────────────────────── */
+.theme-io-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ── Settings: update status notification ─────────────────────────── */

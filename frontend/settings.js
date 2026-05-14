@@ -790,6 +790,108 @@ function updatePreviewColors() {
   });
 }
 
+// ── Custom theme import/export ─────────────────────────────────────────────
+// Maps each color-config field name (as persisted in config.toml and used
+// in the exported JSON) to the id of the Colors-tab control that holds it.
+// This is the authoritative whitelist for import validation — any key not
+// listed here is silently ignored.
+const THEME_COLOR_FIELDS = {
+  h1_color:          'setting-h1',
+  h2_color:          'setting-h2',
+  h3_color:          'setting-h3',
+  bullet_color:      'setting-bullet',
+  code_bg_color:     'setting-code-bg',
+  code_accent_color: 'setting-code-accent',
+  note_bg_color:     'setting-note-bg',
+  note_accent_color: 'setting-note-accent',
+};
+const THEME_VALID_THEMES = ['dark', 'light', 'system'];
+// #rgb or #rrggbb — the only shapes <input type="color"> accepts.
+const THEME_HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+// Surfaces a non-fatal settings error the same way loadCustomFont does:
+// the shared status indicator, auto-cleared after a few seconds.
+function showSettingsError(msg) {
+  statusText.textContent = msg;
+  statusIndicator.classList.remove('hidden', 'status-loading');
+  setTimeout(clearStatus, 4000);
+}
+
+// Gathers the CURRENT Colors-tab values (the in-dialog working copy, the
+// same values saveSettings would persist) into the flat JSON shape and
+// hands them to the backend's native save dialog.
+async function exportTheme() {
+  const theme = { theme: document.getElementById('setting-theme').value };
+  for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
+    theme[field] = document.getElementById(id).value;
+  }
+  try {
+    await invoke('export_theme', { theme });
+  } catch (e) {
+    showSettingsError('Failed to export theme: ' + e);
+  }
+}
+
+// Imports a theme JSON via the backend's native open dialog, validates it
+// defensively, then populates the Colors-tab controls and refreshes the
+// live preview — without saving. The user still confirms with Save (or
+// discards with Cancel) like any other settings change.
+async function importTheme() {
+  let imported;
+  try {
+    imported = await invoke('import_theme');
+  } catch (e) {
+    showSettingsError('Failed to import theme: ' + e);
+    return;
+  }
+  if (imported == null) return; // user cancelled the dialog
+
+  // Defensive validation: a hand-edited or malformed file must never
+  // corrupt the working config. Collect only known fields with plausible
+  // values; unknown keys are ignored, bad values reject the whole file.
+  if (typeof imported !== 'object' || Array.isArray(imported)) {
+    showSettingsError('Invalid theme file: not a theme object.');
+    return;
+  }
+  const validColors = {};
+  for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
+    if (!(field in imported)) continue;
+    const value = imported[field];
+    if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
+      showSettingsError(`Invalid theme file: bad color for ${field}.`);
+      return;
+    }
+    validColors[id] = value.trim();
+  }
+  let validTheme = null;
+  if ('theme' in imported) {
+    const t = imported.theme;
+    if (typeof t !== 'string' || !THEME_VALID_THEMES.includes(t)) {
+      showSettingsError('Invalid theme file: unknown theme value.');
+      return;
+    }
+    validTheme = t;
+  }
+  if (Object.keys(validColors).length === 0 && validTheme === null) {
+    showSettingsError('Invalid theme file: no recognized color settings.');
+    return;
+  }
+
+  // Apply under the populating flag so the theme select's change handler
+  // (which rewrites the bg-color inputs via effectiveBgColor) early-returns
+  // and doesn't clobber the imported background values.
+  populatingSettings = true;
+  if (validTheme !== null) {
+    document.getElementById('setting-theme').value = validTheme;
+    document.body.className = `theme-${resolvedTheme(validTheme)}`;
+  }
+  for (const [id, value] of Object.entries(validColors)) {
+    document.getElementById(id).value = value;
+  }
+  populatingSettings = false;
+  updatePreviewColors();
+}
+
 export function closeSettings() {
   endShortcutCapture();
   if (state.releaseFocusTrap) { state.releaseFocusTrap(); state.releaseFocusTrap = null; }
@@ -922,6 +1024,8 @@ document.getElementById('settings-cancel').addEventListener('click', closeSettin
 document.getElementById('settings-reset').addEventListener('click', resetSettings);
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 document.getElementById('btn-check-updates').addEventListener('click', checkForUpdates);
+document.getElementById('btn-export-theme').addEventListener('click', exportTheme);
+document.getElementById('btn-import-theme').addEventListener('click', importTheme);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
 // Settings tab switching
