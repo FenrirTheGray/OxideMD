@@ -1857,7 +1857,7 @@ body:not(.editing) #status-counts { display: none; }
 }
 
 .settings-row label {
-  width: 80px;
+  width: 148px;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
@@ -1866,9 +1866,11 @@ body:not(.editing) #status-counts { display: none; }
 }
 
 /* Small "i in a circle" affordance next to a settings label — hover or
-   focus surfaces the explanatory `title`. Sits inline with the label
-   text; uses the help cursor so it reads as informational, not clickable. */
+   keyboard focus surfaces the explanatory text. Sits inline with the
+   label text; uses the help cursor so it reads as informational, not
+   clickable. */
 .settings-info-icon {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1888,6 +1890,41 @@ body:not(.editing) #status-counts { display: none; }
 .settings-info-icon:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
+}
+
+/* The explanatory text, pulled straight from `aria-label`, shown on both
+   hover and keyboard focus. A native `title` only appears on mouse hover
+   (and not at all reliably in WebKitGTK), so keyboard users would never
+   see it; this covers them. Screen readers read the `aria-label` itself. */
+.settings-info-icon::after {
+  content: attr(aria-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.settings-info-icon:hover::after,
+.settings-info-icon:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Custom number input */
@@ -1926,6 +1963,15 @@ body:not(.editing) #status-counts { display: none; }
   background: var(--bg-btn-hover);
   color: var(--accent);
 }
+/* Inset focus ring (mirrors `.segmented > button`): the parent
+   `.custom-number` is `overflow: hidden`, so a default/outset outline
+   gets clipped and renders as a stray sliver. Keeping it inset and
+   matching the button's own radius makes it sit cleanly inside the pill. */
+.custom-number-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  z-index: 1;
+}
 
 /* Segmented control — two-option pill used for binary settings. */
 .segmented {
@@ -1961,9 +2007,15 @@ body:not(.editing) #status-counts { display: none; }
   background: var(--accent);
   color: #fff;
 }
+/* Gap ring: `--border-focus` and `--accent` are the same blue, so a
+   plain accent-colored ring on an unpressed button looked identical to
+   the accent-filled pressed button. The inner 2px ring of the button's
+   own background detaches the focus ring so it clearly reads as
+   "focused" rather than "selected", on pressed and unpressed alike. */
 .segmented > button:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: -2px;
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--bg),
+              inset 0 0 0 4px var(--border-focus);
   z-index: 1;
 }
 
