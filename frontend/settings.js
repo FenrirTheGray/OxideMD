@@ -12,6 +12,29 @@ import {
 } from './keybindings.js';
 import { renderShortcutsUI } from './shortcuts-display.js';
 
+// ── Settings tab structure & placement convention ──────────────────────────
+// The Settings modal has five tabs. When adding a new setting row, decide
+// where it belongs by what the setting actually changes:
+//
+//   Reading   — the rendered/printed output and reading layout: typography
+//               (font, size, line height), reading width, the toolbar, and
+//               anything that alters rendered HTML or exported PDFs
+//               (preserve line breaks, printer-friendly PDFs).
+//   Editor    — the CodeMirror edit surface itself: word wrap, spell check,
+//               line numbers, and any future option that changes how text
+//               looks or behaves *while editing*.
+//   Colors    — color tokens and theme: the theme select and every
+//               --color swatch.
+//   Shortcuts — keybinding overrides only.
+//   About     — version, links, update check. No configurable settings.
+//
+// Rule of thumb: if it changes the CodeMirror edit surface → Editor; if it
+// changes rendered/printed output or reading layout → Reading; if it's a
+// color token or the theme → Colors. When a setting could plausibly fit two
+// tabs, place it by the surface the user is looking at when the change
+// matters to them.
+// ───────────────────────────────────────────────────────────────────────────
+
 // ── Config / theme ─────────────────────────────────────────────────────────
 function resolvedTheme(theme) {
   if (theme !== 'system') return theme;
@@ -841,6 +864,7 @@ async function resetSettings() {
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
     document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
     document.getElementById('setting-preserve-line-breaks').value = defaults.preserve_line_breaks ? 'true' : 'false';
+  } else if (activeTabName === 'editor') {
     document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
     document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
   } else if (activeTabName === 'colors') {

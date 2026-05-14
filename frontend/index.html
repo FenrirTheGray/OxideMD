@@ -495,6 +495,9 @@
         <button class="settings-tab active" role="tab" data-tab="reading"
                 id="settings-tab-reading" aria-selected="true"
                 aria-controls="settings-panel-reading">Reading</button>
+        <button class="settings-tab" role="tab" data-tab="editor"
+                id="settings-tab-editor" aria-selected="false" tabindex="-1"
+                aria-controls="settings-panel-editor">Editor</button>
         <button class="settings-tab" role="tab" data-tab="colors"
                 id="settings-tab-colors" aria-selected="false" tabindex="-1"
                 aria-controls="settings-panel-colors">Colors</button>
@@ -593,6 +596,11 @@
               <button type="button" data-value="false" aria-pressed="false">Off</button>
             </div>
           </div>
+        </div>
+
+        <!-- ── Editor panel ─────────────────────────────────────────── -->
+        <div class="settings-panel" id="settings-panel-editor"
+             role="tabpanel" aria-labelledby="settings-tab-editor" hidden>
 
           <div class="settings-row">
             <label>Word wrap</label>
