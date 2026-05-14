@@ -14,8 +14,41 @@ export const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
 export const isLinux = /Linux/i.test(navigator.platform) && !isMac;
 export const modKey = isMac ? 'Cmd' : 'Ctrl';
 
-const MD_EXT_RE = /\.(md|markdown|mdown|mkd)$/i;
-export function isMarkdownPath(p) { return typeof p === 'string' && MD_EXT_RE.test(p); }
+// Canonical default Markdown extensions — must mirror MD_EXTS_DEFAULT in
+// src-tauri/src/config.rs. Used as the fallback whenever config.md_extensions
+// is missing (older config files) or empty.
+export const MD_EXTS_DEFAULT = ['md', 'markdown', 'mdown', 'mkd'];
+
+// The configured (or default) Markdown extension list, read live from
+// state.config so a Settings save takes effect without a reload.
+function mdExtensions() {
+  const list = state.config?.md_extensions;
+  return Array.isArray(list) && list.length ? list : MD_EXTS_DEFAULT;
+}
+
+function pathExtension(p) {
+  const dot = p.lastIndexOf('.');
+  // No dot, or the last dot belongs to a directory name (it sits before
+  // the final path separator) rather than the file's basename.
+  const lastSep = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  if (dot <= lastSep) return '';
+  return p.slice(dot + 1).toLowerCase();
+}
+
+export function isMarkdownPath(p) {
+  return typeof p === 'string' && mdExtensions().includes(pathExtension(p));
+}
+
+// Strips a recognized Markdown extension from a file name, leaving any
+// other extension (or a dotless name) untouched. Used for export filenames.
+export function stripMarkdownExtension(name) {
+  if (typeof name !== 'string') return name;
+  const ext = pathExtension(name);
+  if (ext && mdExtensions().includes(ext)) {
+    return name.slice(0, name.length - ext.length - 1);
+  }
+  return name;
+}
 
 // Prefix-match with a trailing separator so `C:\docs` doesn't match
 // `C:\docs2\foo.md`. Handle both separator styles — notify can echo

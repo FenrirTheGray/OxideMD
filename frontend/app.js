@@ -1,6 +1,6 @@
 import {
   invoke, listen, appWindow,
-  isMarkdownPath, hasMod,
+  isMarkdownPath, stripMarkdownExtension, hasMod,
   tabs, state,
   contentEl, contentScroll, previewPane,
   btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnSettings,
@@ -394,7 +394,7 @@ registerHandler('exportHtml', async (e) => {
   // Use the live editor buffer when one is mounted so the export
   // includes unsaved edits — otherwise tab.raw equals savedRaw.
   const source = tab.raw ?? '';
-  const baseName = (tab.title || 'document').replace(/\.(md|markdown|mdown|mkd)$/i, '');
+  const baseName = stripMarkdownExtension(tab.title || 'document');
   try {
     const outPath = await invoke('pick_export_path', { suggestedName: `${baseName}.html` });
     if (!outPath) return;

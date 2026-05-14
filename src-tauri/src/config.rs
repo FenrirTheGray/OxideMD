@@ -33,12 +33,20 @@ pub struct Config {
     pub keybindings: HashMap<String, String>,
     pub editor_word_wrap: bool,
     pub editor_spell_check: bool,
+    // File extensions (lowercased, no leading dot) the folder browser
+    // treats as Markdown. Normalized on save by the frontend; an empty
+    // list falls back to MD_EXTS_DEFAULT at the read sites.
+    pub md_extensions: Vec<String>,
     // Most-recently-opened files, newest first. Capped at RECENT_FILES_LIMIT
     // entries by add_recent_file. Surfaced on the welcome screen.
     pub recent_files: Vec<String>,
 }
 
 pub const RECENT_FILES_LIMIT: usize = 12;
+
+// Canonical default set of Markdown file extensions. Referenced by
+// `Config::default` so the shipped default can't drift from this list.
+pub const MD_EXTS_DEFAULT: &[&str] = &["md", "markdown", "mdown", "mkd"];
 
 impl Default for Config {
     fn default() -> Self {
@@ -66,6 +74,7 @@ impl Default for Config {
             keybindings: HashMap::new(),
             editor_word_wrap: true,
             editor_spell_check: false,
+            md_extensions: MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect(),
             recent_files: Vec::new(),
         }
     }

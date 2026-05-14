@@ -1982,6 +1982,29 @@ body:not(.editing) #status-counts { display: none; }
   letter-spacing: 0.01em;
 }
 
+/* Plain text input for free-form settings values (e.g. the Markdown
+   extension list). Mirrors the sidebar filter field's look so it sits
+   consistently among the segmented/number controls. */
+.settings-text-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color var(--dur-sm) var(--ease),
+              box-shadow var(--dur-sm) var(--ease);
+}
+.settings-text-input::placeholder { color: var(--fg-dim); }
+.settings-text-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
 /* Small "i in a circle" affordance next to a settings label — hover or
    keyboard focus surfaces the explanatory text. Sits inline with the
    label text; uses the help cursor so it reads as informational, not
