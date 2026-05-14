@@ -135,7 +135,8 @@ OxideMD/
 │   ├── draft-store.js        # Per-file localStorage draft autosave and recovery
 │   ├── folder.js             # Sidebar folder tree, filter, file watching
 │   ├── search.js             # In-document search (match highlighting, navigation)
-│   ├── outline.js            # Document outline popover (heading list, jump-to)
+│   ├── search-project.js     # Project-wide content search panel in the sidebar
+│   ├── outline.js            # Document outline sidebar (heading list, jump-to)
 │   ├── settings.js           # Settings dialog (fonts, colors, shortcuts, update check)
 │   ├── shortcuts-display.js  # Shortcuts tab UI: list actions, capture new bindings
 │   ├── contextmenu.js        # Right-click context menus for sidebar and tabs
@@ -150,6 +151,7 @@ OxideMD/
 │   │   ├── highlight.rs      # Syntax highlighting via syntect
 │   │   ├── config.rs         # Settings struct, TOML load/save, keybinding overrides
 │   │   ├── watcher.rs        # File system watcher (notify)
+│   │   ├── menu.rs           # Native application menu bar (File/Edit/View/Tabs/Help)
 │   │   └── util.rs           # HTML escaping helpers
 │   ├── icons/                # App icons (all sizes)
 │   ├── oxidemd.desktop       # Desktop template for Linux deb/rpm (MIME types, categories)
@@ -158,6 +160,8 @@ OxideMD/
 ├── CHANGELOG.md              # Version history
 └── package.json              # Node dependencies (CodeMirror 6, esbuild)
 ```
+
+For how these pieces fit together — the IPC boundary, module responsibilities, and key lifecycles — see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Technology Stack
 
