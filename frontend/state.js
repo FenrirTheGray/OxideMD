@@ -79,6 +79,7 @@ export const state = {
   originalContent: '',
   customFonts: [],
   customThemes: [],
+  builtinThemes: [],
   fontStyleEl: null,
   activeFontFilename: null,
   copyResetTimer: null,
@@ -149,6 +150,7 @@ export const btnDiscard      = document.getElementById('btn-discard');
 export const editToolbar     = document.getElementById('edit-toolbar');
 export const btnSearch       = document.getElementById('btn-search');
 export const btnOutline      = document.getElementById('btn-outline');
+export const btnPreview      = document.getElementById('btn-preview');
 export const btnSettings     = document.getElementById('btn-settings');
 export const btnMinimize     = document.getElementById('btn-minimize');
 export const btnMaximize     = document.getElementById('btn-maximize');

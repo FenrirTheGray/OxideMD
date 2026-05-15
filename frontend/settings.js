@@ -3,7 +3,7 @@ import {
   statusText, statusIndicator, settingsOverlay, searchBar,
   hasActiveOverlay, MD_EXTS_DEFAULT,
 } from './state.js';
-import { activeTab, applyZoom, setLoading, clearStatus, renderContent } from './tabs.js';
+import { activeTab, applyZoom, setLoading, clearStatus, renderContent, applyRecentFiles } from './tabs.js';
 import { setPreviewHtml, promptResetSettings } from './editor.js';
 import { closeSearch } from './search.js';
 import {
@@ -521,11 +521,46 @@ fontOptionsContainer.addEventListener('click', async (e) => {
 // persisted "selected" value — config stores the raw color fields, not a
 // theme reference — so the trigger always shows a static placeholder and
 // the select exposes no .value property.
-const CUSTOM_THEME_PLACEHOLDER = 'Apply a saved theme…';
+const CUSTOM_THEME_PLACEHOLDER = 'Select a theme…';
+const CUSTOM_THEME_DEFAULT_VALUE = '__default__';
+const CUSTOM_THEME_DEFAULT_LIGHT_VALUE = '__default_light__';
 const customThemeSelect = document.getElementById('setting-custom-theme');
 const customThemeTrigger = customThemeSelect.querySelector('.custom-select-trigger');
 const customThemeOptionsContainer = customThemeSelect.querySelector('.custom-select-options');
 customThemeTrigger.textContent = CUSTOM_THEME_PLACEHOLDER;
+
+// Tracks which saved theme (or Default) the dropdown should label. Empty
+// = no selection (custom edits, or never picked). Value persists to
+// config.custom_theme on Save so the label survives a restart.
+function setCustomThemeSelection(value, label) {
+  customThemeSelect.dataset.value = value || '';
+  customThemeTrigger.textContent = value ? (label || value) : CUSTOM_THEME_PLACEHOLDER;
+}
+function clearCustomThemeSelection() {
+  setCustomThemeSelection('', '');
+}
+// Resolves state.config.custom_theme into a trigger label. Called twice
+// from openSettings — once from the cached themes list and once after
+// list_custom_themes resolves — so the label upgrades from the raw
+// filename to the saved display name as soon as the list is in.
+function applyStoredCustomThemeSelection() {
+  const ct = state.config?.custom_theme || '';
+  if (!ct) { clearCustomThemeSelection(); return; }
+  if (ct === CUSTOM_THEME_DEFAULT_VALUE) {
+    setCustomThemeSelection(CUSTOM_THEME_DEFAULT_VALUE, 'Atom One Dark');
+    return;
+  }
+  if (ct === CUSTOM_THEME_DEFAULT_LIGHT_VALUE) {
+    setCustomThemeSelection(CUSTOM_THEME_DEFAULT_LIGHT_VALUE, 'Atom One Light');
+    return;
+  }
+  const match = findThemeByFilename(ct);
+  // Missing reference (theme uninstalled, bundle slug renamed in an
+  // update, etc.) — fall back to the placeholder rather than leaking
+  // the raw sentinel/filename into the trigger.
+  if (match) setCustomThemeSelection(ct, match.name);
+  else clearCustomThemeSelection();
+}
 
 // ── Custom theme select open/close/keyboard ───────────────────────────────
 function openCustomThemeSelect() {
@@ -584,51 +619,85 @@ customThemeTrigger.addEventListener('keydown', (e) => {
   }
 });
 
-// Rebuilds the options list from state.customThemes. One row per saved
-// theme (label + remove ×), then a separator and the "Import theme…"
-// action; an empty hint stands in when nothing has been imported yet.
+// Finds a theme by its dropdown filename ID — bundled (`builtin:<slug>`)
+// or user-imported (`<name>.json`). Returns undefined for the Default
+// sentinel or anything else not in either list.
+function findThemeByFilename(filename) {
+  if (!filename) return undefined;
+  return state.builtinThemes.find(t => t.filename === filename)
+      || state.customThemes.find(t => t.filename === filename);
+}
+
+// Stable selection IDs for the two bundled defaults. Kept as constants
+// (referenced in dropdown rows, click handler, config persistence, and
+// export) so the strings can't drift between the producer and consumer.
+const ATOM_ONE_DARK = { name: 'Atom One Dark',  filename: CUSTOM_THEME_DEFAULT_VALUE };
+const ATOM_ONE_LIGHT = { name: 'Atom One Light', filename: CUSTOM_THEME_DEFAULT_LIGHT_VALUE };
+
+// Renders one theme row into the dropdown. Bundled themes have no
+// remove button; user imports do.
+function appendThemeOption(theme) {
+  const opt = document.createElement('div');
+  opt.className = 'custom-select-option custom-font-option';
+  opt.dataset.value = theme.filename;
+  opt.setAttribute('role', 'option');
+
+  const label = document.createElement('span');
+  label.className = 'custom-font-label';
+  label.textContent = theme.name;
+  opt.appendChild(label);
+
+  if (!theme.builtin) {
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'custom-font-remove';
+    removeBtn.setAttribute('aria-label', `Remove ${theme.name}`);
+    removeBtn.title = `Remove ${theme.name}`;
+    removeBtn.innerHTML = '&#x2715;';
+    opt.appendChild(removeBtn);
+  }
+
+  customThemeOptionsContainer.appendChild(opt);
+}
+
+// Rebuilds the options list, split into two sections: bundled themes
+// under "Included" (Atom One Dark / Atom One Light via the
+// CUSTOM_THEME_DEFAULT_VALUE / CUSTOM_THEME_DEFAULT_LIGHT_VALUE sentinels +
+// the JSONs shipped in `src-tauri/themes/`) and user imports under
+// "Imported". Each section sorts alphabetically (case-insensitive).
+// Followed by the Import action.
 function rebuildCustomThemeDropdown() {
   customThemeOptionsContainer.innerHTML = '';
 
-  if (state.customThemes.length === 0) {
+  const byName = (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+  const included = [
+    { ...ATOM_ONE_DARK,  builtin: true },
+    { ...ATOM_ONE_LIGHT, builtin: true },
+    ...state.builtinThemes.map(t => ({ ...t, builtin: true })),
+  ].sort(byName);
+  const imported = state.customThemes
+    .map(t => ({ ...t, builtin: false }))
+    .sort(byName);
+
+  const includedHdr = document.createElement('div');
+  includedHdr.className = 'theme-section-header';
+  includedHdr.setAttribute('role', 'presentation');
+  includedHdr.textContent = 'Included';
+  customThemeOptionsContainer.appendChild(includedHdr);
+  for (const t of included) appendThemeOption(t);
+
+  const importedHdr = document.createElement('div');
+  importedHdr.className = 'theme-section-header';
+  importedHdr.setAttribute('role', 'presentation');
+  importedHdr.textContent = 'Imported';
+  customThemeOptionsContainer.appendChild(importedHdr);
+  if (imported.length === 0) {
     const hint = document.createElement('div');
     hint.className = 'font-empty-hint';
-    hint.textContent = 'No custom themes imported';
+    hint.textContent = 'No imported themes';
     customThemeOptionsContainer.appendChild(hint);
   } else {
-    for (const t of state.customThemes) {
-      const opt = document.createElement('div');
-      opt.className = 'custom-select-option custom-font-option';
-      opt.dataset.value = t.filename;
-      opt.setAttribute('role', 'option');
-
-      const label = document.createElement('span');
-      label.className = 'custom-font-label';
-      label.textContent = t.name;
-      opt.appendChild(label);
-
-      const removeBtn = document.createElement('button');
-      removeBtn.className = 'custom-font-remove';
-      removeBtn.setAttribute('aria-label', `Remove ${t.name}`);
-      removeBtn.title = `Remove ${t.name}`;
-      removeBtn.innerHTML = '&#x2715;';
-      opt.appendChild(removeBtn);
-
-      customThemeOptionsContainer.appendChild(opt);
-    }
+    for (const t of imported) appendThemeOption(t);
   }
-
-  // "Import theme…" action
-  const sep = document.createElement('div');
-  sep.className = 'font-options-sep';
-  customThemeOptionsContainer.appendChild(sep);
-
-  const importOpt = document.createElement('div');
-  importOpt.className = 'custom-select-option font-add-option';
-  importOpt.dataset.value = '__import_theme__';
-  importOpt.setAttribute('role', 'option');
-  importOpt.textContent = 'Import theme…';
-  customThemeOptionsContainer.appendChild(importOpt);
 }
 
 // Event delegation for custom theme dropdown clicks
@@ -643,6 +712,7 @@ customThemeOptionsContainer.addEventListener('click', async (e) => {
     const filename = opt.dataset.value;
     await invoke('delete_custom_theme', { filename });
     state.customThemes = await invoke('list_custom_themes');
+    if (customThemeSelect.dataset.value === filename) clearCustomThemeSelection();
     rebuildCustomThemeDropdown();
     return;
   }
@@ -650,80 +720,44 @@ customThemeOptionsContainer.addEventListener('click', async (e) => {
   const opt = e.target.closest('.custom-select-option');
   if (!opt) return;
 
-  if (opt.dataset.value === '__import_theme__') {
-    e.stopPropagation();
-    // Close the dropdown, then run the backend's native open dialog.
-    closeCustomThemeSelect();
-    let imported;
-    try {
-      imported = await invoke('import_theme');
-    } catch (err) {
-      showSettingsError('Failed to import theme: ' + err);
-      return;
-    }
-    if (imported == null) return; // user cancelled the dialog
-
-    // Defensive validation: a hand-edited or malformed file must never
-    // corrupt the working config or get persisted. The backend hands us
-    // { name, colors }; validate the flat colors map the same way the
-    // old importTheme() did — unknown keys ignored, bad values reject.
-    const colors = imported.colors;
-    if (typeof colors !== 'object' || colors == null || Array.isArray(colors)) {
-      showSettingsError('Invalid theme file: not a theme object.');
-      return;
-    }
-    let recognized = 0;
-    for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
-      if (!(field in colors)) continue;
-      const value = colors[field];
-      if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
-        showSettingsError(`Invalid theme file: bad color for ${field}.`);
-        return;
-      }
-      recognized++;
-    }
-    if ('theme' in colors) {
-      const t = colors.theme;
-      if (typeof t !== 'string' || !THEME_VALID_THEMES.includes(t)) {
-        showSettingsError('Invalid theme file: unknown theme value.');
-        return;
-      }
-      recognized++;
-    }
-    for (const key of BASE_PALETTE_TOKENS) {
-      if (!(key in colors)) continue;
-      const value = colors[key];
-      if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
-        showSettingsError(`Invalid theme file: bad color for ${key}.`);
-        return;
-      }
-      recognized++;
-    }
-    // A file with no recognized keys would persist a junk entry that
-    // applies nothing visible — reject it rather than save an empty theme.
-    if (recognized === 0) {
-      showSettingsError('Invalid theme file: no recognized color settings.');
-      return;
-    }
-
-    // Persist the theme, refresh the dropdown, and apply it to the
-    // Colors-tab controls + preview (still a pending change until Save).
-    try {
-      await invoke('save_custom_theme', { name: imported.name, theme: colors });
-    } catch (err) {
-      showSettingsError('Failed to save theme: ' + err);
-      return;
-    }
-    state.customThemes = await invoke('list_custom_themes');
-    rebuildCustomThemeDropdown();
+  // Atom One Dark / Atom One Light — the bundled-by-name handles for
+  // the original built-in dark and light palettes + content defaults.
+  // Each pins its own mode so the label always matches what the user
+  // sees, no matter what was applied before.
+  if (opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE
+      || opt.dataset.value === CUSTOM_THEME_DEFAULT_LIGHT_VALUE) {
+    const mode = opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE ? 'dark' : 'light';
+    const defaults = await invoke('get_default_config');
+    const colors = {
+      theme: mode,
+      ...DEFAULT_PALETTE[mode],
+      h1_color:          defaults.h1_color,
+      h2_color:          defaults.h2_color,
+      h3_color:          defaults.h3_color,
+      bullet_color:      defaults.bullet_color,
+      code_bg_color:     BG_DEFAULTS[mode].code_bg_color,
+      code_accent_color: defaults.code_accent_color,
+      note_bg_color:     BG_DEFAULTS[mode].note_bg_color,
+      note_accent_color: defaults.note_accent_color,
+    };
     applyThemeToControls(colors);
+    const pretty = opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE
+      ? ATOM_ONE_DARK.name
+      : ATOM_ONE_LIGHT.name;
+    setCustomThemeSelection(opt.dataset.value, pretty);
+    closeCustomThemeSelect();
     return;
   }
 
-  // Normal theme selection: apply the saved theme's colors to the
-  // Colors-tab controls + preview. list_custom_themes results are trusted.
-  const theme = state.customThemes.find(t => t.filename === opt.dataset.value);
-  if (theme) applyThemeToControls(theme.colors);
+  // Normal theme selection: apply the picked theme's colors to the
+  // Colors-tab controls + preview. Looks across bundled + imported lists
+  // (both trusted: built-in JSON ships with the app, list_custom_themes
+  // is the only writer of the user themes dir).
+  const theme = findThemeByFilename(opt.dataset.value);
+  if (theme) {
+    applyThemeToControls(theme.colors);
+    setCustomThemeSelection(theme.filename, theme.name);
+  }
   closeCustomThemeSelect();
 });
 
@@ -1058,6 +1092,7 @@ export function openSettings(tabName) {
   document.getElementById('setting-note-bg').value       = effectiveBgColor(state.config.note_bg_color, 'note_bg_color', resolved);
   document.getElementById('setting-note-accent').value   = state.config.note_accent_color;
   document.getElementById('setting-toolbar-compact').value = state.config.toolbar_compact ? 'true' : 'false';
+  document.getElementById('setting-show-recent-files').value = state.config.show_recent_files !== false ? 'true' : 'false';
   document.getElementById('setting-printer-friendly').value = state.config.printer_friendly ? 'true' : 'false';
   document.getElementById('setting-preserve-line-breaks').value = state.config.preserve_line_breaks ? 'true' : 'false';
   document.getElementById('setting-md-extensions').value =
@@ -1067,6 +1102,7 @@ export function openSettings(tabName) {
   document.getElementById('setting-word-wrap').value = state.config.editor_word_wrap !== false ? 'true' : 'false';
   document.getElementById('setting-spell-check').value = state.config.editor_spell_check ? 'true' : 'false';
   document.getElementById('setting-line-numbers').value = state.config.editor_line_numbers ? 'true' : 'false';
+  document.getElementById('setting-format-on-save').value = state.config.editor_format_on_save ? 'true' : 'false';
   // Interface-palette swatches — saved overrides over the theme defaults.
   const effPalette = effectivePalette(resolved, state.config.palette);
   for (const key of BASE_PALETTE_TOKENS) {
@@ -1081,13 +1117,21 @@ export function openSettings(tabName) {
   pendingOverrides = Object.assign(Object.create(null), state.config.keybindings || {});
   renderShortcutsPanel();
   // Render the custom-theme dropdown from whatever's cached, then refresh
-  // the list from disk in the background (mirrors rebuildFontDropdown's
-  // eager-then-lazy pattern). openSettings stays synchronous.
+  // both lists in the background (mirrors rebuildFontDropdown's
+  // eager-then-lazy pattern). openSettings stays synchronous. Builtins
+  // are static so they cache for the full session after the first fetch.
+  applyStoredCustomThemeSelection();
   rebuildCustomThemeDropdown();
-  invoke('list_custom_themes').then(list => {
-    state.customThemes = list;
-    rebuildCustomThemeDropdown();
-  }).catch(() => {});
+  const builtinPromise = state.builtinThemes.length
+    ? Promise.resolve(state.builtinThemes)
+    : invoke('list_builtin_themes').catch(() => []);
+  Promise.all([builtinPromise, invoke('list_custom_themes').catch(() => [])])
+    .then(([builtins, customs]) => {
+      state.builtinThemes = builtins;
+      state.customThemes = customs;
+      applyStoredCustomThemeSelection();
+      rebuildCustomThemeDropdown();
+    });
   activateSettingsTab(tabName || 'general');
   settingsOverlay.classList.remove('hidden');
   state.releaseFocusTrap = trapFocus(document.getElementById('settings-dialog'));
@@ -1186,6 +1230,17 @@ function showSettingsError(msg) {
 // hands them to the backend's native save dialog.
 async function exportTheme() {
   const theme = { theme: document.getElementById('setting-theme').value };
+  // Inherit the currently-applied theme's display name when one is
+  // selected so the export carries a meaningful label. Manual edits
+  // clear the selection, in which case the backend falls back to the
+  // saved file's stem.
+  const ctValue = customThemeSelect.dataset.value || '';
+  if (ctValue === CUSTOM_THEME_DEFAULT_VALUE)        theme.name = ATOM_ONE_DARK.name;
+  else if (ctValue === CUSTOM_THEME_DEFAULT_LIGHT_VALUE) theme.name = ATOM_ONE_LIGHT.name;
+  else if (ctValue) {
+    const match = findThemeByFilename(ctValue);
+    if (match) theme.name = match.name;
+  }
   for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
     theme[field] = document.getElementById(id).value;
   }
@@ -1199,6 +1254,69 @@ async function exportTheme() {
   } catch (e) {
     showSettingsError('Failed to export theme: ' + e);
   }
+}
+
+// Native open dialog → validate → persist → apply. Triggered by the
+// Import theme button next to Export theme. Defensive validation matches
+// the import branch the dropdown used to host.
+async function importThemeFromDialog() {
+  let imported;
+  try {
+    imported = await invoke('import_theme');
+  } catch (err) {
+    showSettingsError('Failed to import theme: ' + err);
+    return;
+  }
+  if (imported == null) return; // user cancelled the dialog
+
+  const colors = imported.colors;
+  if (typeof colors !== 'object' || colors == null || Array.isArray(colors)) {
+    showSettingsError('Invalid theme file: not a theme object.');
+    return;
+  }
+  let recognized = 0;
+  for (const [field] of Object.entries(THEME_COLOR_FIELDS)) {
+    if (!(field in colors)) continue;
+    const value = colors[field];
+    if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
+      showSettingsError(`Invalid theme file: bad color for ${field}.`);
+      return;
+    }
+    recognized++;
+  }
+  if ('theme' in colors) {
+    const t = colors.theme;
+    if (typeof t !== 'string' || !THEME_VALID_THEMES.includes(t)) {
+      showSettingsError('Invalid theme file: unknown theme value.');
+      return;
+    }
+    recognized++;
+  }
+  for (const key of BASE_PALETTE_TOKENS) {
+    if (!(key in colors)) continue;
+    const value = colors[key];
+    if (typeof value !== 'string' || !THEME_HEX_RE.test(value.trim())) {
+      showSettingsError(`Invalid theme file: bad color for ${key}.`);
+      return;
+    }
+    recognized++;
+  }
+  if (recognized === 0) {
+    showSettingsError('Invalid theme file: no recognized color settings.');
+    return;
+  }
+
+  let saved;
+  try {
+    saved = await invoke('save_custom_theme', { name: imported.name, theme: colors });
+  } catch (err) {
+    showSettingsError('Failed to save theme: ' + err);
+    return;
+  }
+  state.customThemes = await invoke('list_custom_themes');
+  applyThemeToControls(colors);
+  setCustomThemeSelection(saved.filename, saved.name);
+  rebuildCustomThemeDropdown();
 }
 
 // Applies a flat theme color map to the Colors-tab controls and refreshes
@@ -1280,18 +1398,21 @@ async function saveSettings() {
     note_bg_color:  document.getElementById('setting-note-bg').value,
     note_accent_color: document.getElementById('setting-note-accent').value,
     toolbar_compact: document.getElementById('setting-toolbar-compact').value === 'true',
+    show_recent_files: document.getElementById('setting-show-recent-files').value === 'true',
     printer_friendly: document.getElementById('setting-printer-friendly').value === 'true',
     preserve_line_breaks: document.getElementById('setting-preserve-line-breaks').value === 'true',
     md_extensions: parseMdExtensions(document.getElementById('setting-md-extensions').value),
     editor_word_wrap: document.getElementById('setting-word-wrap').value === 'true',
     editor_spell_check: document.getElementById('setting-spell-check').value === 'true',
     editor_line_numbers: document.getElementById('setting-line-numbers').value === 'true',
+    editor_format_on_save: document.getElementById('setting-format-on-save').value === 'true',
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
     // Compared against the theme being saved, so an in-dialog mode flip
     // is handled; an all-default palette collapses to {} (keeps tracking
     // dark/light), otherwise the full explicit map is stored.
     palette: collectPaletteFromInputs(
       resolvedTheme(document.getElementById('setting-theme').value)),
+    custom_theme: customThemeSelect.dataset.value || '',
   };
   setLoading();
   try {
@@ -1303,6 +1424,9 @@ async function saveSettings() {
     state.bindings = effectiveBindings(newConfig.keybindings);
     renderShortcutsUI();
     applyConfig(state.config);
+    // Re-paint the welcome screen's recent-files panel so the toggle
+    // takes effect immediately without needing to reopen the window.
+    applyRecentFiles(state.recentFiles);
     const tab = activeTab();
     if (tab) applyZoom(tab.zoom);
     // preserve_line_breaks changes the rendered HTML itself (a <br> vs a
@@ -1358,6 +1482,7 @@ async function resetSettings() {
   const defaults = await invoke('get_default_config');
   if (activeTabName === 'general') {
     document.getElementById('setting-toolbar-compact').value = defaults.toolbar_compact ? 'true' : 'false';
+    document.getElementById('setting-show-recent-files').value = defaults.show_recent_files !== false ? 'true' : 'false';
     document.getElementById('setting-printer-friendly').value = defaults.printer_friendly ? 'true' : 'false';
     document.getElementById('setting-md-extensions').value =
       (Array.isArray(defaults.md_extensions) && defaults.md_extensions.length
@@ -1374,6 +1499,7 @@ async function resetSettings() {
     document.getElementById('setting-word-wrap').value = defaults.editor_word_wrap !== false ? 'true' : 'false';
     document.getElementById('setting-spell-check').value = defaults.editor_spell_check ? 'true' : 'false';
     document.getElementById('setting-line-numbers').value = defaults.editor_line_numbers ? 'true' : 'false';
+    document.getElementById('setting-format-on-save').value = defaults.editor_format_on_save ? 'true' : 'false';
   } else if (activeTabName === 'colors') {
     document.getElementById('setting-theme').value  = defaults.theme;
     document.getElementById('setting-h1').value     = defaults.h1_color;
@@ -1395,6 +1521,7 @@ async function resetSettings() {
     }
     updatePaletteHexLabels();
     applyPaletteToBody(DEFAULT_PALETTE[resolved]);
+    clearCustomThemeSelection();
   } else if (activeTabName === 'shortcuts') {
     // Drop every override so every action falls back to its registry
     // default. Still a pending change until the user hits Save.
@@ -1410,6 +1537,7 @@ document.getElementById('settings-reset').addEventListener('click', resetSetting
 document.getElementById('settings-save').addEventListener('click', saveSettings);
 document.getElementById('btn-check-updates').addEventListener('click', checkForUpdates);
 document.getElementById('btn-export-theme').addEventListener('click', exportTheme);
+document.getElementById('btn-import-theme').addEventListener('click', importThemeFromDialog);
 settingsOverlay.addEventListener('click', (e) => { if (e.target === settingsOverlay) closeSettings(); });
 
 // Settings tab switching
@@ -1428,9 +1556,13 @@ document.getElementById('settings-tabs').addEventListener('keydown', (e) => {
   next.focus();
 });
 
-// Live preview updates
+// Live preview updates. The trigger label tracks the *last applied*
+// saved theme, so any manual color edit makes that label stale — clear
+// it so the dropdown falls back to the placeholder.
 ['setting-h1', 'setting-h2', 'setting-h3', 'setting-bullet', 'setting-code-bg', 'setting-code-accent', 'setting-note-bg', 'setting-note-accent'].forEach(id => {
-  document.getElementById(id).addEventListener('input', updatePreviewColors);
+  const el = document.getElementById(id);
+  el.addEventListener('input', updatePreviewColors);
+  el.addEventListener('input', clearCustomThemeSelection);
 });
 
 // Interface-palette swatches apply live to <body> as you drag them —
@@ -1441,37 +1573,9 @@ for (const key of BASE_PALETTE_TOKENS) {
     document.body.style.setProperty(`--${key}`, e.target.value);
     const hex = document.getElementById(`setting-${key}-hex`);
     if (hex) hex.textContent = e.target.value.toLowerCase();
+    clearCustomThemeSelection();
   });
 }
-
-// Keep body class and bg defaults in sync with the in-flight theme
-// pick so the preview's --fg contrast and the bg swatches match what
-// the user will see after Save. closeSettings reverts the class if
-// Save isn't clicked.
-document.getElementById('setting-theme').addEventListener('change', () => {
-  if (populatingSettings) return;
-  const resolved = resolvedTheme(document.getElementById('setting-theme').value);
-  setBodyTheme(resolved);
-  for (const field of ['code_bg_color', 'note_bg_color']) {
-    const id = field === 'code_bg_color' ? 'setting-code-bg' : 'setting-note-bg';
-    const input = document.getElementById(id);
-    input.value = effectiveBgColor(input.value, field, resolved);
-  }
-  updatePreviewColors();
-  // If the interface swatches are still at a built-in default (either
-  // mode's, untouched), swap them to the new mode's defaults so the
-  // palette tracks the theme; a customized palette is left alone.
-  const matchesMode = mode => BASE_PALETTE_TOKENS.every(k =>
-    document.getElementById(`setting-${k}`).value.toLowerCase()
-      === DEFAULT_PALETTE[mode][k].toLowerCase());
-  if (matchesMode('dark') || matchesMode('light')) {
-    for (const key of BASE_PALETTE_TOKENS) {
-      document.getElementById(`setting-${key}`).value = DEFAULT_PALETTE[resolved][key];
-      document.body.style.setProperty(`--${key}`, DEFAULT_PALETTE[resolved][key]);
-    }
-    updatePaletteHexLabels();
-  }
-});
 
 // About panel external link
 document.querySelectorAll('.about-link[data-url]').forEach(a => {

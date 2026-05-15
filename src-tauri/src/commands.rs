@@ -912,6 +912,18 @@ pub async fn export_theme(
     };
 
     tauri::async_runtime::spawn_blocking(move || {
+        // Stamp a `name` field derived from the chosen filename stem so a
+        // re-import shows a sensible label without renaming. A name
+        // already present in the map (e.g. set by the frontend) wins.
+        let mut theme = theme;
+        if !theme.contains_key("name") {
+            let stem = std::path::Path::new(&chosen)
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Theme")
+                .to_string();
+            theme.insert("name".to_string(), stem);
+        }
         let json = serde_json::to_string_pretty(&theme)
             .map_err(|e| format!("Failed to serialize theme: {e}"))?;
         fs::write(&chosen, json).map_err(|e| format!("Failed to write theme: {e}"))?;
@@ -960,7 +972,7 @@ pub async fn import_theme(
 
     tauri::async_runtime::spawn_blocking(move || {
         let path = PathBuf::from(&chosen);
-        let name = path
+        let stem = path
             .file_stem()
             .and_then(|n| n.to_str())
             .unwrap_or("theme")
@@ -969,6 +981,13 @@ pub async fn import_theme(
             fs::read_to_string(&path).map_err(|e| format!("Failed to read theme: {e}"))?;
         let colors: std::collections::HashMap<String, String> = serde_json::from_str(&content)
             .map_err(|e| format!("Not a valid theme file: {e}"))?;
+        // A `name` field in the JSON wins over the file stem so a theme
+        // imported under a renamed file still surfaces its intended label.
+        let name = colors
+            .get("name")
+            .cloned()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or(stem);
         Ok(Some(ImportedTheme { name, colors }))
     })
     .await
@@ -1069,18 +1088,68 @@ pub fn list_custom_themes() -> Vec<CustomTheme> {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_string();
-        let name = path
-            .file_stem()
-            .and_then(|n| n.to_str())
-            .unwrap_or(&filename)
-            .to_string();
+        // `name` field inside the JSON (added by newer exports) takes
+        // priority so a renamed file still shows its intended label.
+        let name = colors
+            .get("name")
+            .cloned()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&filename)
+                    .to_string()
+            });
         themes.push(CustomTheme {
             name,
             filename,
             colors,
         });
     }
-    themes.sort_by(|a, b| a.name.cmp(&b.name));
+    themes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    themes
+}
+
+// Themes bundled with the app — embedded at compile time so they're
+// always available without a separate install step. Tuple of
+// (slug, file content); the slug becomes the `builtin:<slug>` ID used
+// for selection persistence so it can't collide with a user-imported
+// theme of the same name.
+const BUILTIN_THEMES: &[(&str, &str)] = &[
+    ("catppuccin-mocha", include_str!("../themes/catppuccin-mocha.json")),
+    ("dracula",          include_str!("../themes/dracula.json")),
+    ("gruvbox-dark",     include_str!("../themes/gruvbox-dark.json")),
+    ("nord",             include_str!("../themes/nord.json")),
+    ("rose-pine",        include_str!("../themes/rose-pine.json")),
+    ("solarized-light",  include_str!("../themes/solarized-light.json")),
+    ("tokyo-night",      include_str!("../themes/tokyo-night.json")),
+    ("tokyo-night-storm",include_str!("../themes/tokyo-night-storm.json")),
+];
+
+/// Returns the app's built-in theme set. Same shape as
+/// `list_custom_themes` but the `filename` carries a `builtin:` sentinel
+/// so the frontend can flag them as non-deletable.
+#[tauri::command]
+pub fn list_builtin_themes() -> Vec<CustomTheme> {
+    let mut themes = Vec::new();
+    for (slug, content) in BUILTIN_THEMES {
+        let colors: std::collections::HashMap<String, String> =
+            match serde_json::from_str(content) {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+        let name = colors
+            .get("name")
+            .cloned()
+            .filter(|n| !n.trim().is_empty())
+            .unwrap_or_else(|| slug.to_string());
+        themes.push(CustomTheme {
+            name,
+            filename: format!("builtin:{slug}"),
+            colors,
+        });
+    }
+    themes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     themes
 }
 

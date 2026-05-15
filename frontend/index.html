@@ -80,7 +80,15 @@
         <span class="btn-label">Search</span>
       </button>
 
-      <button id="btn-outline" type="button" title="Document outline" aria-label="Toggle document outline" aria-pressed="false" aria-controls="outline-sidebar" disabled>
+      <button id="btn-preview" type="button" title="Toggle preview pane" aria-label="Toggle preview pane" aria-pressed="false" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span class="btn-label">Preview</span>
+      </button>
+
+      <button id="btn-outline" type="button" title="Toggle document outline" aria-label="Toggle document outline" aria-pressed="false" aria-controls="outline-sidebar" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="3" y1="6"  x2="21" y2="6"/>
           <line x1="7" y1="12" x2="21" y2="12"/>
@@ -380,6 +388,24 @@
           <div class="welcome-wordmark-tag">A lightweight Markdown reader</div>
         </div>
 
+        <button class="welcome-hero" id="welcome-new" type="button">
+          <div class="welcome-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="12" x2="12" y2="18"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <div class="welcome-hero-copy">
+            <h2 class="welcome-hero-title">Create a new file</h2>
+            <div class="welcome-hero-sub">
+              Press <span data-shortcut="newFile"></span> to start a fresh Markdown document.
+            </div>
+          </div>
+          <span class="welcome-hero-cta">New&hellip;</span>
+        </button>
+
         <button class="welcome-hero" id="welcome-open" type="button">
           <div class="welcome-hero-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -395,30 +421,21 @@
           <span class="welcome-hero-cta">Browse&hellip;</span>
         </button>
 
-        <!-- Secondary actions — demoted to a quiet inline row beneath the
-             primary "Open file" hero. IDs are unchanged so app.js's
-             delegated contentEl click handler still routes them, and the
-             data-shortcut spans still get rebuilt by renderShortcutsUI(). -->
-        <div class="welcome-secondary">
-          <button class="welcome-secondary-action" id="welcome-new" type="button">
-            <svg class="welcome-secondary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="12" x2="12" y2="18"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
-            <span class="welcome-secondary-label">New file</span>
-            <span class="welcome-secondary-keys" data-shortcut="newFile"></span>
-          </button>
-          <button class="welcome-secondary-action" id="welcome-open-folder" type="button">
-            <svg class="welcome-secondary-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <button class="welcome-hero" id="welcome-open-folder" type="button">
+          <div class="welcome-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <path d="M3 11h18"/>
             </svg>
-            <span class="welcome-secondary-label">Open folder</span>
-            <span class="welcome-secondary-keys" data-shortcut="openFolder"></span>
-          </button>
-        </div>
+          </div>
+          <div class="welcome-hero-copy">
+            <h2 class="welcome-hero-title">Open a folder</h2>
+            <div class="welcome-hero-sub">
+              Press <span data-shortcut="openFolder"></span> to browse every <kbd>.md</kbd> file in a project.
+            </div>
+          </div>
+          <span class="welcome-hero-cta">Browse&hellip;</span>
+        </button>
 
         <div class="welcome-recent" id="welcome-recent" hidden>
           <div class="welcome-col-title">
@@ -567,6 +584,22 @@
           </div>
 
           <div class="settings-row">
+            <label>Display recent files<span class="settings-info-icon" tabindex="0"
+                   aria-label="When on, the welcome screen lists recently opened files for one-click reopen. When off, the panel is hidden — entries still accrue in the background so toggling on restores them.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <div class="segmented" id="setting-show-recent-files" role="radiogroup"
+                 aria-label="Display recent files on welcome screen">
+              <button type="button" data-value="true" aria-pressed="true">On</button>
+              <button type="button" data-value="false" aria-pressed="false">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
             <label>Printer Friendly PDFs<span class="settings-info-icon" tabindex="0"
                    aria-label="When on, PDFs use a light background with dark text for readability and to save ink. When off, the PDF matches the app's current theme exactly.">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -675,35 +708,53 @@
               <button type="button" data-value="false" aria-pressed="true">Off</button>
             </div>
           </div>
+
+          <div class="settings-row">
+            <label>Format on save<span class="settings-info-icon" tabindex="0"
+                   aria-label="When on, every save aligns Markdown table columns (VS Code style), normalizes line endings to LF, trims trailing whitespace (preserving the two-space hard-break) and collapses to a single trailing newline. Edits are placed in the undo history so Ctrl+Z reverts them. Off by default to keep saves byte-for-byte.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <div class="segmented" id="setting-format-on-save" role="radiogroup"
+                 aria-label="Editor format on save">
+              <button type="button" data-value="true" aria-pressed="false">On</button>
+              <button type="button" data-value="false" aria-pressed="true">Off</button>
+            </div>
+          </div>
         </div>
 
         <!-- ── Colors panel ─────────────────────────────────────────── -->
         <div class="settings-panel" id="settings-panel-colors"
              role="tabpanel" aria-labelledby="settings-tab-colors" hidden>
 
-          <div class="settings-row">
-            <label>Theme</label>
-            <div class="custom-select" id="setting-theme" aria-label="Color theme">
-              <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
-              <div class="custom-select-options" role="listbox">
-                <div class="custom-select-option" data-value="dark" role="option">Dark</div>
-                <div class="custom-select-option" data-value="light" role="option">Light</div>
-                <div class="custom-select-option" data-value="system" role="option">System</div>
-              </div>
-            </div>
-          </div>
+          <!-- Hidden carrier for the dark/light mode the active theme
+               targets. Set by applyThemeToControls from the theme JSON's
+               `theme` field; no user-facing toggle since the Themes
+               dropdown is the single source of truth. -->
+          <input type="hidden" id="setting-theme" value="dark">
 
           <div class="settings-row">
-            <label>Custom themes</label>
-            <div class="custom-select" id="setting-custom-theme" aria-label="Custom themes">
+            <label>Themes</label>
+            <div class="custom-select" id="setting-custom-theme" aria-label="Themes">
               <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
               <div class="custom-select-options" role="listbox"></div>
             </div>
           </div>
 
           <div class="settings-row theme-io-row">
-            <label></label>
+            <label aria-hidden="true"></label>
             <div class="theme-io-buttons">
+              <button type="button" id="btn-import-theme" class="settings-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 21V9"/>
+                  <polyline points="7 16 12 21 17 16"/>
+                  <path d="M5 3h14"/>
+                </svg>
+                Import theme…
+              </button>
               <button type="button" id="btn-export-theme" class="settings-action-btn">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M12 3v12"/>

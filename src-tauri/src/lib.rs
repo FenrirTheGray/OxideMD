@@ -88,6 +88,7 @@ pub fn run() {
             commands::import_theme,
             commands::save_custom_theme,
             commands::list_custom_themes,
+            commands::list_builtin_themes,
             commands::delete_custom_theme,
         ])
         .setup(|app| {
