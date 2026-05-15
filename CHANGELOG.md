@@ -4,6 +4,24 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.1] - 2026-05-15
+
+### Changed
+
+- Toolbar labels auto-hide on narrow windows (below 1220px) via a CSS media query that mirrors the existing compact-density rule; the manual "Compact toolbar" setting still forces icon-only at any width. Removes the need for the toolbar's natural width to dictate the window's minimum width
+- Minimum window width lowered from 1220 to 720, default launch width from 1220 to 1280 — the app now fits on 1280×720 laptops and shrinks comfortably for half-screen snapping. `tauri.conf.json` updated accordingly
+- Window size is now clamped to the current monitor at startup (with 80px of slack for taskbar/decorations and floors mirroring `minWidth`/`minHeight`), so a persisted geometry from a larger display can't open larger than the current screen
+- `frontend/window-size.js` no longer measures the toolbar to derive a minimum width — `tauri.conf` carries the authoritative 720px floor and CSS handles the narrow-width layout. The module now only computes a height floor that fits the welcome screen at the current font/zoom
+
+### Removed
+
+- Native application menu bar (File / Edit / View / Help) introduced in 4.0.0. On Fedora/GTK it rendered as an unwanted system menu and crowded the titlebar — pulled in full pending a redesign
+
+### Fixed
+
+- Print to PDF no longer leaves the UI stuck after pressing Escape to dismiss the dialog. WebKitGTK and Chromium-on-Linux skip-fire the `afterprint` event on cancel, which left `.printing`/`.print-friendly` on `<body>` and the loader overlay visible indefinitely. Teardown now listens for three signals — `matchMedia('print')` change, `afterprint`, and a 60-second safety timer — and runs exactly once, whichever fires first
+- Settings → Compact toolbar setting and the auto-collapse media query share the same icon-only rule so toggling Compact at any window width behaves consistently
+
 ## [4.0.0] - 2026-05-15
 
 ### Added
