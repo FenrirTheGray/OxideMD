@@ -74,14 +74,6 @@ async function init() {
     if (typeof e.payload === 'string') handleFsChange(e.payload);
   });
 
-  // Native menu bar clicks. Rust forwards each item's id as the payload;
-  // route it through the same dispatcher the keyboard shortcuts use.
-  // `about` isn't a real action — it just opens Settings to the About tab.
-  await listen('menu-action', (e) => {
-    if (e.payload === 'about') { openSettings('about'); return; }
-    runAction(e.payload);
-  });
-
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
