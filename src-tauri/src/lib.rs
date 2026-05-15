@@ -98,10 +98,23 @@ pub fn run() {
             crate::markdown::PRESERVE_LINE_BREAKS
                 .store(cfg.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_size(tauri::LogicalSize::new(
-                    cfg.window_width as f64,
-                    cfg.window_height as f64,
-                ));
+                // Clamp the persisted size to the current monitor so the
+                // window cannot open larger than the screen — covers
+                // moving to a smaller display, half-screen snapping on a
+                // different resolution, and stale configs from old
+                // hardware. 80px of slack reserves room for the taskbar
+                // and decorations. Floors mirror tauri.conf minWidth /
+                // minHeight so we never go below the configured minimum.
+                let mut w = cfg.window_width as f64;
+                let mut h = cfg.window_height as f64;
+                if let Ok(Some(mon)) = window.current_monitor() {
+                    let scale = mon.scale_factor();
+                    let mon_w = mon.size().width as f64 / scale;
+                    let mon_h = mon.size().height as f64 / scale;
+                    w = w.min((mon_w - 80.0).max(720.0));
+                    h = h.min((mon_h - 80.0).max(480.0));
+                }
+                let _ = window.set_size(tauri::LogicalSize::new(w, h));
                 if cfg.window_maximized {
                     let _ = window.maximize();
                 }
