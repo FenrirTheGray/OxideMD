@@ -626,9 +626,17 @@ body.maximized {
 
 /* Compact toolbar: icons only. Hide the text labels on every toolbar
    button and tighten the horizontal padding so the buttons stay
-   balanced as pure squares. */
+   balanced as pure squares. The `.compact` class is the explicit
+   user setting; the media query below auto-applies the same rules
+   whenever the window is narrower than 1220px (the measured natural
+   width with labels visible) — so labels never clip on small screens
+   regardless of the stored preference. */
 #toolbar-buttons.compact .btn-label { display: none; }
 #toolbar-buttons.compact button { padding: 5px 8px; }
+@media (max-width: 1219px) {
+  #toolbar-buttons .btn-label { display: none; }
+  #toolbar-buttons button { padding: 5px 8px; }
+}
 
 
 /* ── Window controls ──────────────────────────────────────────────── */
