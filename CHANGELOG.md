@@ -4,6 +4,47 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.0.0] - 2026-05-15
+
+### Added
+
+- Themeable base UI palette: every surface, text token, border, link, scrollbar, and highlight color is now editable from Settings → Colors, with sparse overrides stored in `config.toml` so untouched tokens still track the active theme defaults
+- Bundled themes shipped with the app: Atom One Dark, Atom One Light, Catppuccin Mocha, Dracula, Gruvbox Dark, Nord, Rosé Pine, Solarized Light, Tokyo Night, and Tokyo Night Storm — embedded at compile time, available on first run with no install step
+- Themes dropdown split into "Included" and "Imported" sections, each sorted alphabetically (case-insensitive). The trigger reflects the currently-applied theme and survives restarts via a new `custom_theme` config field
+- Theme JSON template now carries a `name` field; imports prefer it over the file stem so a renamed file still surfaces its intended label, and exports stamp the filename stem when the frontend hasn't already
+- Custom theme import/export as JSON: any theme can be saved through the platform's native dialog and re-imported on another machine. Imports are validated, persisted to a per-user themes directory, and listed in the Themes dropdown across restarts
+- Native application menu bar (File / Edit / View / Help) bound to the same action registry as the toolbar and shortcuts
+- Project-wide content search: a second sidebar tab searches every Markdown file in the open folder, streams results as ripgrep finds them, and clicking a hit jumps to the line in a new or existing tab
+- Document outline panel docked as a right-side sidebar with persisted open/closed state; only opens when a file is active so the welcome screen stays uncluttered
+- Independent Preview and Outline toolbar toggles, each with its own pressed state. Preview controls the split editor's preview pane (edit mode only); Outline controls the right-side sidebar (read or edit mode)
+- Editor settings tab carrying word wrap, spell check, line-number gutter (now on by default), and a new "Format on save" toggle
+- "Format on save" (Editor tab, off by default): aligns Markdown table columns VS Code-style with grapheme-width emoji/CJK accounting, normalizes line endings to LF, trims trailing whitespace (preserving the two-space hard-break), and collapses to a single trailing newline. All edits go through the CodeMirror history so Ctrl+Z reverts them
+- General settings tab carrying toolbar density, Markdown file extensions, Printer Friendly PDFs, and a new "Display recent files" toggle that hides the welcome-screen recent list without clearing the entries
+- Configurable Markdown file extensions (General tab): the folder browser, project search, and CLI handling all share a single normalized list — defaults to `md, markdown, mdown, mkd`
+- Markdown rendering extensions: footnotes with reference links, heading attribute lists (`{#id .class key=value}`), and angle-bracket autolinks (`<https://…>`)
+- PDF export now surfaces a loader and toast feedback so long exports stay visible
+- Editor syntax highlighting tracks the bullet and note accent palette tokens so themed colors flow into the source view
+- Markdown files declare an Editor role on the OS file association so "Open with…" lists OxideMD as an editor
+- Themed scrollbar inside the Settings dialog — tracks the active palette like the other panes
+- Settings dialog is now responsive (`min(570px, calc(100vw - 32px))`) so it never overflows on narrow windows
+- "ARCHITECTURE.md" describing the frontend modules and backend command surface
+
+### Changed
+
+- Welcome screen returned to the v3.2.0 layout: three equal hero cards (Create new file / Open Markdown file / Open folder) with Recent files and Keyboard shortcuts beneath
+- Dark / Light / System dropdown removed from Settings → Colors. The applied theme JSON now drives the mode (`theme: "dark" | "light"`), with the Themes dropdown as the single source of truth
+- Toolbar Preview and Outline buttons reflect their toggle state via `aria-pressed` + an accent-tinted background, distinct from plain hover
+- Outline is hidden on the welcome screen without dropping the persisted open preference; opening a file again restores it
+- Custom theme dropdown trigger no longer pins "Default" to the top; "Atom One Dark" and "Atom One Light" are alphabetized into the Included list with the rest of the bundled themes
+- Theme import is now a button next to Export theme rather than a row inside the Themes dropdown
+- Refactored Editor settings out of Reading: word wrap, spell check, and line-number controls live in their own tab so Reading focuses on typography and reading-mode behavior
+
+### Fixed
+
+- Editor syntax highlighting no longer reads as raw CodeMirror defaults — heading, code, and quote tokens now resolve through the same palette as the rendered preview
+- Watcher debounce, reset-defaults confirm, and Escape scoping cleaned up so destructive operations always confirm and stray Escape presses don't drop edit mode
+- Tab dirty dot contrast and welcome-screen status counts adjusted for the new themeable palette
+
 ## [3.2.0] - 2026-05-14
 
 ### Added
