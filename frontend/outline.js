@@ -21,7 +21,7 @@ import {
   btnOutline, outlineSidebar, outlineSidebarBody, outlineSidebarCloseBtn,
 } from './state.js';
 import { activeTab, syncToolbar } from './tabs.js';
-import { getEditorView, togglePreviewPane } from './editor.js';
+import { getEditorView } from './editor.js';
 import { EditorSelection } from '@codemirror/state';
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
@@ -172,27 +172,23 @@ export function toggleOutline() {
 // Restore the persisted open/closed state at startup. Called from
 // app.js init() after state.config is loaded; doesn't persist (the
 // value already came from config).
+// Restore the persisted open state — but only when there's an active
+// tab. The welcome screen has no document to outline, so we never show
+// the empty sidebar there even if the user left it open last session.
+// Called on startup and again on every tab activation (see applyActiveTab).
 export function applyOutlineVisibility() {
-  if (state.config?.outline_visible) openOutline();
+  const hasTab = state.activeTabId !== null;
+  if (hasTab && state.config?.outline_visible) openOutline();
   else closeOutline();
 }
 
-// The outline button is mode-aware: in read mode it toggles this
-// right-side sidebar; in edit mode it toggles the existing split
-// preview pane (delegated to editor.js, which owns the split state).
-// Both paths repaint the button's label / aria-pressed via
-// syncToolbar() — toggleOutline() does it itself; the preview path
-// needs the explicit call.
+// Outline button toggles the right-side sidebar in both read and edit
+// modes. Preview pane has its own dedicated button (see editor.js) so
+// this one is no longer mode-aware.
 if (btnOutline) {
   btnOutline.addEventListener('click', (e) => {
     e.preventDefault();
-    const tab = activeTab();
-    if (tab?.editing) {
-      togglePreviewPane();
-      syncToolbar();
-    } else {
-      toggleOutline();
-    }
+    toggleOutline();
   });
 }
 

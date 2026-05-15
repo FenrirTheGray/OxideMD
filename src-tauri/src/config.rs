@@ -27,8 +27,18 @@ pub struct Config {
     // configs (and the built-in themes) are unchanged. Populated when
     // the user customizes Interface colors or imports a full theme.
     pub palette: HashMap<String, String>,
+    // Filename of the custom theme last applied via the Settings dropdown,
+    // or "__default__" for the built-in palette reset. Empty when the user
+    // hasn't picked a saved theme (or has modified colors since). Purely a
+    // UI hint so the dropdown can show the active theme label across
+    // restarts — color state lives in the fields above and `palette`.
+    pub custom_theme: String,
     pub toolbar_compact: bool,
     pub printer_friendly: bool,
+    // Whether the welcome screen surfaces the Recent files list. Off
+    // hides the panel entirely; entries still accrue in `recent_files`
+    // and the File menu picks them up so toggling back on restores them.
+    pub show_recent_files: bool,
     pub preserve_line_breaks: bool,
     pub sidebar_width: u32,
     // Whether the right-side document outline sidebar is shown. Toggled
@@ -45,6 +55,11 @@ pub struct Config {
     pub editor_word_wrap: bool,
     pub editor_spell_check: bool,
     pub editor_line_numbers: bool,
+    // Format the buffer on every save: trim trailing whitespace
+    // (preserving Markdown hard-break two-space syntax) and collapse to
+    // a single trailing newline. Off by default — opt-in to keep saves
+    // byte-for-byte for users with strict version control diffs.
+    pub editor_format_on_save: bool,
     // File extensions (lowercased, no leading dot) the folder browser
     // treats as Markdown. Normalized on save by the frontend; an empty
     // list falls back to MD_EXTS_DEFAULT at the read sites.
@@ -77,8 +92,10 @@ impl Default for Config {
             note_bg_color: "#2a2f3a".into(),
             note_accent_color: "#c678dd".into(),
             palette: HashMap::new(),
+            custom_theme: String::new(),
             toolbar_compact: false,
             printer_friendly: true,
+            show_recent_files: true,
             preserve_line_breaks: false,
             sidebar_width: 240,
             outline_visible: false,
@@ -88,7 +105,8 @@ impl Default for Config {
             keybindings: HashMap::new(),
             editor_word_wrap: true,
             editor_spell_check: false,
-            editor_line_numbers: false,
+            editor_line_numbers: true,
+            editor_format_on_save: false,
             md_extensions: MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect(),
             recent_files: Vec::new(),
         }

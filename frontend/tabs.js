@@ -5,7 +5,7 @@ import {
   supportsHighlights, matchHighlight, currentHighlight,
   tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
   editorPane, previewPane,
-  btnReload, btnSearch, btnOutline, btnZoomIn, btnZoomOut, zoomLabel,
+  btnReload, btnSearch, btnOutline, btnPreview, btnZoomIn, btnZoomOut, zoomLabel,
   btnModeToggle, btnSave, btnDiscard, btnPrint, editToolbar,
   filePathEl, statusIndicator, statusText,
   pickerBackdrop, WELCOME_HTML,
@@ -14,7 +14,7 @@ import {
 import { clearSearch } from './search.js';
 import { syncWatcher, highlightActiveTreeItem } from './folder.js';
 import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, isPreviewVisible, updateCounts, clearCounts } from './editor.js';
-import { isOutlineOpen, refreshOutline } from './outline.js';
+import { isOutlineOpen, refreshOutline, applyOutlineVisibility } from './outline.js';
 import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
 import { readDraft, clearDraft } from './draft-store.js';
 
@@ -45,28 +45,22 @@ export function syncToolbar() {
   const editing = !!tab?.editing;
   btnReload.disabled = !hasTab || editing;
   btnSearch.disabled = !hasTab || editing;
-  // Outline button is mode-aware (see outline.js): read mode toggles the
-  // right-side outline sidebar; edit mode toggles the split preview pane.
-  // Repaint its label / tooltip / aria-pressed for the current mode so
-  // the affordance never lies about what the next click will do.
+  // Preview + Outline are independent toggles now (no mode swap on the
+  // outline button). Preview is edit-mode only; Outline is always usable
+  // while a tab is loaded. aria-pressed drives the active-state styling.
+  if (btnPreview) {
+    btnPreview.disabled = !editing;
+    const previewing = editing && isPreviewVisible();
+    btnPreview.setAttribute('aria-pressed', previewing ? 'true' : 'false');
+    btnPreview.setAttribute('aria-label', previewing ? 'Hide preview pane' : 'Show preview pane');
+    btnPreview.title = previewing ? 'Hide preview pane' : 'Show preview pane';
+  }
   if (btnOutline) {
     btnOutline.disabled = !hasTab;
-    const labelEl = btnOutline.querySelector('.btn-label');
-    if (editing) {
-      const previewing = isPreviewVisible();
-      btnOutline.setAttribute('aria-pressed', previewing ? 'true' : 'false');
-      btnOutline.setAttribute('aria-label', previewing ? 'Hide preview pane' : 'Show preview pane');
-      btnOutline.title = previewing ? 'Hide preview pane' : 'Show preview pane';
-      btnOutline.removeAttribute('aria-controls');
-      if (labelEl) labelEl.textContent = 'Preview';
-    } else {
-      const open = isOutlineOpen();
-      btnOutline.setAttribute('aria-pressed', open ? 'true' : 'false');
-      btnOutline.setAttribute('aria-label', 'Toggle document outline');
-      btnOutline.title = 'Document outline';
-      btnOutline.setAttribute('aria-controls', 'outline-sidebar');
-      if (labelEl) labelEl.textContent = 'Outline';
-    }
+    const open = isOutlineOpen();
+    btnOutline.setAttribute('aria-pressed', open ? 'true' : 'false');
+    btnOutline.setAttribute('aria-label', open ? 'Hide document outline' : 'Show document outline');
+    btnOutline.title = open ? 'Hide document outline' : 'Show document outline';
   }
   // Printing works in both read and edit mode — print.js renders the
   // live buffer fresh — so this only gates on having a tab at all.
@@ -251,7 +245,10 @@ export function applyActiveTab() {
   applyZoom(tab.zoom);
   highlightActiveTreeItem();
   // Keep the outline sidebar in sync with whichever document is now
-  // active (no-op while the sidebar is hidden).
+  // active. Restore the persisted open state too — entering a file from
+  // the welcome screen should bring the panel back if the user had it
+  // open last session.
+  applyOutlineVisibility();
   refreshOutline();
 
   if (!tab.editing) {
@@ -278,7 +275,10 @@ export function showWelcome() {
   zoomLabel.textContent = '100%';
   highlightActiveTreeItem();
   clearStatus();
-  // No active document — clear the outline list (no-op while hidden).
+  // No active document — hide the outline sidebar without touching the
+  // persisted preference, so opening a file again restores it. Then
+  // clear the outline list (no-op while hidden).
+  applyOutlineVisibility();
   refreshOutline();
 }
 
@@ -551,6 +551,14 @@ function renderRecentFiles() {
   const root = document.getElementById('welcome-recent');
   const list = document.getElementById('welcome-recent-list');
   if (!root || !list) return;
+  // Gated by the General-tab toggle. Entries still accrue in the
+  // background while hidden, so flipping it back on shows the existing
+  // list without needing to reopen files.
+  if (state.config?.show_recent_files === false) {
+    root.hidden = true;
+    list.innerHTML = '';
+    return;
+  }
   const entries = state.recentFiles ?? [];
   if (entries.length === 0) { root.hidden = true; list.innerHTML = ''; return; }
   root.hidden = false;
