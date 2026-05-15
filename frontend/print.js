@@ -13,12 +13,24 @@
 // webview gives us NO signal that distinguishes "user saved the PDF"
 // from "user cancelled the print dialog", and the OS spooler's actual
 // file write (e.g. Windows "Microsoft Print to PDF") happens after the
-// webview is already done. So `afterprint` is the best available
-// "printing finished" signal: the loader stays up until it fires and
-// the success toast fires then (even on cancel — there's no way to
-// tell). The only failures we can genuinely detect are a
-// `render_preview` throw or a `window.print()` throw; those get an
-// error toast instead.
+// webview is already done. So "printing finished" is the best signal
+// we can hope for, and on WebKitGTK even that is fragile: the
+// `afterprint` event is documented to skip-fire on dialog cancel
+// (Esc), which would leave the loader up and `.printing` on <body>
+// indefinitely — the app appears frozen.
+//
+// We layer three teardown signals, idempotent so only the first wins:
+//   1. matchMedia('print') change listener — primary. When the print
+//      media stops matching the dialog has closed (save OR cancel).
+//      More reliable than `afterprint` on WebKitGTK/Chromium-Linux.
+//   2. `afterprint` event — fallback for browsers where matchMedia
+//      misfires (some older WebKit builds).
+//   3. 60-second safety timer — last resort if both above silently
+//      fail. Better to flash the user back to a working app a minute
+//      late than strand them forever.
+//
+// The only failures we can genuinely detect are a `render_preview`
+// throw or a `window.print()` throw; those get an error toast instead.
 
 import { invoke, convertFileSrc, state } from './state.js';
 import { activeTab } from './tabs.js';
@@ -78,29 +90,64 @@ export async function printActiveTab() {
   }
 
   // `body.printing` lets the stylesheet flip into print-isolation and
-  // `body.print-friendly` selects the light print theme; the one-shot
-  // afterprint listener tears it all back down (whether the user saved
-  // the PDF or cancelled the dialog) so #print-root doesn't hold a
-  // stale render or leave the print classes on <body>.
+  // `body.print-friendly` selects the light print theme; the teardown
+  // below tears it all back down (whether the user saved the PDF or
+  // cancelled the dialog) so #print-root doesn't hold a stale render
+  // or leave the print classes on <body>.
   document.body.classList.add('printing');
   document.body.classList.toggle('print-friendly', printerFriendly);
 
-  // Shared teardown so the afterprint handler and the window.print()
-  // throw path strip exactly the same state: print classes off <body>,
-  // #print-root emptied, the one-shot listener detached, loader hidden.
+  // Three teardown signals (see file header) all funnel into one
+  // idempotent runner; whichever fires first wins. Detaches the rest
+  // so they can't double-fire toasts or trip over a clean DOM.
+  const printMql = window.matchMedia('print');
+  let safetyTimer = 0;
+  let didTeardown = false;
   const teardown = () => {
+    if (didTeardown) return;
+    didTeardown = true;
     document.body.classList.remove('printing', 'print-friendly');
     printRoot.innerHTML = '';
     loaderOverlay.classList.add('hidden');
     window.removeEventListener('afterprint', onAfterPrint);
+    // Cross-spec: addEventListener('change') is the modern API but
+    // Safari < 14 only supports the deprecated addListener form.
+    // Detach via both shapes for safety.
+    if (printMql.removeEventListener) printMql.removeEventListener('change', onMqlChange);
+    else if (printMql.removeListener) printMql.removeListener(onMqlChange);
+    if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = 0; }
   };
-  const onAfterPrint = () => {
+
+  const finish = () => {
     teardown();
     // Best-available "finished" signal — see the file header for why
     // this fires even when the user cancelled the dialog.
     showToast('Exported to PDF.', 'success');
   };
+
+  // Primary signal. The first change fires `matches: true` as the
+  // dialog mounts and applies print media; the second fires
+  // `matches: false` when it dismounts (save OR cancel/Esc). We only
+  // teardown on the false transition.
+  const onMqlChange = (e) => {
+    if (e.matches) return;
+    finish();
+  };
+  if (printMql.addEventListener) printMql.addEventListener('change', onMqlChange);
+  else if (printMql.addListener) printMql.addListener(onMqlChange);
+
+  // Fallback signal.
+  const onAfterPrint = () => finish();
   window.addEventListener('afterprint', onAfterPrint);
+
+  // Last-resort signal: if neither of the above ever fires, force
+  // teardown after 60s so the user can interact with the app again.
+  // No toast here — this path means we don't know what happened.
+  safetyTimer = window.setTimeout(() => {
+    if (didTeardown) return;
+    teardown();
+    showToast('Print dialog did not report completion — the app has been restored.', 'error');
+  }, 60_000);
 
   // The loader must actually paint before window.print(), which can
   // block the main thread while the native dialog spins up. Yield two
@@ -111,7 +158,7 @@ export async function printActiveTab() {
     window.print();
   } catch {
     // window.print() itself threw — the dialog never opened, so
-    // afterprint will never fire. Run the same teardown by hand and
+    // neither signal will fire. Run the same teardown by hand and
     // surface the failure.
     teardown();
     showToast('Could not open the print dialog.', 'error');
