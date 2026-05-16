@@ -15,6 +15,7 @@
 // Modifiers are alphabetized on save so two accels compare as strings.
 
 import { isMac } from './state.js';
+import { logWarn } from './logger.js';
 
 // ── Named keys ─────────────────────────────────────────────────────────────
 // Any KeyboardEvent.key value that isn't a single printable char gets a
@@ -284,7 +285,7 @@ const handlers = new Map();
 
 export function registerHandler(id, fn) {
   if (!ACTION_BY_ID.has(id)) {
-    console.warn(`registerHandler: unknown action "${id}"`);
+    logWarn('keybindings', `registerHandler: unknown action "${id}"`);
     return;
   }
   handlers.set(id, fn);

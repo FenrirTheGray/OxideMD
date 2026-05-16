@@ -1,5 +1,6 @@
 import {
   invoke,
+  listen,
   state,
   systemDarkMQ,
   isLinux,
@@ -32,6 +33,7 @@ import {
 } from "./keybindings.js";
 import { renderShortcutsUI } from "./shortcuts-display.js";
 import { updateAutoCompact } from "./window-size.js";
+import { logWarn } from "./logger.js";
 
 // ── Settings tab structure & placement convention ──────────────────────────
 // The Settings modal has six tabs. When adding a new setting row, decide
@@ -1241,6 +1243,89 @@ function hideUpdateStatus() {
   el.innerHTML = "";
 }
 
+// Sentinel string the Rust side returns when in-app install can't
+// proceed (currently RPM/DEB on Linux \u2014 see commands.rs
+// `UPDATE_UNSUPPORTED_PACKAGE`). Keep in sync with the constant there.
+const UPDATE_UNSUPPORTED_PACKAGE = "UNSUPPORTED_PACKAGE";
+const RELEASES_URL = "https://github.com/FenrirTheGray/OxideMD/releases/latest";
+
+function openReleasesPage() {
+  invoke("open_url", { url: RELEASES_URL });
+}
+
+function wireFallbackButton() {
+  const btn = document.querySelector("#update-status .update-download");
+  if (btn) btn.addEventListener("click", openReleasesPage);
+}
+
+// Drives the install phase after the user clicks Install on an
+// available update. Swaps the static status row for a progress bar,
+// streams `update-progress` events into it, and either lets the OS
+// restart the app on success or falls back to "open the releases
+// page" on the two failure shapes we want to handle distinctly:
+// unsupported package (no in-app path for RPM/DEB) vs. anything else
+// (network, signature, disk, \u2026).
+async function installUpdate(version) {
+  const el = document.getElementById("update-status");
+  el.className = "update-status available";
+  el.innerHTML = `
+    ${UPDATE_ICON_AVAILABLE}
+    <span class="update-message">Installing <span class="update-version">v${version}</span>\u2026 <span class="update-progress-text">starting</span></span>
+    <div class="update-progress-bar" aria-hidden="true"><div class="update-progress-fill"></div></div>
+  `;
+  const progressText = el.querySelector(".update-progress-text");
+  const progressFill = el.querySelector(".update-progress-fill");
+
+  // Listener returns an unlisten fn; tear it down on either outcome
+  // so a later check/install doesn't accumulate stale handlers.
+  const unlisten = await listen("update-progress", (event) => {
+    const payload = event.payload || {};
+    const downloaded = Number(payload.downloaded) || 0;
+    const total = Number(payload.total) || 0;
+    if (total > 0) {
+      const pct = Math.min(100, Math.round((downloaded / total) * 100));
+      progressFill.style.width = `${pct}%`;
+      progressText.textContent = `${pct}%`;
+    } else {
+      // No content-length header \u2014 show downloaded bytes as a rough
+      // signal that something is happening.
+      progressText.textContent = `${(downloaded / 1024 / 1024).toFixed(1)} MB`;
+      progressFill.style.width = "100%";
+      progressFill.classList.add("indeterminate");
+    }
+  });
+
+  try {
+    await invoke("download_and_install_update");
+    // Success path diverges in Rust (`app.restart()`), so we never
+    // resume here in practice. If we do, leave the UI as-is.
+  } catch (e) {
+    const errStr = String(e);
+    if (errStr === UPDATE_UNSUPPORTED_PACKAGE) {
+      showUpdateStatus(
+        "available",
+        `
+        ${UPDATE_ICON_AVAILABLE}
+        <span class="update-message">In-app update isn't available for this install. Download <span class="update-version">v${version}</span> from the releases page and reinstall.</span>
+        <button type="button" class="update-download">Open releases</button>
+      `,
+      );
+    } else {
+      showUpdateStatus(
+        "error",
+        `
+        ${UPDATE_ICON_ERROR}
+        <span class="update-message">Update failed: ${errStr.replace(/</g, "&lt;")}</span>
+        <button type="button" class="update-download">Open releases</button>
+      `,
+      );
+    }
+    wireFallbackButton();
+  } finally {
+    unlisten();
+  }
+}
+
 async function checkForUpdates() {
   const btn = document.getElementById("btn-check-updates");
   const origHTML = btn.innerHTML;
@@ -1256,16 +1341,12 @@ async function checkForUpdates() {
         `
         ${UPDATE_ICON_AVAILABLE}
         <span class="update-message">Update available: <span class="update-version">v${result.version}</span></span>
-        <button type="button" class="update-download">Download</button>
+        <button type="button" class="update-download">Install</button>
       `,
       );
       document
         .querySelector("#update-status .update-download")
-        .addEventListener("click", () => {
-          invoke("open_url", {
-            url: "https://github.com/FenrirTheGray/OxideMD/releases/latest",
-          });
-        });
+        .addEventListener("click", () => installUpdate(result.version));
     } else {
       showUpdateStatus(
         "current",
@@ -1834,9 +1915,9 @@ async function saveSettings() {
         } catch (e) {
           // Keep the stale render for this tab rather than aborting the
           // loop; the active tab still gets refreshed below if it rendered.
-          console.warn(
-            "Failed to re-render tab after line-break setting change:",
-            t.path ?? "(untitled)",
+          logWarn(
+            'settings',
+            `re-render after line-break change failed for ${t.path ?? '(untitled)'}`,
             e,
           );
         }

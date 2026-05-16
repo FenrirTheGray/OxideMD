@@ -56,7 +56,11 @@
     ],
     "linux": {
       "deb": {
-        "desktopTemplate": "oxidemd.desktop"
+        "desktopTemplate": "oxidemd.desktop",
+        "postInstallScript": "scripts/post-install.sh"
+      },
+      "rpm": {
+        "postInstallScript": "scripts/post-install.sh"
       }
     },
     "windows": {

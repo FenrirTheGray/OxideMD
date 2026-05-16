@@ -8,6 +8,23 @@
 </head>
 <body class="theme-dark">
 
+  <!-- ── Window-edge resize handles ─────────────────────────────────────
+       Decorations are off, so the OS doesn't paint draggable borders
+       and the cursor never changes near the edge. These thin overlays
+       provide both: each handle sets its own resize cursor and starts
+       an OS-native resize drag on mousedown. Hidden when maximized
+       (CSS), which also stops them when the window is snapped. -->
+  <div id="resize-handles" aria-hidden="true">
+    <div class="resize-handle resize-n"  data-resize="North"></div>
+    <div class="resize-handle resize-s"  data-resize="South"></div>
+    <div class="resize-handle resize-w"  data-resize="West"></div>
+    <div class="resize-handle resize-e"  data-resize="East"></div>
+    <div class="resize-handle resize-nw" data-resize="NorthWest"></div>
+    <div class="resize-handle resize-ne" data-resize="NorthEast"></div>
+    <div class="resize-handle resize-sw" data-resize="SouthWest"></div>
+    <div class="resize-handle resize-se" data-resize="SouthEast"></div>
+  </div>
+
   <!-- ── Toolbar (draggable title bar + tabs + actions) ────────────── -->
   <div id="toolbar" role="toolbar" aria-label="Application toolbar" data-tauri-drag-region>
 

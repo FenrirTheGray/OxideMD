@@ -23,6 +23,7 @@ import { applyFormat } from './editor-format.js';
 import { registerHandler, dispatchKey } from './keybindings.js';
 import { writeDraft, clearDraft } from './draft-store.js';
 import { refreshOutline } from './outline.js';
+import { logError } from './logger.js';
 
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec } from '@codemirror/state';
@@ -408,7 +409,7 @@ function installPasteHandler(view) {
         selection: { anchor: sel.from + insertion.length },
       });
     } catch (err) {
-      console.error('[oxidemd] image paste failed', err);
+      logError('editor', 'image paste failed', err);
     }
   });
 }
@@ -555,7 +556,7 @@ async function renderPreviewNow() {
     if (!cur || !cur.editing || cur.id !== capturedId) return;
     setPreviewHtml(html);
   } catch (e) {
-    console.error('[oxidemd] render_preview failed', e);
+    logError('editor', 'render_preview failed', e);
   }
 }
 

@@ -4,9 +4,18 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
+/// Bump this whenever the on-disk config schema changes in a way that
+/// older config files can't be deserialized faithfully (renamed keys,
+/// changed value semantics, removed fields whose absence matters).
+/// `migrate_config` runs once per launch to bring older files forward.
+pub const CURRENT_CONFIG_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
+    /// Schema version. Files written by older OxideMD builds lack this
+    /// field; serde fills it with `0`, which triggers a migration pass.
+    pub config_version: u32,
     pub theme: String,
     pub font_family: String,
     pub font_size: u32,
@@ -72,9 +81,28 @@ pub const RECENT_FILES_LIMIT: usize = 12;
 // `Config::default` so the shipped default can't drift from this list.
 pub const MD_EXTS_DEFAULT: &[&str] = &["md", "markdown", "mdown", "mkd"];
 
+// Reverse-DNS triple fed to `directories::ProjectDirs`. Single source
+// of truth for every OxideMD-owned path on disk so a future rebrand or
+// identifier change is a one-line edit. The display-form `APP_NAME`
+// surfaces on macOS (`~/Library/Application Support/com.oxidemd.OxideMD`)
+// and Windows (`%APPDATA%\oxidemd\OxideMD\config`); the `directories`
+// crate lowercases it to `oxidemd` on Linux (`~/.config/oxidemd`).
+pub const APP_QUALIFIER: &str = "com";
+pub const APP_ORGANIZATION: &str = "oxidemd";
+pub const APP_NAME: &str = "OxideMD";
+
+/// Resolves the OS-appropriate config / data / cache directories for
+/// OxideMD. Returns `None` only when the OS won't tell us a home
+/// directory (e.g. extremely locked-down Linux containers); callers
+/// fall back to in-memory defaults in that case.
+pub fn project_dirs() -> Option<ProjectDirs> {
+    ProjectDirs::from(APP_QUALIFIER, APP_ORGANIZATION, APP_NAME)
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
+            config_version: CURRENT_CONFIG_VERSION,
             theme: "dark".into(),
             font_family: "system-ui".into(),
             font_size: 16,
@@ -116,18 +144,15 @@ pub fn add_recent_file(config: &mut Config, path: &str) {
 }
 
 fn config_path() -> Option<PathBuf> {
-    ProjectDirs::from("com", "oxidemd", "OxideMD")
-        .map(|dirs| dirs.config_dir().join("config.toml"))
+    project_dirs().map(|dirs| dirs.config_dir().join("config.toml"))
 }
 
 pub fn fonts_dir() -> Option<PathBuf> {
-    ProjectDirs::from("com", "oxidemd", "OxideMD")
-        .map(|dirs| dirs.config_dir().join("fonts"))
+    project_dirs().map(|dirs| dirs.config_dir().join("fonts"))
 }
 
 pub fn themes_dir() -> Option<PathBuf> {
-    ProjectDirs::from("com", "oxidemd", "OxideMD")
-        .map(|dirs| dirs.config_dir().join("themes"))
+    project_dirs().map(|dirs| dirs.config_dir().join("themes"))
 }
 
 pub fn load_config() -> Config {
@@ -139,7 +164,28 @@ pub fn load_config() -> Config {
         Ok(s) => s,
         Err(_) => return Config::default(),
     };
-    toml::from_str(&content).unwrap_or_default()
+    let mut config: Config = toml::from_str(&content).unwrap_or_default();
+    if config.config_version < CURRENT_CONFIG_VERSION {
+        migrate_config(&mut config);
+        config.config_version = CURRENT_CONFIG_VERSION;
+        // Best-effort persist — if it fails we still hand the in-memory
+        // migrated config back, the next save_config() will retry.
+        let _ = save_config(&config);
+    }
+    config
+}
+
+/// Brings older config files forward to `CURRENT_CONFIG_VERSION` in
+/// place. Each `if config.config_version < N { ... }` block is a single
+/// schema step; they cascade so a v0 config runs through every step in
+/// order. Currently a no-op placeholder — the v0→v1 jump exists only to
+/// stamp the version field onto existing files, so future migrations
+/// have a baseline they can detect against.
+fn migrate_config(_config: &mut Config) {
+    // Example shape for future schema changes:
+    //   if _config.config_version < 2 {
+    //       // rename old key, drop unknown values, fill new default …
+    //   }
 }
 
 pub fn save_config(config: &Config) -> Result<(), String> {
