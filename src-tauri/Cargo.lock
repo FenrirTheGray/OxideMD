@@ -2752,9 +2752,10 @@ dependencies = [
 
 [[package]]
 name = "oxidemd"
-version = "4.1.0"
+version = "4.2.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "directories",
  "gdk",
  "gtk",
