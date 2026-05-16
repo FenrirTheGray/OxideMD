@@ -626,6 +626,14 @@
               <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
               <div class="custom-select-options" role="listbox"></div>
             </div>
+            <button type="button" id="btn-import-font" class="settings-action-btn" aria-label="Import font from file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 21V9"/>
+                <polyline points="7 16 12 21 17 16"/>
+                <path d="M5 3h14"/>
+              </svg>
+              Import
+            </button>
           </div>
 
           <div class="settings-row">
@@ -742,28 +750,22 @@
               <div class="custom-select-trigger" tabindex="0" role="combobox" aria-expanded="false" aria-haspopup="listbox"></div>
               <div class="custom-select-options" role="listbox"></div>
             </div>
-          </div>
-
-          <div class="settings-row theme-io-row">
-            <label aria-hidden="true"></label>
-            <div class="theme-io-buttons">
-              <button type="button" id="btn-import-theme" class="settings-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 21V9"/>
-                  <polyline points="7 16 12 21 17 16"/>
-                  <path d="M5 3h14"/>
-                </svg>
-                Import theme…
-              </button>
-              <button type="button" id="btn-export-theme" class="settings-action-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 3v12"/>
-                  <polyline points="7 8 12 3 17 8"/>
-                  <path d="M5 21h14"/>
-                </svg>
-                Export theme…
-              </button>
-            </div>
+            <button type="button" id="btn-import-theme" class="settings-action-btn" aria-label="Import theme from file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 21V9"/>
+                <polyline points="7 16 12 21 17 16"/>
+                <path d="M5 3h14"/>
+              </svg>
+              Import
+            </button>
+            <button type="button" id="btn-export-theme" class="settings-action-btn" aria-label="Export current theme to file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12"/>
+                <polyline points="7 8 12 3 17 8"/>
+                <path d="M5 21h14"/>
+              </svg>
+              Export
+            </button>
           </div>
 
           <div class="color-section-title">Content colors</div>
@@ -1134,7 +1136,7 @@
 
       <div id="settings-footer">
         <button id="settings-reset">Reset defaults</button>
-        <button id="settings-cancel">Cancel</button>
+        <button id="settings-cancel">Close</button>
         <button id="settings-save">Save</button>
       </div>
 
