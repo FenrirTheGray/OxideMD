@@ -22,7 +22,7 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 - **Theming** — dark, light, and system themes (Atom One Dark / Atom One Light) with configurable accent colors for H1/H2/H3 headings and list bullets
 - **Custom fonts** — install `.ttf`/`.otf`/`.woff`/`.woff2` font files from the settings font dropdown; fonts are stored in the OxideMD config folder and persist across sessions
 - **Rebindable shortcuts** — all actions are configurable from Settings → Shortcuts with conflict detection and a per-action key-capture flow
-- **Settings** — tabbed dialog (Reading / Colors / Shortcuts / About) with persistent configuration saved per-platform (`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
+- **Settings** — tabbed dialog (General / Reading / Editor / Colors / Shortcuts / About) with persistent configuration saved per-platform (`%APPDATA%\oxidemd\OxideMD\config` on Windows, `~/.config/oxidemd` on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS)
 - **Reading layout** — configurable line height (1.0–2.4) and reading width (480–1400 px) that scales with zoom; an optional "Preserve line breaks" mode renders every single newline as a line break instead of CommonMark soft-wrapping
 - **Folder browser** — open a directory to view its contents in a sidebar tree; click files to open them in tabs; expand-all / collapse-all toolbar buttons; case-insensitive filename filter that auto-expands matching folders and highlights matched characters; drag the divider to resize, or double-click it to fit the widest row (capped at 50% of the window)
 - **Right-click context menus** — contextual menus for the sidebar tree and tab bar
@@ -30,10 +30,10 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 - **Tab overflow scrolling** — left/right chevron buttons appear in the toolbar when the tab strip overflows
 - **Drag and drop** — drag one or more `.md` files onto the window to open them
 - **Multi-file open** — select multiple files at once from the open dialog
-- **CLI support** — pass a file path as an argument: `oxidemd path/to/file.md`
-- **Custom title bar** — frameless window with integrated minimize/maximize/close controls
-- **Window geometry** — size, position, and maximized state are restored between sessions
-- **Update checker** — check for new releases from the settings panel; prompts to download when an update is available
+- **Custom title bar** — frameless window with integrated minimize/maximize/close controls; thin edge and corner overlays give native resize cursors and click-and-drag resizing
+- **In-app updates** — check from the settings panel; downloads, installs, and restarts on the new version for Windows NSIS/MSI, macOS `.app`, and Linux AppImage builds. RPM/DEB users (root-only install paths) get a one-click link to the GitHub release. A toast prompts you to restart if a new version was installed on disk but the running process is still the old one (common after `dnf upgrade` / `apt upgrade`)
+- **Diagnostic logging** — one date-stamped log file per launch (`OxideMD-YYYY-MM-DD.log`) in the OS app log dir, capturing both Rust- and frontend-side errors plus uncaught exceptions. Useful when reporting issues
+- **CLI flags** — `oxidemd path/to/file.md` to open files at launch; `oxidemd --reset-all --yes` to wipe all OxideMD state (settings, custom themes/fonts, drafts, recents, logs) for clean-state recovery
 - **Tiny footprint** — no Electron, no bundled browser; uses the native webview on each platform (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS)
 
 ## Keyboard Shortcuts
@@ -141,18 +141,21 @@ OxideMD/
 │   ├── shortcuts-display.js  # Shortcuts tab UI: list actions, capture new bindings
 │   ├── contextmenu.js        # Right-click context menus for sidebar and tabs
 │   ├── print.js              # Print the active document to PDF via the native print dialog
-│   └── window-size.js        # Persistent window size and position
+│   ├── window-size.js        # Min-size cap, screen-clamp, and window-edge resize handles
+│   ├── toast.js              # Bottom-right toast notifications (success / error)
+│   └── logger.js             # Frontend logger that pipes into the date-stamped log file
 ├── src-tauri/                # Rust backend (Tauri)
 │   ├── src/
 │   │   ├── main.rs           # Entry point
-│   │   ├── lib.rs            # Tauri app setup, plugin registration, CLI arg handling
-│   │   ├── commands.rs       # Tauri IPC commands (open, save, render, config, fonts, watch…)
+│   │   ├── lib.rs            # Tauri builder, plugin registration, --reset-all + version-stamp
+│   │   ├── commands.rs       # Tauri IPC commands (open, save, render, config, fonts, updater…)
 │   │   ├── markdown.rs       # pulldown-cmark → HTML conversion, local image embedding
 │   │   ├── highlight.rs      # Syntax highlighting via syntect
-│   │   ├── config.rs         # Settings struct, TOML load/save, keybinding overrides
+│   │   ├── config.rs         # Config struct, TOML load/save, schema migrations, path triple
 │   │   ├── watcher.rs        # File system watcher (notify)
-│   │   ├── menu.rs           # Native application menu bar (File/Edit/View/Tabs/Help)
 │   │   └── util.rs           # HTML escaping helpers
+│   ├── scripts/
+│   │   └── post-install.sh   # RPM/DEB postinstall: kills any running oxidemd before relaunch
 │   ├── icons/                # App icons (all sizes)
 │   ├── oxidemd.desktop       # Desktop template for Linux deb/rpm (MIME types, categories)
 │   └── tauri.conf.json       # Tauri configuration (window, bundle, file associations)
