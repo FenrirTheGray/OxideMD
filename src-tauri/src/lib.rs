@@ -67,7 +67,6 @@ pub fn run() {
             commands::get_config,
             commands::get_default_config,
             commands::save_config_cmd,
-            commands::save_window_geometry,
             commands::open_url,
             commands::install_font,
             commands::remove_font,
@@ -91,34 +90,19 @@ pub fn run() {
             commands::delete_custom_theme,
         ])
         .setup(|app| {
-            // Restore saved window geometry
             let cfg = config::load_config();
             // Seed the renderer's soft-break mode from saved config so
             // files opened on launch render with the right setting.
             crate::markdown::PRESERVE_LINE_BREAKS
                 .store(cfg.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
-            if let Some(window) = app.get_webview_window("main") {
-                // Clamp the persisted size to the current monitor so the
-                // window cannot open larger than the screen — covers
-                // moving to a smaller display, half-screen snapping on a
-                // different resolution, and stale configs from old
-                // hardware. 80px of slack reserves room for the taskbar
-                // and decorations. Floors mirror tauri.conf minWidth /
-                // minHeight so we never go below the configured minimum.
-                let mut w = cfg.window_width as f64;
-                let mut h = cfg.window_height as f64;
-                if let Ok(Some(mon)) = window.current_monitor() {
-                    let scale = mon.scale_factor();
-                    let mon_w = mon.size().width as f64 / scale;
-                    let mon_h = mon.size().height as f64 / scale;
-                    w = w.min((mon_w - 80.0).max(720.0));
-                    h = h.min((mon_h - 80.0).max(480.0));
-                }
-                let _ = window.set_size(tauri::LogicalSize::new(w, h));
-                if cfg.window_maximized {
-                    let _ = window.maximize();
-                }
-            }
+            // Window opens at the configured default size, centered,
+            // every launch — see tauri.conf.json. We deliberately do
+            // not persist size/maximize state: prior attempts mixed
+            // physical vs logical pixels and on HiDPI Windows each
+            // cycle inflated the window beyond the screen, and even
+            // the monitor-clamped restore in 4.0.1 still relied on
+            // stale dimensions that no longer matched the user's
+            // current setup.
             // Some key combos (Ctrl+Shift+Tab, etc.) are swallowed by
             // WebKitGTK before JS can see them. Intercept at the GTK
             // window level so we handle them before the webview does.

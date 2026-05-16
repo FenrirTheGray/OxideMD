@@ -47,7 +47,7 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   grep of every markdown file under a root; returns per-file grouped matches
   with total/truncated flags).
 - **Config** — `get_config`, `get_default_config`, `save_config_cmd` (persists
-  and mirrors the soft-break setting into the renderer), `save_window_geometry`.
+  and mirrors the soft-break setting into the renderer).
 - **Fonts** — `install_font` (pick a font file, copy into the config folder),
   `remove_font`, `list_custom_fonts`, `get_font_data` (base64 bytes for the
   webview to register a `@font-face`).
