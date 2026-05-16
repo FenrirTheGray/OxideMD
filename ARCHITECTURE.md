@@ -8,10 +8,10 @@ this doc explains how the pieces interact.
 
 OxideMD is a [Tauri v2](https://tauri.app/) desktop app: a **Rust backend**
 (`src-tauri/`) owns the OS-facing work — filesystem, dialogs, markdown
-rendering, syntax highlighting, the native menu, the file watcher, updates —
-and a **webview frontend** (`frontend/`) owns all UI and interaction. There is
-no server and no bundled browser; the frontend runs in the platform's native
-webview (WebView2 / WebKitGTK / WKWebView).
+rendering, syntax highlighting, the file watcher, diagnostic logging, the
+updater — and a **webview frontend** (`frontend/`) owns all UI and
+interaction. There is no server and no bundled browser; the frontend runs in
+the platform's native webview (WebView2 / WebKitGTK / WKWebView).
 
 The two halves talk over Tauri's **IPC bridge**:
 
@@ -25,6 +25,27 @@ The frontend is plain ES modules (no framework). `npm run build:frontend` runs
 esbuild to bundle `frontend/app.js` and its imports — including the CodeMirror 6
 packages from `node_modules` — into a single file the webview loads.
 `cargo tauri dev` / `cargo tauri build` drive the whole thing.
+
+## Naming
+
+OxideMD's name appears on disk and on screen in two forms. Pick the one that
+matches the context and don't mix them:
+
+- **`OxideMD`** — display form. Used anywhere a human reads the name: window
+  title, `productName` in `tauri.conf.json`, README/CHANGELOG prose, the
+  welcome wordmark, the About dialog, GitHub release names, log file prefix,
+  bundle artifact filenames, and the `application` arg to `ProjectDirs` (which
+  preserves casing on macOS / Windows paths).
+- **`oxidemd`** — identifier form. Used wherever the OS or another tool reads
+  the name as a slug: the Cargo crate, the Linux binary (`Exec=oxidemd`),
+  `StartupWMClass`, `pkill -x oxidemd`, the CLI invocation, the localStorage
+  prefix (`oxidemd:draft:`), temp-file slugs, and the `organization` component
+  of the bundle ID.
+
+The reverse-DNS bundle identifier `com.oxidemd.viewer` is set once in
+`tauri.conf.json` and the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
+constants in `config.rs`. Reach for those constants rather than re-spelling
+the triple, so a future rename is a single edit.
 
 ## The IPC boundary
 
@@ -62,7 +83,12 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
 - **Theme import/export** — `export_theme` / `import_theme` move the flat
   color-config map to/from a user-picked `.json` file.
 - **File watching** — `watch_paths` replaces the whole watched set in one call.
-- **Updates** — `check_for_updates` queries the updater plugin.
+- **Updates** — `check_for_updates` queries the updater plugin for the
+  remote `latest.json`; `download_and_install_update` runs the full
+  download → install → restart pipeline, streaming `update-progress`
+  events during the download. On Linux RPM/DEB (detected via absence of
+  the `APPIMAGE` env var) it returns `UPDATE_UNSUPPORTED_PACKAGE` so the
+  frontend can route the user to the releases page instead.
 - **Misc** — `get_cli_files` (argv paths to open on launch), `open_url`
   (hand an http/https/mailto URL to the OS, other schemes refused),
   `file_sha256` (hex digest, used for draft conflict detection).
@@ -71,11 +97,17 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
 
 - **`fs-changed`** — emitted by `watcher.rs` when a watched file/folder changes;
   carries the changed path. Leading-edge debounced per path (150 ms window).
-- **`menu-action`** — emitted by `menu.rs` on a native menu click; carries the
-  menu item's id, which is identical to a frontend action id.
 - **`open-files-from-instance`** — emitted by the single-instance plugin in
   `lib.rs` when a second launch forwards its argv file paths to the running
   instance.
+- **`version-mismatch`** — emitted by the single-instance callback when a
+  freshly-launched second instance's stamped version differs from the
+  running one (i.e. an update was installed on disk but the user is still
+  running the old build). Payload is the new version string; the frontend
+  surfaces it as a long-lived toast asking the user to relaunch.
+- **`update-progress`** — emitted during `download_and_install_update`
+  with `{ downloaded, total }` byte counters so the settings panel can
+  drive its progress bar.
 - **`prev-tab` / `next-tab` / `move-tab-left` / `move-tab-right`** — **Linux
   only**. WebKitGTK swallows some Ctrl+Tab combos before JS sees them, so
   `lib.rs` intercepts them at the GTK window level and re-emits them as events.
@@ -83,21 +115,25 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
 ## Rust module map (`src-tauri/src/`)
 
 - **`main.rs`** — thin entry point; calls `oxidemd_lib::run()`.
-- **`lib.rs`** — Tauri builder: plugin registration (dialog, shell, updater,
-  single-instance), the `generate_handler!` command list, `setup` (restore
-  window geometry, seed the renderer, attach the native menu, the Linux GTK
-  key interceptor).
+- **`lib.rs`** — Tauri builder: handles the `--reset-all [--yes]` CLI flag
+  before any plugin opens disk handles; stamps the current version into
+  `<data_dir>/.running_version`; configures `tauri-plugin-log` with a
+  date-stamped file target; registers plugins (log, dialog, shell, updater,
+  single-instance) plus the version-mismatch detection in the
+  single-instance callback; declares the `generate_handler!` command list;
+  `setup` seeds the renderer's soft-break flag and (on Linux only) installs
+  a GTK key interceptor that re-emits the Ctrl+Tab family as IPC events.
 - **`commands.rs`** — every `#[tauri::command]` plus their helper types and
   pure helpers (path canonicalization, the folder walk, the search scanner).
-- **`config.rs`** — the `Config` struct, its `Default`, TOML load/save, the
-  per-platform config path, and recent-files maintenance.
+- **`config.rs`** — the `Config` struct, its `Default`, TOML load/save,
+  `migrate_config` for schema-version upgrades, the per-platform config /
+  fonts / themes paths, the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
+  identifier triple + `project_dirs()` helper, and recent-files maintenance.
 - **`markdown.rs`** — pulldown-cmark source → HTML string; heading slugs/ids,
   footnotes, local-image resolution, raw-HTML escaping, the soft-break atomic.
 - **`highlight.rs`** — syntect-based fenced-code-block syntax highlighting.
 - **`watcher.rs`** — single recursive `notify` watcher behind a mutex; per-path
   leading-edge coalesce; emits `fs-changed`.
-- **`menu.rs`** — builds the native File/Edit/View/Tabs/Help menu; menu item
-  ids mirror frontend action ids; emits `menu-action`.
 - **`util.rs`** — HTML-escaping helpers for text content and attributes.
 
 ## Frontend module map (`frontend/`)
@@ -125,28 +161,47 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   sidebar (calls `search_project`, lists file-grouped results).
 - **`outline.js`** — document outline sidebar (heading list, jump-to); the
   toolbar button is repurposed as a preview toggle in edit mode.
-- **`settings.js`** — the tabbed settings dialog (Reading / Editor / Colors /
-  Shortcuts / About), config apply, custom-font loading, update check.
+- **`settings.js`** — the tabbed settings dialog (General / Reading / Editor /
+  Colors / Shortcuts / About), config apply, custom-font loading, the update
+  check and in-app install pipeline (drives the progress UI from
+  `update-progress` events).
 - **`shortcuts-display.js`** — renders shortcut chips in the popover, welcome
   screen, and tooltips from `state.bindings`.
 - **`contextmenu.js`** — context-aware right-click menus for the sidebar tree
   and tab bar (the default webview menu is suppressed).
 - **`print.js`** — print the active document to PDF via the webview's native
   print dialog, using a `@media print` stylesheet and the `#print-root` element.
-- **`window-size.js`** — measures and sets the real minimum window size once,
-  after layout settles.
+- **`window-size.js`** — once-after-layout: measures the welcome-screen min
+  height, caps both axes against `screen.avail{Width,Height}` so a stale
+  geometry can't open off-screen, and calls `setMinSize` / `setSize`
+  accordingly. Also owns the responsive toolbar compact-mode toggle and
+  the 8 invisible edge / corner resize-handle overlays whose mousedown
+  hands off to `appWindow.startResizeDragging`.
+- **`toast.js`** — lightweight bottom-right toast notifications; auto-dismiss
+  with an optional per-call `lifetimeMs` override for messages that need to
+  linger (e.g. "restart to apply update").
+- **`logger.js`** — frontend `logError` / `logWarn` / `logInfo` helpers that
+  invoke `plugin:log|log` so messages reach the same date-stamped file as
+  Rust-side logs. Installs `window.onerror` + `unhandledrejection` listeners
+  on import so uncaught exceptions land in the log automatically. Must be
+  imported first in `app.js` so the global handlers are live before any
+  other module runs.
 
 ## Key lifecycles
 
 ### Config
 
 `Config` (`config.rs`) is serialized as TOML at the platform config dir
-(`%APPDATA%\OxideMD` on Windows, `~/.config/oxidemd` on Linux,
+(`%APPDATA%\oxidemd\OxideMD\config` on Windows, `~/.config/oxidemd` on Linux,
 `~/Library/Application Support/com.oxidemd.OxideMD` on macOS), resolved via the
-`directories` crate. `load_config` falls back to `Config::default()` on any
-read/parse error. The struct is `#[serde(default)]`, so a config file written
-by an older version simply backfills any newly-added field from its default —
-no migration code. The frontend fetches the whole struct once at init
+`directories` crate from the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
+triple in `config.rs`. `load_config` falls back to `Config::default()` on any
+read/parse error. The struct is `#[serde(default)]`, so a config file written by
+an older version backfills any newly-added field from its default. For schema
+changes that *can't* be expressed as a new default (renamed keys, reinterpreted
+values), bump `CURRENT_CONFIG_VERSION` and add a step to `migrate_config`; it
+runs once on load when the stored `config_version` is behind, then re-saves.
+The frontend fetches the whole struct once at init
 (`state.config = await invoke('get_config')`) and `save_config_cmd` persists it
 back. Some settings need to reach the renderer immediately: the soft-break flag
 is mirrored into the `PRESERVE_LINE_BREAKS` atomic in `markdown.rs` (seeded in
@@ -178,10 +233,62 @@ and metadata). `effectiveBindings` merges the user's sparse config overrides
 over those defaults — so actions added in an update auto-apply without
 rewriting config. Modules call `registerHandler(id, fn)` to bind behavior;
 `dispatchKey` matches a `KeyboardEvent` against the active bindings and invokes
-the handler; `runAction(id)` invokes one directly. The toolbar buttons and the
-native menu both funnel through the same handlers — toolbar clicks call
-`runAction`, and a `menu-action` event (whose payload is an action id) is routed
-to `runAction` in `app.js`.
+the handler; `runAction(id)` invokes one directly. Toolbar buttons funnel
+through the same handlers — clicks call `runAction` so the toolbar, the
+welcome shortcuts, and keyboard accelerators all share one code path.
+
+### Logging
+
+`lib.rs` initializes `tauri-plugin-log` at startup with a date-stamped file
+target (`OxideMD-YYYY-MM-DD.log`) in the OS app log dir (`~/.local/state` on
+Linux, `%LOCALAPPDATA%` on Windows, `~/Library/Logs` on macOS), plus a
+stdout target gated to `cfg(debug_assertions)` so release builds stay quiet.
+Rotation is by size (5 MB) with `KeepAll` so history survives for incident
+forensics. On the frontend side, `logger.js` invokes `plugin:log|log` so its
+`logError` / `logWarn` / `logInfo` calls land in the same file as Rust-side
+`log::error!` / `log::warn!`. The module's import side effect installs
+`window.onerror` and `unhandledrejection` listeners — uncaught JS errors are
+captured automatically without each call site having to remember to wrap.
+
+### Updates
+
+`check_for_updates` returns the available version + release-notes body.
+`download_and_install_update` does the whole flow in one command: re-checks,
+calls `download_and_install` on the resulting `Update` handle, and finishes
+with `app.restart()` (which diverges). During the download, the closure
+passed to the plugin emits `update-progress` events with the running byte
+counters so the settings panel can drive its progress bar. On Linux without
+`APPIMAGE` set in the environment (RPM/DEB installs need root to replace
+`/usr/bin/oxidemd`) we return `UPDATE_UNSUPPORTED_PACKAGE` so the frontend
+falls back to opening the GitHub releases page.
+
+### Version-mismatch detection
+
+Linux RPM/DEB upgrades don't kill the running process (`dpkg`/`dnf` just
+swap files on disk), and AppImage / Windows-portable / macOS drag-replace
+have the same problem. With `tauri-plugin-single-instance` active, the
+user's "relaunch" then just refocuses the stale in-memory process. Two
+mechanisms guard against this:
+
+- **Post-install scriptlet** — `src-tauri/scripts/post-install.sh` runs
+  `pkill -x oxidemd` after the package manager writes the new binary; the
+  next launch is guaranteed to be the new process. Wired into RPM and DEB
+  via `bundle.linux.{deb,rpm}.postInstallScript` in `tauri.conf.json`.
+- **Version stamp** — every launch writes `env!("CARGO_PKG_VERSION")` to
+  `<data_dir>/.running_version` *before* the single-instance plugin can
+  bounce it. When a freshly-launched second instance triggers the
+  callback in the surviving original, that callback reads the file: if
+  the value doesn't match its own version, it emits `version-mismatch`
+  and the frontend shows a long-lived toast asking the user to relaunch.
+
+### `--reset-all` flag
+
+`oxidemd --reset-all` prints what would be deleted and exits; `--reset-all
+--yes` deletes the OxideMD config dir, data dir (including webview
+storage / drafts / `.running_version`), and cache dir. Runs in `lib.rs`
+before any plugin opens handles in those directories. Last-resort recovery
+for users whose state is in a state we can't reason about — the routine
+escape hatch is "Reset settings" in the Settings dialog.
 
 ### Rendering
 
