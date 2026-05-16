@@ -4,6 +4,30 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.1.0] - 2026-05-16
+
+### Added
+
+- Responsive toolbar: action labels auto-hide when the window narrows so the toolbar stays usable without forcing the user to flip the toolbar-compact preference. Composes with the manual toggle (either flag hides labels), uses a 24px hysteresis buffer so dragging the window edge across the threshold doesn't flicker, and measures the natural label-on width once at launch so the threshold is content-driven rather than a hardcoded breakpoint
+- Settings → Reading: "Import" button next to the Font dropdown, mirroring the Themes row. Clicking it runs the same install-font flow that used to live as an "Add font…" entry inside the dropdown
+- Themes and Fonts dropdowns now group entries under "Included" and "Imported" section headers, each bracketed above and below by a divider so the sections read as separators rather than loose labels
+- Save button on the Settings dialog is now dirty-state-driven: disabled while the form mirrors the persisted config, enabled only after a real change. Listens for `input`/`change`/`click`/`keyup` at the dialog root and rAF-defers the diff so custom widgets (segmented pills, custom-select dropdowns, shortcut editor) that mutate `dataset` attributes are caught via bubbling
+
+### Changed
+
+- Settings dialog widened to 660px so the Themes and Font rows fit the dropdown plus action buttons without crowding
+- Settings footer: "Cancel" renamed to "Close" (it always discarded unsaved tweaks; the new label reflects that). "Save" now persists changes without closing the modal, so the user can iterate against the live preview behind the dialog. The X button, Close button, and Escape are the only ways out
+- Clicking the backdrop outside the Settings dialog no longer closes it — accidental dismissal mid-edit is gone
+- Themes Import / Export and Font Import buttons now sit inline with their dropdown rather than below it, in dedicated rows
+- App-wide button family aligned around three tiers: primary CTA (flat `var(--accent)` fill with `filter: brightness()` hover), outlined secondary (`var(--bg)` fill + `var(--border)` outline), and ghost icon (transparent fill + transparent border). The previous "marketing CTA" gradient + drop-shadow look was removed from `#settings-save` and `.update-status .update-download`; `--save-btn-bg` and `--save-btn-shadow` tokens deleted
+- Segmented controls (On/Off pills) no longer stretch across the row — they sit at intrinsic width, right-aligned, with `min-width: 56px` per option for visual balance and `white-space: nowrap` so longer labels like "Icons + labels" don't wrap to two lines
+- `.custom-select-trigger` truncates with an ellipsis instead of wrapping when the row tightens (e.g. when a long theme label sits in the squeezed Themes dropdown next to Import/Export)
+- Settings label column widened from 148px to 180px so two-word labels like "Display recent files" and "Printer Friendly PDFs" stay on a single line beside the info icon
+
+### Fixed
+
+- Window opens centered at the configured default size every launch. The 4.0.1 monitor-clamp still relied on a persisted geometry that mixed physical and logical pixels — on HiDPI Windows each maximize/close/relaunch cycle inflated the window by the scale factor, and even with clamping the restored size could outgrow the screen on a new display. The `save_window_geometry` command, the matching config fields, and the frontend listener were removed entirely; `tauri.conf.json` (`center: true`, `width: 1280`, `height: 700`) drives every launch
+
 ## [4.0.1] - 2026-05-15
 
 ### Changed
