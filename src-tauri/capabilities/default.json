@@ -10,6 +10,7 @@
     "core:window:allow-close",
     "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
     "core:window:allow-set-min-size",
     "core:window:allow-set-size",
     "core:window:allow-inner-size",
@@ -17,6 +18,7 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "shell:allow-open",
-    "updater:default"
+    "updater:default",
+    "log:default"
   ]
 }

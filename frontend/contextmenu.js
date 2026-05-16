@@ -22,6 +22,7 @@ import {
 import { applyFormat } from './editor-format.js';
 import { getEditorView } from './editor.js';
 import { printActiveTab } from './print.js';
+import { logError } from './logger.js';
 import { EditorSelection } from '@codemirror/state';
 
 // ── Menu renderer ────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ function showMenu(items, clientX, clientY) {
     btn.addEventListener('click', () => {
       if (item.disabled) return;
       closeMenu();
-      try { item.action(); } catch (e) { console.error('[oxidemd] ctx action', e); }
+      try { item.action(); } catch (e) { logError('contextmenu', 'menu action threw', e); }
     });
     el.appendChild(btn);
   });

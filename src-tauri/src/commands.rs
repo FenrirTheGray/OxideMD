@@ -6,7 +6,7 @@ use base64::Engine;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
 
@@ -1597,4 +1597,63 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateResult, St
         }),
         Err(e) => Err(format!("{e}")),
     }
+}
+
+/// Sentinel error returned when in-app update is impossible for the
+/// running install format (RPM/DEB on Linux). The frontend matches on
+/// this exact string to fall back to "open the releases page" instead
+/// of showing a generic failure toast.
+pub const UPDATE_UNSUPPORTED_PACKAGE: &str = "UNSUPPORTED_PACKAGE";
+
+/// Downloads the latest update, installs it in place, and restarts the
+/// app. The check phase is folded in so the frontend only needs one
+/// invoke; `update-progress` events fire during the download with
+/// `{ downloaded, total }` byte counters so a progress bar can track it.
+///
+/// On Linux, in-place install only works for AppImage builds — the
+/// `APPIMAGE` env var is the canonical "I'm running as an AppImage"
+/// signal. RPM/DEB users get `UPDATE_UNSUPPORTED_PACKAGE` so the
+/// frontend can route them to the releases page (root is needed to
+/// replace `/usr/bin/oxidemd` and we don't want to escalate).
+#[tauri::command]
+pub async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("APPIMAGE").is_none() {
+            return Err(UPDATE_UNSUPPORTED_PACKAGE.into());
+        }
+    }
+
+    let updater = app
+        .updater_builder()
+        .build()
+        .map_err(|e: tauri_plugin_updater::Error| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "No update available".to_string())?;
+
+    let app_for_progress = app.clone();
+    update
+        .download_and_install(
+            move |downloaded, total| {
+                let _ = app_for_progress.emit(
+                    "update-progress",
+                    serde_json::json!({
+                        "downloaded": downloaded,
+                        "total": total,
+                    }),
+                );
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // `restart()` diverges (`-> !`) so the function ends here; the
+    // restart is what actually applies the new binary to the running
+    // process. The user sees the window close and reopen on the new
+    // version.
+    app.restart();
 }

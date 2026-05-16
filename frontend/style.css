@@ -159,6 +159,48 @@ body.maximized {
   border-color: transparent;
 }
 
+/* ── Window-edge resize handles ──────────────────────────────────────
+   Thin overlays at the body edges + corners. Each sets its own
+   resize cursor on hover; window-size.js attaches mousedown listeners
+   that call appWindow.startResizeDragging(). Edges span the full
+   body width/height; corners are 12×12 and OVERLAP the edges at the
+   four corners. A higher z-index on corners guarantees the diagonal
+   cursor wins where they overlap — without the overlap there'd be a
+   tiny dead strip between corner and edge where the cursor flickers
+   back to default. Hidden when maximized — resizing a maximized
+   window is a no-op and the wrong cursor would be jarring. */
+:root {
+  --resize-edge-thickness: 6px;
+  --resize-corner-size: 12px;
+}
+.resize-handle {
+  position: fixed;
+  z-index: 9998;
+  background: transparent;
+}
+body.maximized .resize-handle,
+body.fullscreen .resize-handle {
+  display: none;
+}
+/* Edges span the full extent; corners reach in to cover the ends. */
+.resize-handle.resize-n { top: 0;    left: 0; right: 0;  height: var(--resize-edge-thickness); cursor: n-resize; }
+.resize-handle.resize-s { bottom: 0; left: 0; right: 0;  height: var(--resize-edge-thickness); cursor: s-resize; }
+.resize-handle.resize-w { left: 0;   top: 0;  bottom: 0; width:  var(--resize-edge-thickness); cursor: w-resize; }
+.resize-handle.resize-e { right: 0;  top: 0;  bottom: 0; width:  var(--resize-edge-thickness); cursor: e-resize; }
+/* Corners sit above edges so the diagonal cursor wins at the corner. */
+.resize-handle.resize-nw,
+.resize-handle.resize-ne,
+.resize-handle.resize-sw,
+.resize-handle.resize-se {
+  width: var(--resize-corner-size);
+  height: var(--resize-corner-size);
+  z-index: 9999;
+}
+.resize-handle.resize-nw { top: 0;    left: 0;  cursor: nw-resize; }
+.resize-handle.resize-ne { top: 0;    right: 0; cursor: ne-resize; }
+.resize-handle.resize-sw { bottom: 0; left: 0;  cursor: sw-resize; }
+.resize-handle.resize-se { bottom: 0; right: 0; cursor: se-resize; }
+
 /* ── Toolbar ──────────────────────────────────────────────────────── */
 #toolbar {
   display: flex;
@@ -3348,6 +3390,42 @@ body.resizing-sidebar * {
 .update-status .update-download:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
+}
+
+/* Inline progress strip shown while an update is downloading +
+   installing. The bar sits flush against the right edge of the
+   status row so the message text keeps its space. `.indeterminate`
+   sweeps when the server didn't send a content-length so we can't
+   compute a true percentage. */
+.update-status .update-progress-bar {
+  flex-shrink: 0;
+  width: 120px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-subtle, var(--border));
+  overflow: hidden;
+}
+.update-status .update-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width var(--dur-sm) var(--ease);
+}
+.update-status .update-progress-fill.indeterminate {
+  animation: update-progress-sweep 1.4s var(--ease) infinite;
+  transform-origin: left center;
+}
+.update-status .update-progress-text {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+@keyframes update-progress-sweep {
+  0%   { transform: translateX(-100%) scaleX(0.35); }
+  50%  { transform: translateX(0)      scaleX(0.55); }
+  100% { transform: translateX(100%)  scaleX(0.35); }
 }
 
 @keyframes update-status-in {

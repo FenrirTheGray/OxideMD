@@ -1,3 +1,9 @@
+// Installs window-level error / unhandled-rejection listeners that
+// forward into tauri-plugin-log. Must come before any other import so
+// errors thrown during the rest of the init sequence are captured.
+import './logger.js';
+import { logError } from './logger.js';
+
 import {
   invoke, listen, appWindow,
   isMarkdownPath, stripMarkdownExtension, hasMod,
@@ -24,7 +30,7 @@ import { openProjectSearch } from './search-project.js';
 import {
   switchToTab, closeTab,
   zoomIn, zoomOut, resetZoom,
-  renderTabBar, updateTabOverflow,
+  renderTabBar,
   loadFile, reloadFile, handleAnchorClick, openFilePicker, createNewFile,
   applyRecentFiles,
 } from './tabs.js';
@@ -32,6 +38,7 @@ import { loadCustomFont, applyConfig, openSettings, closeSettings } from './sett
 import { enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch } from './editor.js';
 import { activeTab } from './tabs.js';
 import { printActiveTab } from './print.js';
+import { showToast } from './toast.js';
 import './contextmenu.js';
 import './window-size.js';
 import { applyOutlineVisibility } from './outline.js';
@@ -67,17 +74,25 @@ async function init() {
     }
   });
 
+  // The new instance that triggered the single-instance bounce stamped
+  // a different version into `.running_version` than this still-running
+  // process is on. That means an update was installed on disk but the
+  // user is still seeing the old build — common after `dnf upgrade` /
+  // `apt upgrade` / AppImage swap when the running app was never
+  // closed. Longer-than-default lifetime so the notice doesn't blink past.
+  await listen('version-mismatch', (e) => {
+    const installed = typeof e.payload === 'string' ? e.payload : '';
+    const msg = installed
+      ? `OxideMD ${installed} is installed. Restart to apply the update.`
+      : 'A newer OxideMD is installed. Restart to apply the update.';
+    showToast(msg, 'success', { lifetimeMs: 15000 });
+  });
+
   // Filesystem changes in any watched file/folder. The Rust watcher may
   // fire several events per save (editors write+truncate+rename); coalesce
   // them into a single reload per path.
   await listen('fs-changed', (e) => {
     if (typeof e.payload === 'string') handleFsChange(e.payload);
-  });
-
-  let resizeTimer;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { updateTabOverflow(); }, 600);
   });
 
   await appWindow.onDragDropEvent((e) => {
@@ -97,16 +112,35 @@ const ICON_MAXIMIZE = `<rect x="4" y="4" width="16" height="16" rx="1"/>`;
 const ICON_RESTORE  = `<rect x="2" y="6" width="14" height="14" rx="1"/><polyline points="6 6 6 2 22 2 22 16 18 16"/>`;
 
 async function syncMaximizeIcon() {
-  const isMax = await appWindow.isMaximized();
+  // Two states matter for chrome behavior:
+  //  - maximized: drives the toolbar icon + hides the resize handles
+  //    (resizing a maximized window is a no-op on every platform).
+  //  - fullscreen: separate from maximize on macOS (Cmd+Ctrl+F enters
+  //    native fullscreen without going through "zoom"); on Windows /
+  //    Linux it's reachable via WM tools. In either case the window
+  //    can't be resized, so we hide the handles for both.
+  const [isMax, isFull] = await Promise.all([
+    appWindow.isMaximized(),
+    appWindow.isFullscreen(),
+  ]);
   btnMaximize.querySelector('svg').innerHTML = isMax ? ICON_RESTORE : ICON_MAXIMIZE;
   btnMaximize.title = isMax ? 'Restore' : 'Maximize';
   document.body.classList.toggle('maximized', isMax);
+  document.body.classList.toggle('fullscreen', isFull);
 }
 
 btnMinimize.addEventListener('click', () => appWindow.minimize());
 btnMaximize.addEventListener('click', async () => { await appWindow.toggleMaximize(); syncMaximizeIcon(); });
 btnWinClose.addEventListener('click', () => appWindow.close());
-appWindow.onResized(syncMaximizeIcon);
+// `onResized` fires on every pixel of a drag-resize. `isMaximized()` is
+// an async IPC round-trip, and the icon / `body.maximized` only matter
+// at rest — so debounce to the trailing edge so a long drag does one
+// IPC call when the user lets go, not dozens per second.
+let syncMaxTimer = 0;
+appWindow.onResized(() => {
+  clearTimeout(syncMaxTimer);
+  syncMaxTimer = setTimeout(syncMaximizeIcon, 120);
+});
 
 // ── Shortcuts popover (anchored to the logo) ──────────────────────────
 // Opens on hover or click/focus. A small grace timer bridges the gap
@@ -293,7 +327,7 @@ async function copyCodeBlock(btn) {
     btn.classList.add('copied');
     setTimeout(() => btn.classList.remove('copied'), 1200);
   } catch (err) {
-    console.error('[oxidemd] copy failed', err);
+    logError('copy-code', 'clipboard write failed', err);
   }
 }
 // Same treatment for anchors inside the live preview pane — without this,
@@ -400,7 +434,7 @@ registerHandler('exportHtml', async (e) => {
       title: baseName,
     });
   } catch (err) {
-    console.error('[oxidemd] export failed', err);
+    logError('export-html', 'export failed', err);
   }
 });
 

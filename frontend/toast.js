@@ -22,8 +22,11 @@ let container = null;
  * Show a toast notification.
  * @param {string} message - text to display.
  * @param {'success'|'error'} [kind='success'] - accent variant.
+ * @param {{ lifetimeMs?: number }} [opts] - per-call overrides. Use a
+ *   longer lifetime for messages the user must read and act on (e.g.
+ *   "relaunch to apply update") so they don't blink past.
  */
-export function showToast(message, kind = 'success') {
+export function showToast(message, kind = 'success', opts = {}) {
   if (!container) container = document.getElementById('toast-container');
   // No container in the DOM (shouldn't happen) → fail quietly rather
   // than throw into whatever called us.
@@ -49,5 +52,8 @@ export function showToast(message, kind = 'success') {
   };
 
   // Auto-dismiss after the visible lifetime elapses.
-  setTimeout(dismiss, TOAST_LIFETIME_MS);
+  const lifetime = Number.isFinite(opts.lifetimeMs) && opts.lifetimeMs > 0
+    ? opts.lifetimeMs
+    : TOAST_LIFETIME_MS;
+  setTimeout(dismiss, lifetime);
 }
