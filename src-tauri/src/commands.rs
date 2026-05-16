@@ -648,15 +648,6 @@ pub fn save_config_cmd(config: Config) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub fn save_window_geometry(width: u32, height: u32, maximized: bool) -> Result<(), String> {
-    let mut cfg = load_config();
-    cfg.window_width = width;
-    cfg.window_height = height;
-    cfg.window_maximized = maximized;
-    save_config(&cfg)
-}
-
 #[derive(serde::Serialize)]
 pub struct RecentFile {
     pub path: String,

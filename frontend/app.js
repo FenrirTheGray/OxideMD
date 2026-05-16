@@ -77,7 +77,7 @@ async function init() {
   let resizeTimer;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { saveGeometry(); updateTabOverflow(); }, 600);
+    resizeTimer = setTimeout(() => { updateTabOverflow(); }, 600);
   });
 
   await appWindow.onDragDropEvent((e) => {
@@ -89,19 +89,6 @@ async function init() {
   });
 
   syncMaximizeIcon();
-}
-
-// ── Window geometry ────────────────────────────────────────────────────────
-async function saveGeometry() {
-  try {
-    const maximized = await appWindow.isMaximized();
-    if (maximized) {
-      await invoke('save_window_geometry', { width: state.config.window_width, height: state.config.window_height, maximized: true });
-    } else {
-      const size = await appWindow.outerSize();
-      await invoke('save_window_geometry', { width: size.width, height: size.height, maximized: false });
-    }
-  } catch {}
 }
 
 // ── Event wiring ───────────────────────────────────────────────────────────
