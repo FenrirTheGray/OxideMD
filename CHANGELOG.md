@@ -4,6 +4,30 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.2.0] - 2026-05-16
+
+### Added
+
+- In-app updater: clicking "Install" on an available update downloads the new binary with a live progress bar, replaces it in place, and restarts OxideMD on the new version — no more bouncing out to the GitHub releases page for Windows NSIS/MSI, macOS `.app`, or Linux AppImage builds. RPM/DEB installs (which need root to replace `/usr/bin/oxidemd`) gracefully fall back to "open the releases page" via a sentinel error returned from the Rust `download_and_install_update` command
+- Diagnostic logging via `tauri-plugin-log`: one date-stamped file per launch (`OxideMD-YYYY-MM-DD.log`) in the OS app log dir, capturing both Rust-side log calls and a new frontend `logger.js` whose `logError` / `logWarn` helpers route through the same file. Window-level `error` and `unhandledrejection` listeners catch otherwise-silent crashes; every existing `console.error/warn` site now flows through the helpers with a named scope
+- Window-edge resize cursors: 8 invisible overlay handles (4 full-span edges + 4 corner squares) wired to `appWindow.startResizeDragging()`, so hovering near the border shows the correct OS resize cursor and click-and-drag delegates to the WM. Required because `decorations: false` means the OS doesn't paint draggable chrome. Corners overlap the edges with a higher z-index so the diagonal cursor wins at the corner — no dead strip where the cursor would otherwise flicker back to default. Handles auto-hide while maximized
+- Config schema versioning: new `config_version` field plus a `migrate_config` step that runs on load and re-saves. v0→v1 is a no-op placeholder — future schema changes can drop renamed/removed keys and fill new defaults without losing user data
+- `oxidemd --reset-all` CLI flag for clean-state recovery: prints a deletion preview, requires `--yes` to actually run, then wipes the OxideMD config dir (settings, custom themes, fonts), data dir (drafts in webview storage, `.running_version`), and cache dir
+- RPM/DEB post-install kill script (`scripts/post-install.sh`): `pkill -x oxidemd` runs after `dpkg`/`dnf` writes the new binary, so the user can't end up refocusing a stale in-memory process via `tauri-plugin-single-instance` after upgrading. Wired through `bundle.linux.{deb,rpm}.postInstallScript`
+- Version-mismatch detection for upgrades that bypass the post-install script (AppImage swap, Windows portable, macOS .app drag-replace): each launch stamps its version into `<data_dir>/.running_version`, and the surviving instance's single-instance callback emits a `version-mismatch` event whose payload reaches a 15-second toast saying "OxideMD vX.Y.Z is installed. Restart to apply the update."
+- `showToast` accepts an optional `{ lifetimeMs }` override so messages the user must read and act on (like the update notice) don't auto-dismiss in the default 4 seconds
+
+### Changed
+
+- Settings → About: the update flow's CTA renamed from "Download" to "Install" and now triggers the in-app install pipeline instead of opening the releases page. Errors and unsupported-package fallbacks still surface an "Open releases" button so the manual download path stays reachable
+
+### Fixed
+
+- Window opens at a usable size and stays resizable on small displays. `window-size.js` was setting the window minimum height to the welcome screen's natural `scrollHeight` + toolbar + status bar — a value that easily exceeded 1000px and overshot the usable area on Windows 10 with a taskbar or any Linux WM with top bar + dock, locking the window above screen height. Both the min-size and the current window geometry are now capped against `screen.avail{Width,Height} - 80px`, on both axes, with a runtime clamp that pulls the window back if a stale state opened it past the cap
+- `body.maximized` and the maximize toolbar icon no longer thrash on drag-resize. `appWindow.onResized` was running `isMaximized()` over IPC on every pixel of a manual resize, queuing dozens of async round-trips per second. The handler is now debounced 120ms to the trailing edge so a long drag fires one IPC call when the user lets go
+- Tab overflow no longer double-updates on resize. `tabs.js` already wires a direct `resize` listener that runs the (cheap, idempotent) overflow check; a 600ms debounced duplicate in `app.js` was running the same work again after every drag, making the overflow indicators feel sluggish without adding any correctness. The duplicate is gone — the direct handler keeps the gutters and scroll buttons live with no lag
+- Resize handles also hide in fullscreen (macOS Cmd+Ctrl+F, WM-triggered fullscreen on Linux/Windows), not just when maximized. `syncMaximizeIcon` now toggles a parallel `body.fullscreen` class via `appWindow.isFullscreen()`, and the resize-handle CSS + mousedown guard treat both states the same — resizing isn't possible in either, so showing the cursor was misleading
+
 ## [4.1.0] - 2026-05-16
 
 ### Added
