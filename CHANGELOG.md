@@ -4,6 +4,13 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.2.1] - 2026-05-17
+
+### Fixed
+
+- Right-click "Copy" in reading mode (preview pane) and the rendered-content area now actually copies the selected text. The menu item was calling `document.execCommand('copy')` lazily, but clicking the menu button collapses the window text selection (focus shifts out of the article), so by the time the action ran the selection was gone and the clipboard got an empty string. The Markdown-context menu now snapshots `window.getSelection().toString()` at menu-build time and writes that snapshot through `navigator.clipboard.writeText`. The CM6 editor menu and the `<input>`/`<textarea>` menu were already snapshotting their selections internally and were not affected
+- Window minimum size scales with the display instead of being pinned at 720×480. `window-size.js` now sets `minSize = max(1/4 of screen.{width,height}, 480×270)` capped at `screen.avail{Width,Height} − 80px`, and `tauri.conf.json` minimums lowered to 480×270 so the OS, the JS cap, and the config agree. On a 1080p panel the floor is 480×270; on 4K it's 960×540. The welcome-screen `scrollHeight` measurement that used to drive minHeight was removed — it occasionally bumped the floor above 1000px and trapped users at sizes far larger than they wanted
+
 ## [4.2.0] - 2026-05-16
 
 ### Added
