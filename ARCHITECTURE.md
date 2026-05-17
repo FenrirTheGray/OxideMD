@@ -171,12 +171,15 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   and tab bar (the default webview menu is suppressed).
 - **`print.js`** — print the active document to PDF via the webview's native
   print dialog, using a `@media print` stylesheet and the `#print-root` element.
-- **`window-size.js`** — once-after-layout: measures the welcome-screen min
-  height, caps both axes against `screen.avail{Width,Height}` so a stale
-  geometry can't open off-screen, and calls `setMinSize` / `setSize`
-  accordingly. Also owns the responsive toolbar compact-mode toggle and
-  the 8 invisible edge / corner resize-handle overlays whose mousedown
-  hands off to `appWindow.startResizeDragging`.
+- **`window-size.js`** — once-after-layout: sets the window minimum size
+  to `max(screen.{width,height} / 4, 480×270)` capped against
+  `screen.avail{Width,Height}` so a stale geometry can't open off-screen,
+  and calls `setMinSize` / `setSize` accordingly. The 480×270 floor
+  mirrors the `tauri.conf.json` minimums (1/4 of a 1920×1080 baseline);
+  on larger displays the min scales up to match. Also owns the
+  responsive toolbar compact-mode toggle and the 8 invisible edge /
+  corner resize-handle overlays whose mousedown hands off to
+  `appWindow.startResizeDragging`.
 - **`toast.js`** — lightweight bottom-right toast notifications; auto-dismiss
   with an optional per-call `lifetimeMs` override for messages that need to
   linger (e.g. "restart to apply update").

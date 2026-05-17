@@ -297,7 +297,14 @@ function buildEditorMenu() {
 function buildMarkdownMenu(root, target) {
   const link = target.closest('a[href]');
   const img  = !link ? target.closest('img') : null;
-  const hasSelection = !window.getSelection().isCollapsed;
+  // Snapshot the selected text now. Clicking a menu item collapses the
+  // window text selection (focus moves to the menu button), so by the
+  // time the action runs `document.execCommand('copy')` would copy
+  // nothing. CM6 and <input>/<textarea> menus are unaffected because
+  // they retain their own selection state internally.
+  const winSel = window.getSelection();
+  const selectedText = winSel && !winSel.isCollapsed ? winSel.toString() : '';
+  const hasSelection = selectedText.length > 0;
   const items = [];
 
   if (link) {
@@ -316,7 +323,7 @@ function buildMarkdownMenu(root, target) {
     return items;
   }
 
-  if (hasSelection) items.push({ label: 'Copy', action: () => document.execCommand('copy') });
+  if (hasSelection) items.push({ label: 'Copy', action: () => copyText(selectedText) });
   items.push({ label: 'Select All', action: () => selectAllIn(root) });
   items.push({ separator: true });
   items.push({ label: 'Print…', action: () => printActiveTab() });
