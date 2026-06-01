@@ -62,3 +62,77 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # Hand the Linux .deb to the Arch packaging job (oxidemd-bin repackages it).
+      - name: Stash Linux .deb for Arch packaging
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oxidemd-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+  arch-package:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    container:
+      image: archlinux:latest
+    steps:
+      # Install before checkout: the checkout action needs git in the container.
+      - name: Install build tooling
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git nodejs npm rust \
+            webkit2gtk-4.1 gtk3 librsvg \
+            pacman-contrib github-cli
+
+      - uses: actions/checkout@v6
+
+      - name: Download Linux .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: oxidemd-deb
+          path: deb-artifact
+
+      - name: Build Arch packages
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB="$(ls deb-artifact/*.deb | head -1)"
+          # makepkg refuses to run as root; build as an unprivileged user.
+          useradd -m builder
+          chown -R builder:builder .
+          runuser -u builder -- bash packaging/aur/ci-build.sh "$VERSION" "$DEB"
+
+      - name: Upload packages to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" arch-dist/*.pkg.tar.zst --clobber
+
+      # Keep the in-repo PKGBUILDs (used by repo/AUR builders) in sync with the
+      # released version, with real checksums. Runs last so a push failure
+      # (e.g. branch protection on main) never strips the release of artifacts.
+      - name: Sync committed PKGBUILDs to main
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB="$(realpath "$(ls deb-artifact/*.deb | head -1)")"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          # Discard the tag checkout + build-time pkgver edits, start from main.
+          git checkout -f -B main origin/main
+          chown -R builder:builder packaging/aur
+          runuser -u builder -- bash packaging/aur/update-pkgbuild.sh "$VERSION" "$DEB"
+          if git diff --quiet -- packaging/aur; then
+            echo "PKGBUILDs already in sync; nothing to commit."
+          else
+            git add packaging/aur/oxidemd/PKGBUILD packaging/aur/oxidemd/.SRCINFO \
+                    packaging/aur/oxidemd-bin/PKGBUILD packaging/aur/oxidemd-bin/.SRCINFO
+            git commit -m "chore: sync Arch PKGBUILDs to ${VERSION} [skip ci]"
+            git push origin HEAD:main
+          fi
