@@ -66,6 +66,24 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 | `Ctrl+I`              | Italic                            |
 | `Ctrl+K`              | Insert link                       |
 
+## Installing
+
+Prebuilt installers for each tagged release are on the [Releases page](https://github.com/FenrirTheGray/OxideMD/releases):
+
+| Platform | Download                          |
+| -------- | --------------------------------- |
+| Windows  | `.msi` or `.exe` (NSIS)           |
+| macOS    | `.dmg` (Apple Silicon and Intel)  |
+| Linux    | `.AppImage`, `.deb`, or `.rpm`    |
+
+**Arch-based systems** (Arch, Omarchy, EndeavourOS, Manjaro): every release also attaches prebuilt `.pkg.tar.zst` packages. Download `oxidemd-bin-<version>-1-x86_64.pkg.tar.zst` from the [latest release](https://github.com/FenrirTheGray/OxideMD/releases/latest) and install it:
+
+```bash
+sudo pacman -U ./oxidemd-bin-<version>-1-x86_64.pkg.tar.zst
+```
+
+Or build from the PKGBUILDs in [`packaging/aur/`](packaging/aur/README.md) with `makepkg -si` — `oxidemd` builds from source, `oxidemd-bin` repackages the prebuilt binary.
+
 ## Building from Source
 
 ### Prerequisites
@@ -81,6 +99,11 @@ A lightweight, cross-platform Markdown viewer and editor written in Rust using [
 **Linux (Debian/Ubuntu):**
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+**Linux (Arch / Omarchy / EndeavourOS / Manjaro):**
+```bash
+sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl librsvg
 ```
 
 **macOS:**
@@ -117,6 +140,8 @@ Installers are output to `src-tauri/target/release/bundle/`:
 | Windows  | `.msi`, `.exe` (NSIS)        |
 | Linux    | `.deb`, `.rpm`, `.AppImage`  |
 | macOS    | `.dmg`                       |
+
+> On Arch-based systems, building the `.AppImage` needs `NO_STRIP=true cargo tauri build` — the bundled `linuxdeploy` can't strip Arch's modern `.relr.dyn` ELF sections. The `.deb`/`.rpm` targets are unaffected. To produce a native Arch package instead, see [`packaging/aur/`](packaging/aur/README.md).
 
 ## Project Structure
 
@@ -159,6 +184,7 @@ OxideMD/
 │   ├── icons/                # App icons (all sizes)
 │   ├── oxidemd.desktop       # Desktop template for Linux deb/rpm (MIME types, categories)
 │   └── tauri.conf.json       # Tauri configuration (window, bundle, file associations)
+├── packaging/aur/            # Arch Linux PKGBUILDs (oxidemd, oxidemd-bin) + release build scripts
 ├── media/                    # Screenshots and assets for documentation
 ├── CHANGELOG.md              # Version history
 └── package.json              # Node dependencies (CodeMirror 6, esbuild)
