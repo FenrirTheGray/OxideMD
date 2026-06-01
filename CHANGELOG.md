@@ -4,6 +4,12 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.3.1] - 2026-06-02
+
+### Fixed
+
+- Window failed to open on wlroots-based Wayland compositors (Hyprland, Sway). WebKitGTK's DMABUF renderer committed the window's surface buffer without an explicit-sync acquire timeline point, so the compositor rejected the commit with a `wp_linux_drm_syncobj_surface_v1` "Missing acquire timeline" protocol error and the app exited at startup with `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display`. OxideMD now sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Linux Wayland sessions — only when it isn't already set, leaving X11/XWayland sessions and any user override untouched
+
 ## [4.3.0] - 2026-06-02
 
 ### Added
