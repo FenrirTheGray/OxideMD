@@ -4,6 +4,13 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.3.0] - 2026-06-02
+
+### Added
+
+- Native Arch Linux packaging under `packaging/aur/`: two PKGBUILDs let OxideMD install on Arch-based systems (Arch, Omarchy, EndeavourOS, Manjaro). `oxidemd` builds from the tagged source release, and `oxidemd-bin` repackages the official release `.deb` for a near-instant install with no Rust/Node toolchain. Both install the binary, desktop entry, icons, and license, `provides=oxidemd`, and conflict with each other; a generated `.SRCINFO` accompanies each so they can be pushed straight to the AUR. The source PKGBUILD deliberately uses plain `cargo build --release` rather than `cargo tauri build`, sidestepping the AppImage/linuxdeploy step that fails on current Arch with `strip: unknown type [0x13] section '.relr.dyn'`
+- Release workflow now builds and publishes the Arch packages: a new `arch-package` job (in an `archlinux:latest` container) builds both `.pkg.tar.zst` files and attaches them to the release, reusing the Linux job's `.deb` as a workflow artifact so no extra binary artifact is needed. After upload it syncs the committed PKGBUILDs back to `main` — bumping `pkgver`, regenerating real `sha256sums` via `updpkgsums`, and refreshing `.SRCINFO` — so repo and AUR users always track the latest release without manual checksum work
+
 ## [4.2.1] - 2026-05-17
 
 ### Fixed
