@@ -89,6 +89,22 @@ fn maybe_handle_reset_all() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK's DMABUF renderer commits buffers without an explicit-sync
+    // acquire timeline point, which wlroots compositors (Hyprland, Sway)
+    // reject with a `wp_linux_drm_syncobj_surface_v1` "Missing acquire
+    // timeline" protocol error — the window dies at startup with
+    // `Gdk-Message: Error 71 (Protocol error)`. Disable that renderer on
+    // Wayland so the window comes up. Honor an existing override and leave
+    // X11/XWayland sessions (where the path works) untouched.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some()
+            && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     if maybe_handle_reset_all() {
         return;
     }
