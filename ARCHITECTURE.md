@@ -1,8 +1,9 @@
 # Architecture
 
-This document orients contributors on how OxideMD fits together. For a
-file-by-file index see the Project Structure section of the [README](README.md);
-this doc explains how the pieces interact.
+This document orients contributors on how OxideMD fits together: how the
+Rust backend and webview frontend split responsibilities, talk over IPC,
+and hang together at runtime. For a quick tour of what the app does, see
+the [README](README.md).
 
 ## High-level shape
 
