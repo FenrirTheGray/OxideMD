@@ -21,11 +21,12 @@ import {
   confirmOverlay,
 } from './state.js';
 import { effectiveBindings, registerHandler, dispatchKey, runAction } from './keybindings.js';
+import { debounce } from './lib/timing.js';
 import { renderShortcutsUI } from './shortcuts-display.js';
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
 } from './search.js';
-import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange } from './folder.js';
+import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from './folder.js';
 import { openProjectSearch } from './search-project.js';
 import {
   switchToTab, closeTab,
@@ -41,7 +42,7 @@ import { printActiveTab } from './print.js';
 import { showToast } from './toast.js';
 import './contextmenu.js';
 import './window-size.js';
-import { applyOutlineVisibility } from './outline.js';
+import { applyOutlineVisibility, closeOutline } from './outline.js';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -136,11 +137,7 @@ btnWinClose.addEventListener('click', () => appWindow.close());
 // an async IPC round-trip, and the icon / `body.maximized` only matter
 // at rest — so debounce to the trailing edge so a long drag does one
 // IPC call when the user lets go, not dozens per second.
-let syncMaxTimer = 0;
-appWindow.onResized(() => {
-  clearTimeout(syncMaxTimer);
-  syncMaxTimer = setTimeout(syncMaximizeIcon, 120);
-});
+appWindow.onResized(debounce(syncMaximizeIcon, 120));
 
 // ── Shortcuts popover (anchored to the logo) ──────────────────────────
 // Opens on hover or click/focus. A small grace timer bridges the gap
@@ -209,17 +206,38 @@ window.addEventListener('resize', () => {
 
 btnNew.addEventListener('click', () => createNewFile());
 btnOpen.addEventListener('click', openFilePicker);
-btnOpenFolder.addEventListener('click', openFolder);
+// In narrow (drawer) mode with a folder already open, the folder button
+// toggles the file-tree drawer rather than re-opening the OS picker —
+// it's the affordance for bringing the tree back after it auto-collapsed.
+// Otherwise it opens a folder as usual.
+btnOpenFolder.addEventListener('click', () => {
+  if (document.body.classList.contains('narrow') && state.currentFolder) {
+    toggleSidebarDrawer();
+  } else {
+    openFolder();
+  }
+});
 sidebarCloseBtn.addEventListener('click', closeFolder);
+
+// Tapping the dimmed backdrop closes whichever drawer is open (narrow
+// mode only — it's display:none otherwise so this never fires when docked).
+const drawerBackdrop = document.getElementById('drawer-backdrop');
+if (drawerBackdrop) {
+  drawerBackdrop.addEventListener('click', () => {
+    collapseSidebarDrawer();
+    closeOutline();
+  });
+}
 sidebarExpandAllBtn.addEventListener('click', expandAllFolders);
 sidebarCollapseAllBtn.addEventListener('click', collapseAllFolders);
 
-let treeFilterTimer;
+// The clear-button toggle runs on every keystroke; only the (heavier)
+// tree re-filter is debounced.
+const debouncedTreeFilter = debounce(setTreeFilter, 80);
 sidebarFilterInput.addEventListener('input', () => {
-  clearTimeout(treeFilterTimer);
   const value = sidebarFilterInput.value;
   sidebarFilterClearBtn.classList.toggle('hidden', value === '');
-  treeFilterTimer = setTimeout(() => setTreeFilter(value), 80);
+  debouncedTreeFilter(value);
 });
 sidebarFilterInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
@@ -363,11 +381,7 @@ searchCase.addEventListener('click', () => {
   runSearch(searchInput.value);
 });
 
-let searchDebounceTimer;
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchDebounceTimer);
-  searchDebounceTimer = setTimeout(() => runSearch(searchInput.value), 40);
-});
+searchInput.addEventListener('input', debounce(() => runSearch(searchInput.value), 40));
 searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.shiftKey ? prevMatch() : nextMatch(); e.preventDefault(); }
   if (e.key === 'Escape') { closeSearch(); e.preventDefault(); }

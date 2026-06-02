@@ -131,6 +131,18 @@
         <span class="btn-label">Settings</span>
       </button>
 
+      <!-- Overflow menu trigger. Hidden until the responsive toolbar logic
+           (window-size.js) relocates lower-priority buttons into #more-menu
+           because they don't fit alongside the window controls. -->
+      <button id="btn-more" class="hidden" type="button" title="More actions" aria-label="More actions" aria-haspopup="true" aria-expanded="false" aria-controls="more-menu">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.7"/>
+          <circle cx="12" cy="12" r="1.7"/>
+          <circle cx="19" cy="12" r="1.7"/>
+        </svg>
+        <span class="btn-label">More</span>
+      </button>
+
     </div>
 
     <!-- Window controls -->
@@ -158,6 +170,12 @@
        registry, so rebinds in Settings → Shortcuts are reflected here. -->
   <div id="shortcuts-popover" class="hidden" role="dialog"
        aria-label="Keyboard shortcuts" aria-hidden="true"></div>
+
+  <!-- ── Toolbar overflow menu (anchored to #btn-more) ────────────────── -->
+  <!-- Holds toolbar buttons relocated by window-size.js when the toolbar is
+       too narrow to show them all. The buttons are moved here (not cloned),
+       so their handlers and toggle state are preserved. -->
+  <div id="more-menu" class="hidden" role="menu" aria-label="More actions" aria-hidden="true"></div>
 
   <!-- ── Search bar ─────────────────────────────────────────────────── -->
   <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
@@ -482,6 +500,11 @@
       </div>
       <div id="outline-sidebar-body"></div>
     </aside>
+
+    <!-- Dims the content behind an open drawer in narrow-window mode;
+         clicking it closes the open drawer. Visibility is driven by CSS
+         (:has on an open sidebar), so it never blocks clicks when docked. -->
+    <div id="drawer-backdrop" aria-hidden="true"></div>
   </div>
 
   <!-- ── Status bar ─────────────────────────────────────────────────── -->

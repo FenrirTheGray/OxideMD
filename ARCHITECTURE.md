@@ -178,9 +178,12 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   and calls `setMinSize` / `setSize` accordingly. The 480×270 floor
   mirrors the `tauri.conf.json` minimums (1/4 of a 1920×1080 baseline);
   on larger displays the min scales up to match. Also owns the
-  responsive toolbar compact-mode toggle and the 8 invisible edge /
-  corner resize-handle overlays whose mousedown hands off to
-  `appWindow.startResizeDragging`.
+  responsive-layout logic: the two-stage toolbar (drop button labels,
+  then relocate the lowest-priority buttons into the `#more-menu` "⋯"
+  popover while pinning the window controls), the `body.narrow` flag
+  that turns the sidebars into overlay drawers below 720px, and the 8
+  invisible edge / corner resize-handle overlays whose mousedown hands
+  off to `appWindow.startResizeDragging`.
 - **`toast.js`** — lightweight bottom-right toast notifications; auto-dismiss
   with an optional per-call `lifetimeMs` override for messages that need to
   linger (e.g. "restart to apply update").

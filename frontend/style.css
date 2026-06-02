@@ -273,6 +273,77 @@ body.fullscreen .resize-handle {
   }
 }
 
+/* ── Toolbar overflow menu ────────────────────────────────────────────
+   Holds toolbar buttons relocated by the responsive toolbar logic. The
+   buttons are moved here (not cloned), so they lose the #toolbar-buttons
+   chip styling and the compact label-hiding (both ID-scoped) — we restyle
+   them as full-width menu rows with their labels shown again. */
+#more-menu {
+  position: fixed;
+  z-index: 180;
+  min-width: 184px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  animation: shortcuts-pop var(--dur) var(--ease-out);
+}
+#more-menu.hidden {
+  display: none;
+}
+#more-menu button {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+/* Force the label visible even though the source button was compact. */
+#more-menu button .btn-label {
+  display: inline;
+}
+#more-menu button svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+#more-menu button:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+#more-menu button[aria-pressed="true"]:not(:disabled) {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
+#more-menu button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -1px;
+}
+#more-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 /* ── Outline sidebar ──────────────────────────────────────────────────
    Docked on the right side of #main-container (the folder browser is
    the left sidebar). Toggled by btn-outline in read mode; structure
@@ -752,6 +823,12 @@ body.fullscreen .resize-handle {
 #toolbar-buttons.compact button,
 #toolbar-buttons.compact-auto button {
   padding: 5px 8px;
+}
+
+/* Overflow ("⋯") trigger — shown only when window-size.js has moved
+   buttons into #more-menu. */
+#btn-more.hidden {
+  display: none;
 }
 
 
@@ -1545,7 +1622,9 @@ body.resizing-sidebar * {
 #content {
   max-width: var(--reading-width, 800px);
   margin: 0 auto;
-  padding: 56px 44px;
+  /* Fluid gutters: shrink toward the edges on narrow windows so the
+     document keeps as much width as possible, full padding when roomy. */
+  padding: clamp(24px, 5vw, 56px) clamp(16px, 4vw, 44px);
   user-select: text;
   cursor: text;
 }
@@ -1712,6 +1791,11 @@ body.resizing-sidebar * {
 @media (max-width: 520px) {
   .welcome-shortcuts {
     grid-template-columns: 1fr;
+  }
+  /* Give the ellipsizing file path priority over the line/word counts
+     in the cramped status bar. */
+  #status-counts {
+    display: none;
   }
 }
 .welcome-shortcut {
@@ -2452,6 +2536,9 @@ body.resizing-sidebar * {
   background: var(--bg-settings);
   border-radius: 14px;
   width: min(660px, calc(100vw - 32px));
+  /* Never taller than the viewport — on short windows the body scrolls
+     instead of pushing the dialog off-screen. */
+  max-height: calc(100vh - 32px);
   box-shadow: var(--shadow-dialog);
   display: flex;
   flex-direction: column;
@@ -2521,16 +2608,26 @@ body.resizing-sidebar * {
   align-items: stretch;
   gap: 2px;
   padding: 6px 8px 0;
+  /* Narrow windows: let the category tabs scroll horizontally rather
+     than wrap (wrapping would break the seamless tab→body fill). */
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--bg-settings-hd);
   /* Inset shadow so the active tab's body-color fill can cover its
      own width of the separator and flow seamlessly into #settings-body
      below (Notepad-style tabs). */
   box-shadow: inset 0 -1px 0 var(--border);
 }
+#settings-tabs::-webkit-scrollbar {
+  display: none;
+}
 .settings-tab {
   appearance: none;
   background: transparent;
   border: none;
+  /* Keep full size so the strip scrolls (see #settings-tabs) instead of
+     the tabs squishing on narrow windows. */
+  flex-shrink: 0;
   color: var(--fg-dim);
   cursor: pointer;
   font-family: var(--font-family);
@@ -2561,7 +2658,11 @@ body.resizing-sidebar * {
   padding: 18px 22px 20px;
   display: flex;
   flex-direction: column;
-  height: 600px;
+  /* Fixed-height body so the dialog is the same size on every tab —
+     switching categories never resizes the modal. The body scrolls
+     internally. The height is the original 600px on roomy windows but
+     caps to the viewport on short ones so the dialog still fits. */
+  height: min(600px, calc(100vh - 200px));
   box-sizing: border-box;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -3689,7 +3790,7 @@ body.editing #editor-split {
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 28px 32px;
+  padding: clamp(16px, 3vw, 28px) clamp(16px, 4vw, 32px);
   cursor: text;
   user-select: text;
   background: var(--bg);
@@ -4717,6 +4818,123 @@ body.resizing-split * {
 .welcome-recent-forget:hover {
   color: var(--danger);
   background: var(--bg-danger-hover);
+}
+
+/* ── Responsive / narrow-window layout ────────────────────────────────
+   The window min-size scales down to 480×270, so the desktop layout has
+   to survive phone-width geometry. Breakpoints (literal px so they can
+   live in @media conditions):
+
+     ≤ 720px  sidebars become overlay drawers (body.narrow, set by
+              window-size.js) instead of pushing the document.
+     ≤ 640px  the editor/preview split collapses to a single pane and the
+              formatting toolbar scrolls horizontally instead of clipping.
+     ≤ 520px  welcome-grid + status-counts tweaks (see the block above).
+
+   Drawer open/closed state:
+     #sidebar.hidden      → no folder open (docked behavior unchanged wide).
+     #sidebar.collapsed   → folder open but drawer slid away (narrow only).
+   The slide transition is auto-disabled by the reduced-motion block below
+   (global transition-duration override). */
+
+/* Backdrop sits behind the drawers, above the content. Hidden by default
+   in every layout; the narrow block reveals it only while a drawer is
+   actually open (via :has), so it never intercepts clicks when docked. */
+#drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* Positioning context for the absolutely-placed drawers + backdrop. */
+  #main-container {
+    position: relative;
+  }
+
+  /* File tree → left drawer. Floats over the content (position:absolute)
+     so the document keeps full width; .collapsed slides it off-screen
+     without forgetting the open folder. */
+  #sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(var(--sidebar-width, 240px), 85vw);
+    z-index: 40;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--dur) var(--ease);
+  }
+  #sidebar.collapsed {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  /* Can't drag-resize a drawer. */
+  #sidebar-divider {
+    display: none;
+  }
+
+  /* Outline → right drawer. */
+  #outline-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: min(260px, 85vw);
+    z-index: 40;
+    box-shadow: var(--shadow-md);
+  }
+
+  #drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  /* Show the backdrop only while a drawer is actually open. */
+  body.narrow
+    #main-container:has(#sidebar:not(.hidden):not(.collapsed))
+    #drawer-backdrop,
+  body.narrow #main-container:has(#outline-sidebar:not(.hidden)) #drawer-backdrop {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Two side-by-side panes can't share <640px — show one pane. The
+     existing split-mode toggle still chooses editor vs preview; we only
+     drop the simultaneous two-pane layout. Default (no mode class) shows
+     the editor. */
+  #editor-split:not(.split-mode-preview) #preview-pane,
+  #editor-split:not(.split-mode-preview) #split-divider {
+    display: none;
+  }
+  #editor-split:not(.split-mode-preview) #editor-pane {
+    flex: 1 1 auto;
+  }
+  #editor-split.split-mode-preview #editor-pane,
+  #editor-split.split-mode-preview #split-divider {
+    display: none;
+  }
+  #editor-split.split-mode-preview #preview-pane {
+    flex: 1 1 auto;
+  }
+
+  /* Formatting toolbar: scroll the button strip horizontally instead of
+     clipping it. Save/Discard stay pinned at the right edge. */
+  #edit-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #edit-toolbar .fmt-content {
+    grid-column: 1;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  #edit-toolbar .fmt-content::-webkit-scrollbar {
+    display: none;
+  }
+  #edit-toolbar .edit-actions {
+    grid-column: 2;
+  }
 }
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */

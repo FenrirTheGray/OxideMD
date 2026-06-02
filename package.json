@@ -1,7 +1,9 @@
 {
+  "type": "module",
   "scripts": {
     "build:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --minify --outfile=frontend/dist/bundle.js",
-    "watch:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --outfile=frontend/dist/bundle.js --watch --sourcemap"
+    "watch:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --outfile=frontend/dist/bundle.js --watch --sourcemap",
+    "test": "node --test \"frontend/**/*.test.js\""
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
