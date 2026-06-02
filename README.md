@@ -30,6 +30,7 @@ OxideMD opens, renders, and edits Markdown files without shipping a browser. It 
 - Document outline popover for quick navigation
 - Right-click context menus on the tab strip and folder tree
 - Drag and drop `.md` files onto the window to open them
+- Responsive layout: on narrow windows the sidebars become overlay drawers and the toolbar collapses overflowing actions into a "⋯" menu, so the app stays usable down to its minimum size
 
 ### Appearance
 - Atom One Dark, Atom One Light, and system themes

@@ -4,6 +4,18 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.4.0] - 2026-06-02
+
+### Added
+
+- Fully responsive layout for narrow and small windows (the minimum size goes down to 480×270). The file-tree and outline sidebars become overlay drawers below 720px — they float over the document behind a dimmed backdrop instead of squeezing the reading column, slide away when a file is opened, and reopen via the folder button; the editor/preview split collapses to a single pane below 640px; and `#content` / preview padding is fluid (`clamp`) so the gutters shrink smoothly rather than eating scarce width
+- Toolbar overflow menu: when the window is too narrow to show every action, the lowest-priority buttons relocate into a "⋯" popover (the real elements move, so handlers and toggle state are preserved) while the window controls stay pinned — so the minimize/maximize/close buttons can never be pushed off-screen on the borderless window. This is a second degradation stage beyond the existing label-hiding, with its own hysteresis so dragging the edge across the threshold doesn't flicker
+
+### Changed
+
+- The Settings dialog now fits short windows: its height is capped to the viewport and the body scrolls within it (instead of overflowing off-screen), and the category tabs scroll horizontally rather than wrapping
+- The active tab now stays visible at minimum width — reserving room for the tab strip means a single open file no longer collapses behind a pair of (pointless) tab-scroll arrows
+
 ## [4.3.1] - 2026-06-02
 
 ### Fixed

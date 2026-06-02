@@ -17,11 +17,20 @@
 
 import { appWindow } from './state.js';
 import { logError } from './logger.js';
+import { updateTabOverflow } from './tabs.js';
 
 const { LogicalSize } = window.__TAURI__.window;
 
 const toolbarButtons = document.getElementById('toolbar-buttons');
 const windowControls = document.getElementById('window-controls');
+const sidebarEl = document.getElementById('sidebar');
+const btnMore = document.getElementById('btn-more');
+const moreMenu = document.getElementById('more-menu');
+
+// At/below this width the sidebars become overlay drawers instead of
+// pushing the document (see the ≤720px block in style.css). Kept in sync
+// with that breakpoint.
+const NARROW_BP = 720;
 
 // Floor: 1/4 of 1920×1080. Mirrors tauri.conf.json so the OS, the
 // cap math, and the config agree.
@@ -74,26 +83,85 @@ requestAnimationFrame(() => requestAnimationFrame(async () => {
     logError('window-size', 'window sizing failed', e);
   }
   primeNaturalToolbarWidth();
-  updateAutoCompact();
+  updateToolbarLayout();
+  updateNarrow();
 }));
 
-// Responsive toolbar compact mode ───────────────────────────────────────
-// Cached natural (label-on) width of the toolbar action cluster. We
-// measure it once with `.compact-auto` and `.compact` temporarily
-// stripped so the cached value reflects the un-compacted layout even
-// when the user has `toolbar_compact` enabled at launch.
+// Responsive drawer mode ─────────────────────────────────────────────
+// Toggle `body.narrow` so CSS can switch the sidebars to overlay drawers,
+// and on each wide↔narrow transition reset the file-tree drawer: collapse
+// it on entering narrow (so it doesn't suddenly cover the document) and
+// clear the collapse on leaving (so it re-docks). Only the *edge* is
+// acted on, so dragging within narrow mode never fights the user's open
+// drawer. The collapse class is inert in the wide layout.
+let wasNarrow = null;
+export function updateNarrow() {
+  const isNarrow = window.innerWidth <= NARROW_BP;
+  document.body.classList.toggle('narrow', isNarrow);
+  if (isNarrow !== wasNarrow) {
+    wasNarrow = isNarrow;
+    if (sidebarEl) sidebarEl.classList.toggle('collapsed', isNarrow);
+  }
+}
+
+// Responsive toolbar ─────────────────────────────────────────────────────
+// The toolbar degrades in two stages as the window narrows so the window
+// controls are NEVER pushed off-screen (on a borderless window the close
+// button must always be reachable):
+//   Stage 1  drop the button text labels (`.compact-auto`).
+//   Stage 2  relocate the lowest-priority buttons into the #more-menu
+//            popover, leaving a "⋯" trigger in their place.
+// Stage 2 moves the actual <button> elements (not clones), so their event
+// handlers and toggle state ride along; the CSS chip/label-hiding rules are
+// ID-scoped to #toolbar-buttons, so a relocated button automatically
+// renders as a full-width menu row with its label shown.
+
+// Buttons in their natural left-to-right toolbar order. Used to restore
+// them and to keep the menu in a stable, familiar order.
+const TOOLBAR_ORDER = [
+  'btn-new', 'btn-open', 'btn-open-folder', 'btn-reload', 'btn-mode-toggle',
+  'btn-search', 'btn-preview', 'btn-outline', 'btn-print', 'btn-settings',
+];
+// Order in which buttons leave the toolbar for the menu (least essential
+// first), so the most-used actions stay as quick icons the longest.
+const OVERFLOW_ORDER = [
+  'btn-print', 'btn-reload', 'btn-open-folder', 'btn-open', 'btn-new',
+  'btn-preview', 'btn-outline', 'btn-search', 'btn-mode-toggle', 'btn-settings',
+];
+
+// Cached natural (label-on) width of the toolbar action cluster, measured
+// with the compact classes stripped so it reflects the un-compacted layout
+// even when the user has `toolbar_compact` enabled at launch.
 let naturalToolbarWidth = 0;
-// Hysteresis buffer (px). The window must grow back at least this far
-// past the trigger point before we restore the labels, so a user
-// dragging the edge across the threshold doesn't see the labels flicker.
+// Hysteresis buffers (px) so dragging the edge across a threshold doesn't
+// flicker labels (stage 1) or buttons (stage 2) in and out.
 const COMPACT_HYSTERESIS = 24;
-// Minimum tab strip width we want to preserve before sacrificing labels.
+const OVERFLOW_HYSTERESIS = 24;
+// Tab-strip width to protect before stage 1 (drop labels) and before
+// stage 2 (start overflowing buttons). Stage 2's reserve is smaller — we
+// only banish buttons to the menu once even icon-only ones would starve
+// the active tab.
 const TAB_AREA_RESERVE = 200;
+const OVERFLOW_RESERVE = 120;
+
+// Pull every relocated button back into the toolbar, in natural order,
+// ahead of the trailing "⋯" trigger.
+function restoreToolbarButtons() {
+  if (!toolbarButtons) return;
+  for (const id of TOOLBAR_ORDER) {
+    const btn = document.getElementById(id);
+    if (btn && btn.parentElement !== toolbarButtons) {
+      toolbarButtons.insertBefore(btn, btnMore);
+    }
+  }
+}
 
 function primeNaturalToolbarWidth() {
   if (!toolbarButtons) return;
   const hadAuto = toolbarButtons.classList.contains('compact-auto');
   const hadCompact = toolbarButtons.classList.contains('compact');
+  restoreToolbarButtons();
+  if (btnMore) btnMore.classList.add('hidden');
   toolbarButtons.classList.remove('compact-auto', 'compact');
   // Force a reflow by reading offsetWidth after the class change.
   naturalToolbarWidth = toolbarButtons.offsetWidth;
@@ -101,25 +169,118 @@ function primeNaturalToolbarWidth() {
   if (hadAuto) toolbarButtons.classList.add('compact-auto');
 }
 
-export function updateAutoCompact() {
+export function updateToolbarLayout() {
   if (!toolbarButtons || !naturalToolbarWidth) return;
+
+  // Sticky-state snapshot (for hysteresis) before we reset the baseline.
+  const wasAutoCompact = toolbarButtons.classList.contains('compact-auto');
+  const wasOverflowing = btnMore && !btnMore.classList.contains('hidden');
+
+  // Baseline: everything docked, labels per the user's preference only.
+  restoreToolbarButtons();
+  toolbarButtons.classList.remove('compact-auto');
+  if (btnMore) btnMore.classList.add('hidden');
+
   const logoEl = document.getElementById('btn-logo');
   const logoW = logoEl ? logoEl.offsetWidth : 0;
   const winCtrlW = visible(windowControls) ? windowControls.offsetWidth : 0;
-  const available = window.innerWidth - logoW - winCtrlW - TAB_AREA_RESERVE;
-  const isCompact = toolbarButtons.classList.contains('compact-auto');
-  const trigger = isCompact
-    ? naturalToolbarWidth + COMPACT_HYSTERESIS
-    : naturalToolbarWidth;
-  toolbarButtons.classList.toggle('compact-auto', trigger > available);
+  const base = window.innerWidth - logoW - winCtrlW;
+  const userCompact = toolbarButtons.classList.contains('compact');
+
+  // Stage 1 — drop labels. (Skipped when the user already forced compact.)
+  if (!userCompact) {
+    const trigger = wasAutoCompact
+      ? naturalToolbarWidth + COMPACT_HYSTERESIS
+      : naturalToolbarWidth;
+    if (trigger > base - TAB_AREA_RESERVE) {
+      toolbarButtons.classList.add('compact-auto');
+    }
+  }
+
+  // Stage 2 — overflow the cluster into the menu until it fits while
+  // leaving OVERFLOW_RESERVE px for the tab strip. The "⋯" trigger's own
+  // width is included by revealing it before we measure.
+  const budget =
+    base - OVERFLOW_RESERVE - (wasOverflowing ? OVERFLOW_HYSTERESIS : 0);
+  if (btnMore && toolbarButtons.scrollWidth > budget) {
+    btnMore.classList.remove('hidden');
+    for (const id of OVERFLOW_ORDER) {
+      if (toolbarButtons.scrollWidth <= budget) break;
+      const btn = document.getElementById(id);
+      if (btn) moreMenu.appendChild(btn);
+    }
+    // Normalize the menu to natural toolbar order.
+    for (const id of TOOLBAR_ORDER) {
+      const btn = document.getElementById(id);
+      if (btn && btn.parentElement === moreMenu) moreMenu.appendChild(btn);
+    }
+  } else {
+    closeMoreMenu();
+  }
+
+  // The cluster width changed, so the tab strip's overflow state may have
+  // too (e.g. a single tab that no longer needs scroll arrows).
+  updateTabOverflow();
 }
+
+// ── Overflow menu open/close ─────────────────────────────────────────
+function positionMoreMenu() {
+  if (!btnMore || !moreMenu) return;
+  const rect = btnMore.getBoundingClientRect();
+  // Right-align to the trigger so the menu never spills off the edge.
+  moreMenu.style.top = `${Math.round(rect.bottom + 4)}px`;
+  moreMenu.style.right = `${Math.round(window.innerWidth - rect.right)}px`;
+  moreMenu.style.left = 'auto';
+}
+function openMoreMenu() {
+  if (!moreMenu || !btnMore) return;
+  positionMoreMenu();
+  moreMenu.classList.remove('hidden');
+  moreMenu.setAttribute('aria-hidden', 'false');
+  btnMore.setAttribute('aria-expanded', 'true');
+}
+export function closeMoreMenu() {
+  if (!moreMenu || !btnMore) return;
+  moreMenu.classList.add('hidden');
+  moreMenu.setAttribute('aria-hidden', 'true');
+  btnMore.setAttribute('aria-expanded', 'false');
+}
+
+if (btnMore) {
+  btnMore.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (moreMenu.classList.contains('hidden')) openMoreMenu();
+    else closeMoreMenu();
+  });
+}
+if (moreMenu) {
+  // Activating any relocated action closes the menu.
+  moreMenu.addEventListener('click', (e) => {
+    if (e.target.closest('button')) closeMoreMenu();
+  });
+}
+// Click-outside and Escape close the menu.
+document.addEventListener('mousedown', (e) => {
+  if (!moreMenu || moreMenu.classList.contains('hidden')) return;
+  if (moreMenu.contains(e.target) || (btnMore && btnMore.contains(e.target))) return;
+  closeMoreMenu();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && moreMenu && !moreMenu.classList.contains('hidden')) {
+    closeMoreMenu();
+    if (btnMore) btnMore.focus();
+  }
+});
 
 let compactRafId = 0;
 window.addEventListener('resize', () => {
   if (compactRafId) return;
   compactRafId = requestAnimationFrame(() => {
     compactRafId = 0;
-    updateAutoCompact();
+    updateToolbarLayout();
+    updateNarrow();
+    // Keep the menu anchored to its (possibly moved) trigger.
+    if (moreMenu && !moreMenu.classList.contains('hidden')) positionMoreMenu();
   });
 });
 

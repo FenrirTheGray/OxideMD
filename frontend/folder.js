@@ -109,6 +109,9 @@ export function setFolder(tree) {
   sidebarFolderName.textContent = tree.name || tree.root;
   sidebarFolderName.title = tree.root;
   sidebarEl.classList.remove('hidden');
+  // A freshly opened folder should reveal its tree, even in narrow
+  // (drawer) mode where the sidebar would otherwise be collapsed.
+  sidebarEl.classList.remove('collapsed');
   renderFolderTree();
   updateProjectSearchAvailability();
   syncWatcher();
@@ -287,10 +290,31 @@ function buildTreeNode(node, opts = {}) {
       row.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
     });
   } else {
-    row.addEventListener('click', () => loadFile(node.path));
+    row.addEventListener('click', () => {
+      loadFile(node.path);
+      // In narrow (drawer) mode, picking a file slides the tree away so
+      // the document gets the full width. Keyboard activation routes
+      // through row.click(), so this covers it too.
+      collapseSidebarDrawer();
+    });
   }
 
   return wrap;
+}
+
+// ── Narrow-window drawer state ──────────────────────────────────────
+// In narrow mode (body.narrow, set by window-size.js) the sidebar floats
+// over the content as a drawer. `.collapsed` slides it away without
+// forgetting the open folder (distinct from `.hidden`, which means no
+// folder is open). These are no-ops in the docked/wide layout — the CSS
+// only acts on `.collapsed` inside the ≤720px query — so callers don't
+// need to guard on the mode themselves, except where re-opening only
+// makes sense as a drawer (toggleSidebarDrawer).
+export function collapseSidebarDrawer() {
+  sidebarEl.classList.add('collapsed');
+}
+export function toggleSidebarDrawer() {
+  sidebarEl.classList.toggle('collapsed');
 }
 
 function renderHighlightedLabel(label, text, query) {

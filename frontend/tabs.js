@@ -1,43 +1,31 @@
 import {
-  invoke, convertFileSrc, appWindow,
+  invoke, appWindow,
   tabs, state,
   ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
-  supportsHighlights, matchHighlight, currentHighlight,
   tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
   editorPane, previewPane,
   btnReload, btnSearch, btnOutline, btnPreview, btnZoomIn, btnZoomOut, zoomLabel,
   btnModeToggle, btnSave, btnDiscard, btnPrint, editToolbar,
-  filePathEl, statusIndicator, statusText,
+  filePathEl,
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
 } from './state.js';
 import { clearSearch } from './search.js';
 import { syncWatcher, highlightActiveTreeItem } from './folder.js';
-import { isDirty, saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, isPreviewVisible, updateCounts, clearCounts } from './editor.js';
+import { saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, updateCounts, clearCounts } from './editor.js';
+import {
+  activeTab, isDirty, isPreviewVisible,
+  renderContent, setLoading, clearStatus, applyZoom,
+} from './tab-state.js';
+// Re-export the seam primitives that other modules still import from
+// tabs.js (settings.js, folder.js, print.js, app.js) so their imports
+// don't change after the move to tab-state.js.
+export {
+  activeTab, renderContent, setLoading, clearStatus, applyZoom,
+} from './tab-state.js';
 import { isOutlineOpen, refreshOutline, applyOutlineVisibility } from './outline.js';
 import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
 import { readDraft, clearDraft } from './draft-store.js';
-
-// Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
-// with an absolute path. The webview can't load a raw filesystem path, so we
-// rewrite it to an asset:// URL here. Remote images already carry a real `src`
-// and are untouched.
-export function renderContent(html) {
-  // Any existing search highlights point to about-to-be-detached text nodes.
-  // Drop them so the registry doesn't hold refs to orphaned ranges.
-  if (state.searchRanges.length || (supportsHighlights && currentHighlight.size)) {
-    state.searchRanges = [];
-    state.searchCurrent = -1;
-    if (supportsHighlights) {
-      matchHighlight.clear();
-      currentHighlight.clear();
-    }
-  }
-  contentEl.innerHTML = html;
-  for (const img of contentEl.querySelectorAll('img[data-oxide-src]')) {
-    img.src = convertFileSrc(img.dataset.oxideSrc);
-  }
-}
 
 export function syncToolbar() {
   const hasTab = state.activeTabId !== null;
@@ -84,8 +72,15 @@ export function syncToolbar() {
   editToolbar.hidden = !editing;
 }
 
-export function activeTab() {
-  return tabs.find(t => t.id === state.activeTabId) ?? null;
+// Single choke point for the chrome that derives from the active tab + edit
+// state: the toolbar buttons, the tab bar, and the outline sidebar. Call
+// this after any mutation to tabs / activeTabId / edit mode so the three
+// can't drift out of sync — replaces the scattered
+// `syncToolbar(); renderTabBar(); refreshOutline();` triples.
+export function rerender() {
+  syncToolbar();
+  renderTabBar();
+  refreshOutline();
 }
 
 export function openInNewTab(path, title, html, raw = null) {
@@ -297,24 +292,6 @@ export function setStatusFilePath(path) {
     filePathEl.removeAttribute('tabindex');
     filePathEl.removeAttribute('aria-label');
   }
-}
-
-export function applyZoom(zoom) {
-  const tab = activeTab();
-  const fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
-  contentEl.style.fontSize = fontSize;
-  // Mirror the zoom on the live preview so Ctrl+/− affect it too.
-  if (previewPane) previewPane.style.fontSize = fontSize;
-  // The editor takes the full viewport width; reading-width constraints
-  // are a rendered-markdown concern only.
-  if (tab?.editing) {
-    contentEl.style.maxWidth = 'none';
-  } else {
-    contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
-  }
-  zoomLabel.textContent = Math.round(zoom * 100) + '%';
-  btnZoomOut.disabled = zoom <= ZOOM_MIN;
-  btnZoomIn.disabled  = zoom >= ZOOM_MAX;
 }
 
 export function zoomIn() {
@@ -626,26 +603,6 @@ function showError(msg) {
   p.style.cssText = 'color:#e06c75;margin-top:2em;font-family:monospace;';
   p.textContent = 'Error: ' + msg;
   contentEl.replaceChildren(p);
-}
-
-export function setLoading() {
-  statusText.textContent = 'Loading';
-  statusIndicator.classList.remove('hidden');
-  statusIndicator.classList.add('status-loading');
-}
-
-function setReady() {
-  statusText.textContent = 'Ready';
-  statusIndicator.classList.remove('hidden', 'status-loading');
-}
-
-export function clearStatus() {
-  if (tabs.length === 0) {
-    statusIndicator.classList.add('hidden');
-    statusIndicator.classList.remove('status-loading');
-  } else {
-    setReady();
-  }
 }
 
 // Links are handled via a single delegated listener on contentEl (installed
