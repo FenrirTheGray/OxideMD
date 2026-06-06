@@ -25,7 +25,13 @@ impl Highlighter {
             .or_else(|| self.ss.find_syntax_by_extension(lang))
             .unwrap_or_else(|| self.ss.find_syntax_plain_text());
 
-        let theme = &self.ts.themes["base16-ocean.dark"];
+        // Index access would panic if the theme were ever missing; fall
+        // back to plain escaped code instead so a load-defaults change in a
+        // future syntect can't take the whole renderer down.
+        let theme = match self.ts.themes.get("base16-ocean.dark") {
+            Some(t) => t,
+            None => return html_escape(code),
+        };
         let mut h = HighlightLines::new(syntax, theme);
         let mut html = String::new();
 
@@ -46,4 +52,3 @@ impl Highlighter {
         html
     }
 }
-

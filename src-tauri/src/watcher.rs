@@ -34,6 +34,16 @@ static WATCHER: Mutex<Option<RecommendedWatcher>> = Mutex::new(None);
 /// `git checkout` storm while still feeling instant for a real edit.
 const COALESCE_WINDOW: Duration = Duration::from_millis(150);
 
+/// Hard cap on how many per-path timestamps `should_emit` tracks. The map
+/// only needs the paths touched within the last `COALESCE_WINDOW`;
+/// anything older can't suppress a future event. A long-lived watch over
+/// a churning tree (a `git checkout` storm touching thousands of files)
+/// would otherwise grow the map without bound. When the cap is hit we
+/// clear the whole map — O(1) amortized, and forgetting debounce state at
+/// worst lets a few paths re-emit once (which the frontend coalesces)
+/// rather than paying an O(n) staleness sweep on every insert.
+const MAX_TRACKED_PATHS: usize = 8192;
+
 /// Decide whether an event for `path` at time `now` should be emitted,
 /// updating `last_emit` when it should. Pure leading-edge debounce: emit
 /// if we've never emitted for this path, or if the last emit was longer
@@ -49,6 +59,11 @@ fn should_emit(
     match last_emit.get(path) {
         Some(&prev) if now.duration_since(prev) < window => false,
         _ => {
+            // Bound memory: drop everything once we cross the cap. See
+            // MAX_TRACKED_PATHS for why a full clear is the right trade.
+            if last_emit.len() >= MAX_TRACKED_PATHS {
+                last_emit.clear();
+            }
             last_emit.insert(path.to_path_buf(), now);
             true
         }
@@ -86,9 +101,7 @@ pub fn set_watch_paths(app: AppHandle, paths: Vec<PathBuf>) -> Result<(), String
                 // they'd cause spurious reloads on every hover/indexer pass.
                 let relevant = matches!(
                     event.kind,
-                    EventKind::Create(_)
-                        | EventKind::Modify(_)
-                        | EventKind::Remove(_)
+                    EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
                 );
                 if !relevant {
                     return;
@@ -129,7 +142,12 @@ mod tests {
     fn first_event_for_a_path_is_emitted() {
         let mut last = HashMap::new();
         let now = Instant::now();
-        assert!(should_emit(&mut last, Path::new("/a.md"), now, COALESCE_WINDOW));
+        assert!(should_emit(
+            &mut last,
+            Path::new("/a.md"),
+            now,
+            COALESCE_WINDOW
+        ));
     }
 
     #[test]
@@ -139,8 +157,18 @@ mod tests {
         let p = Path::new("/a.md");
         assert!(should_emit(&mut last, p, t0, COALESCE_WINDOW));
         // Two more events 10ms and 50ms later — both inside the window.
-        assert!(!should_emit(&mut last, p, t0 + Duration::from_millis(10), COALESCE_WINDOW));
-        assert!(!should_emit(&mut last, p, t0 + Duration::from_millis(50), COALESCE_WINDOW));
+        assert!(!should_emit(
+            &mut last,
+            p,
+            t0 + Duration::from_millis(10),
+            COALESCE_WINDOW
+        ));
+        assert!(!should_emit(
+            &mut last,
+            p,
+            t0 + Duration::from_millis(50),
+            COALESCE_WINDOW
+        ));
     }
 
     #[test]
@@ -159,13 +187,41 @@ mod tests {
     }
 
     #[test]
+    fn tracked_paths_stay_bounded() {
+        // A storm of distinct paths must not grow the map without bound:
+        // once it crosses MAX_TRACKED_PATHS the map is cleared, so its
+        // size never exceeds the cap.
+        let mut last = HashMap::new();
+        let now = Instant::now();
+        for i in 0..(MAX_TRACKED_PATHS * 3) {
+            let p = PathBuf::from(format!("/file-{i}.md"));
+            assert!(should_emit(&mut last, &p, now, COALESCE_WINDOW));
+            assert!(
+                last.len() <= MAX_TRACKED_PATHS,
+                "map exceeded cap: {}",
+                last.len()
+            );
+        }
+    }
+
+    #[test]
     fn distinct_paths_are_coalesced_independently() {
         let mut last = HashMap::new();
         let t0 = Instant::now();
         // A storm touching many distinct paths still emits one per path —
         // the coalesce is per-path, not global.
-        assert!(should_emit(&mut last, Path::new("/a.md"), t0, COALESCE_WINDOW));
-        assert!(should_emit(&mut last, Path::new("/b.md"), t0, COALESCE_WINDOW));
+        assert!(should_emit(
+            &mut last,
+            Path::new("/a.md"),
+            t0,
+            COALESCE_WINDOW
+        ));
+        assert!(should_emit(
+            &mut last,
+            Path::new("/b.md"),
+            t0,
+            COALESCE_WINDOW
+        ));
         // ...but a second hit on /a.md within the window is still dropped.
         assert!(!should_emit(
             &mut last,
