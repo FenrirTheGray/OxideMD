@@ -1,0 +1,431 @@
+/* ── Headings ─────────────────────────────────────────────────────── */
+.md-rendered h1,
+.md-rendered h2,
+.md-rendered h3,
+.md-rendered h4,
+.md-rendered h5,
+.md-rendered h6 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1.8em 0 0.55em;
+  letter-spacing: -0.025em;
+}
+.md-rendered h1 {
+  font-size: 2em;
+  color: var(--h1-color);
+}
+.md-rendered h2 {
+  font-size: 1.5em;
+  color: var(--h2-color);
+}
+.md-rendered h3 {
+  font-size: 1.2em;
+  color: var(--h3-color);
+}
+.md-rendered h4 {
+  font-size: 1em;
+  color: var(--fg);
+}
+.md-rendered h5 {
+  font-size: 1em;
+  color: var(--fg-toolbar);
+}
+.md-rendered h6 {
+  font-size: 1em;
+  color: var(--fg-dim);
+}
+
+/* H1 — accent underline */
+.md-rendered h1 {
+  padding-bottom: 0.35em;
+  border-bottom: 2px solid var(--border);
+  position: relative;
+}
+.md-rendered h1::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 48px;
+  height: 2px;
+  background: var(--tab-indicator);
+  border-radius: 1px;
+}
+
+/* H2 — subtle bottom border */
+.md-rendered h2 {
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── Body text ────────────────────────────────────────────────────── */
+.md-rendered p {
+  line-height: var(--content-line-height, 1.8);
+  margin: 0.8em 0;
+}
+.md-rendered strong {
+  font-weight: 700;
+  color: var(--fg);
+}
+.md-rendered em {
+  font-style: italic;
+}
+.md-rendered del {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* ── Inline code ──────────────────────────────────────────────────── */
+.md-rendered code {
+  font-family:
+    "Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.84em;
+  background: var(--code-bg, var(--bg-code));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--accent-2);
+}
+
+/* ── Code blocks ──────────────────────────────────────────────────── */
+/* `--code-bg` and `--code-accent` are user-configurable via Settings →
+   Colors. They fall back to the theme tokens so the block still renders
+   correctly before the config is applied.
+   The Rust renderer wraps each fenced code block in <div class="codeblock">
+   so we can stack a language label and a copy button against the same
+   positioning context as the <pre>. */
+.md-rendered .codeblock {
+  position: relative;
+  margin: 1.2em 0;
+}
+.md-rendered .codeblock pre {
+  margin: 0;
+}
+.md-rendered pre {
+  background: var(--code-bg, var(--bg-code));
+  border-radius: 10px;
+  padding: 20px 24px;
+  overflow-x: auto;
+  margin: 1.2em 0;
+  line-height: 1.65;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--code-accent, var(--accent));
+  box-shadow: var(--shadow-sm);
+  position: relative;
+}
+
+.md-rendered .codeblock-lang {
+  position: absolute;
+  top: 8px;
+  right: 56px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-sm) var(--ease);
+}
+
+.md-rendered .codeblock-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-rendered .codeblock-copy svg {
+  width: 14px;
+  height: 14px;
+}
+.md-rendered .codeblock:hover .codeblock-copy,
+.md-rendered .codeblock-copy:focus-visible,
+.md-rendered .codeblock:hover .codeblock-lang {
+  opacity: 1;
+}
+.md-rendered .codeblock-copy:hover {
+  color: var(--accent);
+  border-color: var(--border-focus);
+  background: var(--bg-btn-hover);
+}
+.md-rendered .codeblock-copy:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.md-rendered .codeblock-copy.copied {
+  color: var(--status-ok);
+  border-color: var(--status-ok);
+  opacity: 1;
+}
+
+.md-rendered pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  white-space: pre;
+  color: inherit;
+}
+
+/* ── Blockquotes ──────────────────────────────────────────────────── */
+.md-rendered blockquote {
+  border-left: 3px solid var(--note-accent, var(--quote-border));
+  margin: 1.2em 0;
+  padding: 14px 22px;
+  background: var(--note-bg, var(--accent-glow));
+  border-radius: 0 8px 8px 0;
+}
+
+.md-rendered blockquote p {
+  margin: 0;
+  font-style: italic;
+  font-size: 0.95em;
+  line-height: 1.75;
+  opacity: 0.9;
+}
+
+/* ── Lists ────────────────────────────────────────────────────────── */
+.md-rendered ul,
+.md-rendered ol {
+  padding-left: 1.75em;
+  margin: 0.6em 0;
+}
+.md-rendered li {
+  line-height: var(--content-line-height, 1.8);
+  margin: 0.2em 0;
+}
+.md-rendered ul li::marker {
+  color: var(--bullet-color);
+  font-size: 0.9em;
+}
+.md-rendered ol li::marker {
+  color: var(--bullet-color);
+  font-weight: 600;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+.md-rendered table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.3em 0;
+  font-size: 13.5px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.md-rendered thead {
+  background: var(--bg-table-hd);
+}
+
+.md-rendered thead tr th {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+}
+
+.md-rendered th,
+.md-rendered td {
+  padding: 10px 18px;
+  text-align: left;
+}
+
+.md-rendered tbody tr {
+  background: var(--bg-code);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--dur-xs) var(--ease);
+}
+.md-rendered tbody tr:nth-child(even) {
+  background: var(--bg-table-row);
+}
+.md-rendered tbody tr:last-child {
+  border-bottom: none;
+}
+.md-rendered tbody tr:hover {
+  background: var(--bg-btn-hover);
+}
+
+/* ── Horizontal rule ──────────────────────────────────────────────── */
+.md-rendered hr {
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--border) 20%,
+    var(--border) 80%,
+    transparent
+  );
+  margin: 2.5em 0;
+}
+
+/* ── Links ────────────────────────────────────────────────────────── */
+.md-rendered a {
+  color: var(--link);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-rendered a:hover {
+  color: var(--link-hover);
+  border-bottom-color: currentColor;
+}
+.md-rendered a.md-link {
+  transition:
+    color var(--dur-sm) var(--ease),
+    background-color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+  padding: 0.1em;
+  border-radius: 4px;
+}
+.md-rendered a.md-link:hover {
+  background-color: var(--accent-2);
+  /* border-bottom-color: transparent; */
+}
+
+/* A link whose scheme the renderer judged unsafe (javascript:, data:,
+   vbscript:) is emitted with no href — inert. Style it as plain,
+   non-interactive text so it doesn't masquerade as a working link. */
+.md-rendered a.md-link-blocked {
+  color: inherit;
+  cursor: default;
+  border-bottom: none;
+  background-color: transparent;
+}
+
+/* ── Images ───────────────────────────────────────────────────────── */
+.md-rendered img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1.4em auto;
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Remote images are inert until the user enables "Load remote images"
+   (Settings → Reading): the renderer emits them with no `src`, just
+   `.md-remote-image`. Style that empty state as a dashed box instead of a
+   broken-image icon — the browser renders the image's alt text inside it.
+   Once hydrated, hydrateImages() removes the class and sets `src`, so this
+   rule stops applying. */
+.md-rendered img.md-remote-image {
+  width: auto;
+  min-height: 2.5em;
+  padding: 0.75em 1em;
+  color: var(--fg-dim);
+  font-size: 0.85em;
+  background: var(--bg-toolbar);
+  border: 1px dashed var(--border);
+  box-shadow: none;
+}
+
+/* ── Footnotes ────────────────────────────────────────────────────── */
+/* Reference superscript: a small raised number linking to the
+   definition. Kept tight so it doesn't disturb the prose baseline. */
+.md-rendered .footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  margin-left: 0.15em;
+}
+.md-rendered .footnote-ref a {
+  border-bottom: none;
+  padding: 0 0.2em;
+}
+
+/* The definitions list, flushed to the end of the document and set
+   apart with a top rule and muted, slightly smaller text. */
+.md-rendered .footnotes {
+  margin-top: 2.5em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.9em;
+  color: var(--fg-muted);
+}
+.md-rendered .footnotes ol {
+  margin: 0;
+}
+.md-rendered .footnotes li {
+  margin: 0.4em 0;
+}
+.md-rendered .footnotes li p {
+  margin: 0.3em 0;
+}
+
+/* Back-reference arrow: returns the reader to the call site. */
+.md-rendered .footnote-backref {
+  margin-left: 0.4em;
+  border-bottom: none;
+  text-decoration: none;
+  color: var(--link);
+}
+.md-rendered .footnote-backref:hover {
+  color: var(--link-hover);
+}
+
+/* ── GFM task lists ───────────────────────────────────────────────── */
+/* Rendered when pulldown-cmark sees `- [ ]` / `- [x]` markers and emits
+   <input type="checkbox" disabled>. The checkbox sits at start-of-line
+   with negative margin so the bullet position aligns with non-task
+   list items above and below. */
+.md-rendered ul li:has(> .task-list-checkbox) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+.md-rendered .task-list-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 0.55em -2px 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  cursor: default;
+  vertical-align: baseline;
+  position: relative;
+  flex-shrink: 0;
+}
+.md-rendered .task-list-checkbox:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.md-rendered .task-list-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+

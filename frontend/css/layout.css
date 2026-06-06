@@ -1,0 +1,1394 @@
+/* ── Outline sidebar ──────────────────────────────────────────────────
+   Docked on the right side of #main-container (the folder browser is
+   the left sidebar). Toggled by btn-outline in read mode; structure
+   and visuals mirror #sidebar so the two panels feel like a pair.
+   Per-row indentation is inline (depends on the min heading level in
+   the doc). */
+#outline-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-toolbar);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+}
+#outline-sidebar.hidden {
+  display: none;
+}
+
+#outline-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+#outline-sidebar-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+#outline-sidebar-close {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+#outline-sidebar-close:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#outline-sidebar-close:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#outline-sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+#outline-sidebar-body::-webkit-scrollbar {
+  width: 10px;
+}
+#outline-sidebar-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+#outline-sidebar-body::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+#outline-sidebar-body:hover::-webkit-scrollbar-thumb {
+  background-color: var(--fg-muted);
+}
+
+.outline-empty {
+  padding: 14px 16px;
+  color: var(--fg-muted, var(--fg-toolbar));
+  font-style: italic;
+  text-align: center;
+}
+.outline-list {
+  display: flex;
+  flex-direction: column;
+}
+.outline-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  padding: 6px 12px;
+  font: inherit;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 0;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+.outline-item:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.outline-item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+.outline-h1 {
+  font-weight: 700;
+  font-size: 13px;
+}
+.outline-h2 {
+  font-weight: 600;
+}
+.outline-h3 {
+  font-weight: 500;
+}
+.outline-h4,
+.outline-h5,
+.outline-h6 {
+  font-weight: 400;
+  color: var(--fg-toolbar);
+}
+.shortcuts-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+  margin-bottom: 8px;
+}
+.shortcuts-group {
+  margin-bottom: 10px;
+}
+.shortcuts-group:last-child {
+  margin-bottom: 0;
+}
+.shortcuts-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--fg);
+}
+.shortcut-row > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.shortcut-row > span:last-child {
+  color: var(--fg-muted);
+  text-align: right;
+  min-width: 0;
+}
+.shortcut-row kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* ── Tab area ─────────────────────────────────────────────────────── */
+#tab-area {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  scrollbar-width: none;
+}
+#tab-area::-webkit-scrollbar {
+  display: none;
+}
+
+/* Tab overflow fade indicators */
+#tab-area.has-overflow-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black calc(100% - 32px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+}
+#tab-area.has-overflow-left {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 32px,
+    black 100%
+  );
+  mask-image: linear-gradient(to right, transparent, black 32px, black 100%);
+}
+#tab-area.has-overflow-left.has-overflow-right {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 32px,
+    black calc(100% - 32px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 32px,
+    black calc(100% - 32px),
+    transparent
+  );
+}
+
+/* Tab overflow scroll buttons — visible only when tabs overflow on that side */
+.tab-scroll-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  margin: 0 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0;
+  -webkit-app-region: no-drag;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    transform var(--dur-xs) var(--ease);
+}
+.tab-scroll-btn[hidden] {
+  display: none;
+}
+.tab-scroll-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.tab-scroll-btn:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.tab-scroll-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.tab-scroll-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tab-scroll-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────────────── */
+.tab {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 7px;
+  padding: 0 8px 0 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 210px;
+  min-width: 84px;
+  flex-shrink: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  position: relative;
+  user-select: none;
+  -webkit-app-region: no-drag;
+  transition:
+    color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+
+.tab:hover {
+  color: var(--fg-dim);
+  background: var(--bg-tab-hover);
+}
+
+/* Active tab takes the body color and rounds its top corners so it
+   reads as a folder tab. Its full-height background covers the 1px
+   toolbar separator at its own width, producing the seamless flow
+   into the content area below (Notepad-style). */
+.tab.active {
+  color: var(--fg);
+  background: var(--bg);
+  border-radius: 8px 8px 0 0;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: inherit;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0.55;
+  transition:
+    opacity var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease),
+    box-shadow var(--dur-xs) var(--ease);
+}
+.tab-close svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 0.85;
+}
+.tab .tab-close:hover {
+  opacity: 1;
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+}
+.tab:active {
+  background: var(--bg-tab-hover);
+}
+#tab-area:has(:focus-visible) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* ── Main container (sidebar + content) ─────────────────────────── */
+#main-container {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Sidebar (file tree) ────────────────────────────────────────── */
+#sidebar {
+  width: var(--sidebar-width, 240px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-toolbar);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  user-select: none;
+}
+
+#sidebar.hidden {
+  display: none;
+}
+
+/* Drag handle between sidebar and content. The element itself is a
+   9px transparent hit zone (extended beyond its layout slot with
+   negative margins so neighbors aren't pushed). The visible accent
+   line is painted by ::before at 1px centered, keeping the visual
+   weight the same as before while doubling the grab area. */
+#sidebar-divider {
+  flex: 0 0 9px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  margin-left: -4px;
+  margin-right: -4px;
+}
+#sidebar-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: transparent;
+  transition: background var(--dur-sm) var(--ease);
+}
+#sidebar.hidden + #sidebar-divider {
+  display: none;
+}
+#sidebar-divider:hover::before,
+#sidebar-divider.dragging::before,
+#sidebar-divider:focus-visible::before {
+  background: var(--accent);
+}
+#sidebar-divider:focus-visible {
+  outline: none;
+}
+body.resizing-sidebar,
+body.resizing-sidebar * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+#sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+#sidebar-folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-header-actions button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+.sidebar-header-btn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.sidebar-header-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.sidebar-header-btn:focus-visible {
+  outline: none;
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#sidebar-close:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#sidebar-close:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#sidebar-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-filter-icon {
+  position: absolute;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  color: var(--fg-dim);
+  pointer-events: none;
+}
+
+#sidebar-filter-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 4px 24px 4px 26px;
+  outline: none;
+  min-width: 0;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+#sidebar-filter-input::placeholder {
+  color: var(--fg-dim);
+}
+#sidebar-filter-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+#sidebar-filter-clear {
+  position: absolute;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+#sidebar-filter-clear:hover {
+  background: var(--bg-btn-hover);
+  color: var(--fg);
+}
+#sidebar-filter-clear:focus-visible {
+  outline: none;
+  color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.tree-match {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+#sidebar-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 6px 0;
+  font-size: 13px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-hover) transparent;
+}
+
+#sidebar-tree::-webkit-scrollbar {
+  width: 10px;
+}
+#sidebar-tree::-webkit-scrollbar-track {
+  background: transparent;
+}
+#sidebar-tree::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+#sidebar-tree:hover::-webkit-scrollbar-thumb {
+  background-color: var(--fg-muted);
+}
+
+.tree-node {
+  display: block;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px 3px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  /* Grow to fit the longest filename so horizontal scrolling of
+     #sidebar-tree reveals it; min-width keeps the hover/active
+     background extending across the visible viewport for short names. */
+  width: max-content;
+  min-width: 100%;
+  color: var(--fg);
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+.tree-row:hover {
+  background: var(--bg-btn-hover);
+}
+.tree-row:focus-visible {
+  outline: none;
+  background: var(--bg-btn-hover);
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+}
+.tree-row:active {
+  background: var(--bg-tab-hover);
+}
+.tree-row.active {
+  background: var(--bg-tab-hover);
+  color: var(--accent);
+}
+
+.tree-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  transition: transform var(--dur-sm) var(--ease);
+}
+.tree-twisty.empty {
+  visibility: hidden;
+}
+.tree-twisty svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.tree-node.expanded > .tree-row > .tree-twisty {
+  transform: rotate(90deg);
+}
+
+.tree-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+}
+.tree-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.tree-row:hover .tree-icon,
+.tree-row.active .tree-icon {
+  color: var(--accent);
+}
+
+.tree-label {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+}
+
+.tree-children {
+  display: none;
+  padding-left: 12px;
+}
+.tree-node.expanded > .tree-children {
+  display: block;
+}
+
+.tree-empty {
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+  font-style: italic;
+}
+
+.tree-truncated {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-align: center;
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* ── Content scroll area ──────────────────────────────────────────── */
+#content-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-hover) transparent;
+}
+
+/* WebKit / Chromium — floating pill scrollbar */
+#content-scroll::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+#content-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+#content-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  min-height: 40px;
+  transition: background-color var(--dur-sm) var(--ease);
+}
+
+/* Container hover lifts the thumb further */
+#content-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: var(--fg-muted);
+}
+
+#content-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-toolbar);
+}
+
+#content-scroll::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent);
+}
+
+#content-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Content ──────────────────────────────────────────────────────── */
+#content {
+  max-width: var(--reading-width, 800px);
+  margin: 0 auto;
+  /* Fluid gutters: shrink toward the edges on narrow windows so the
+     document keeps as much width as possible, full padding when roomy. */
+  padding: clamp(24px, 5vw, 56px) clamp(16px, 4vw, 44px);
+  user-select: text;
+  cursor: text;
+}
+
+/* ── Welcome screen ───────────────────────────────────────────────── */
+#welcome {
+  max-width: 560px;
+  margin: 56px auto 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  user-select: none;
+  cursor: default;
+  font-family: var(--font-family);
+}
+
+/* Reset shared markdown heading styles on the welcome screen. */
+.md-rendered #welcome h1,
+.md-rendered #welcome h2 {
+  border: none;
+  padding: 0;
+  margin: 0;
+  position: static;
+}
+.md-rendered #welcome h1::after,
+.md-rendered #welcome h2::after {
+  content: none;
+}
+
+/* Wordmark */
+.welcome-wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: fit-content;
+}
+#welcome .welcome-wordmark-name {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--h1-color);
+  margin: 0;
+  line-height: 1.2;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--accent);
+}
+.welcome-wordmark-tag {
+  font-size: 15px;
+  color: var(--fg-dim);
+  letter-spacing: 0.03em;
+  font-variant: small-caps;
+}
+
+/* Framed hero — drop target / primary CTA */
+.welcome-hero {
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+  padding: 24px 22px;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  text-align: left;
+  width: 100%;
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    transform var(--dur-sm) var(--ease);
+}
+.welcome-hero:hover {
+  border-color: var(--accent);
+  border-style: solid;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.welcome-hero:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+.welcome-hero:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.welcome-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  background: var(--accent-glow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.welcome-hero-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.welcome-hero-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+#welcome .welcome-hero-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  margin: 0;
+  line-height: 1.25;
+}
+.welcome-hero-sub {
+  font-size: 12px;
+  color: var(--fg-dim);
+  line-height: 1.6;
+}
+.welcome-hero-cta {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+  transition:
+    background var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+.welcome-hero:hover .welcome-hero-cta {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Shortcuts section */
+.welcome-shortcuts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.welcome-col-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-dim);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.welcome-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+  row-gap: 2px;
+}
+@media (max-width: 520px) {
+  .welcome-shortcuts {
+    grid-template-columns: 1fr;
+  }
+  /* Give the ellipsizing file path priority over the line/word counts
+     in the cramped status bar. */
+  #status-counts {
+    display: none;
+  }
+}
+.welcome-shortcut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  font-size: 12px;
+  gap: 10px;
+}
+.welcome-shortcut-label {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.welcome-shortcut-keys {
+  display: inline-flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+#welcome kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family:
+    ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-toolbar);
+  letter-spacing: 0.02em;
+  min-width: 20px;
+}
+.welcome-hero-sub kbd {
+  margin: 0 1px;
+  border-bottom-width: 1px;
+  padding: 1px 6px;
+  font-size: 11.5px;
+  background: var(--bg);
+}
+
+/* ── Status bar ───────────────────────────────────────────────────── */
+#status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-toolbar);
+  height: 34px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+#status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#file-path {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  cursor: default;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition:
+    color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+#file-path.clickable {
+  cursor: pointer;
+}
+#file-path.clickable:hover {
+  color: var(--accent-2);
+}
+#file-path:not(.clickable):hover {
+  color: var(--accent-2);
+}
+#file-path.clickable:focus-visible {
+  outline: none;
+  color: var(--accent-2);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+#file-path.copied {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+#status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 11px;
+}
+#status-indicator.hidden {
+  display: none;
+}
+
+/* Line / word / char counts for the active document — shown in both read
+   and edit mode. JS keeps the text fresh (tab switch, doc change,
+   selection change, mode change) and blanks it on the welcome screen;
+   :empty drops the separator border so a blank element leaves no
+   orphaned divider in the status bar. */
+#status-counts {
+  color: var(--fg-dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 0 0 0 8px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+#status-counts:empty {
+  padding: 0;
+  margin-left: 0;
+  border-left: none;
+}
+
+.status-sep {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.status-label {
+  color: var(--fg-dim);
+  letter-spacing: 0.02em;
+}
+
+#status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  flex-shrink: 0;
+  box-shadow: 0 0 4px var(--status-ok-glow);
+}
+
+/* While loading: hide dot, show spinner */
+#status-indicator.status-loading #status-dot {
+  display: none;
+}
+#status-indicator:not(.status-loading) #status-spinner {
+  display: none;
+}
+
+#status-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Welcome screen: recent files ─────────────────────────────────── */
+.welcome-recent {
+  width: 100%;
+  max-width: 560px;
+  margin: 32px auto 8px;
+}
+.welcome-recent[hidden] {
+  display: none;
+}
+.welcome-recent .welcome-col-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.welcome-recent-clear {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition:
+    color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+.welcome-recent-clear:hover {
+  color: var(--accent);
+  background: var(--bg-btn-hover);
+}
+.welcome-recent-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.welcome-recent-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 6px;
+  transition: background var(--dur-sm) var(--ease);
+}
+.welcome-recent-item:hover {
+  background: var(--bg-btn-hover);
+}
+.welcome-recent-link {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 18px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--fg);
+  font: inherit;
+  border-radius: 6px;
+  min-width: 0;
+}
+.welcome-recent-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+.welcome-recent-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.welcome-recent-dir {
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: right;
+  min-width: 0;
+}
+.welcome-recent-item.missing .welcome-recent-name {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+.welcome-recent-forget {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  width: 28px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 12px;
+  opacity: 0;
+  transition:
+    opacity var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+.welcome-recent-item:hover .welcome-recent-forget,
+.welcome-recent-forget:focus-visible {
+  opacity: 1;
+}
+.welcome-recent-forget:hover {
+  color: var(--danger);
+  background: var(--bg-danger-hover);
+}
+
+/* ── Responsive / narrow-window layout ────────────────────────────────
+   The window min-size scales down to 480×270, so the desktop layout has
+   to survive phone-width geometry. Breakpoints (literal px so they can
+   live in @media conditions):
+
+     ≤ 720px  sidebars become overlay drawers (body.narrow, set by
+              window-size.js) instead of pushing the document.
+     ≤ 640px  the editor/preview split collapses to a single pane and the
+              formatting toolbar scrolls horizontally instead of clipping.
+     ≤ 520px  welcome-grid + status-counts tweaks (see the block above).
+
+   Drawer open/closed state:
+     #sidebar.hidden      → no folder open (docked behavior unchanged wide).
+     #sidebar.collapsed   → folder open but drawer slid away (narrow only).
+   The slide transition is auto-disabled by the reduced-motion block below
+   (global transition-duration override). */
+
+/* Backdrop sits behind the drawers, above the content. Hidden by default
+   in every layout; the narrow block reveals it only while a drawer is
+   actually open (via :has), so it never intercepts clicks when docked. */
+#drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* Positioning context for the absolutely-placed drawers + backdrop. */
+  #main-container {
+    position: relative;
+  }
+
+  /* File tree → left drawer. Floats over the content (position:absolute)
+     so the document keeps full width; .collapsed slides it off-screen
+     without forgetting the open folder. */
+  #sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(var(--sidebar-width, 240px), 85vw);
+    z-index: 40;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--dur) var(--ease);
+  }
+  #sidebar.collapsed {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  /* Can't drag-resize a drawer. */
+  #sidebar-divider {
+    display: none;
+  }
+
+  /* Outline → right drawer. */
+  #outline-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: min(260px, 85vw);
+    z-index: 40;
+    box-shadow: var(--shadow-md);
+  }
+
+  #drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  /* Show the backdrop only while a drawer is actually open. */
+  body.narrow
+    #main-container:has(#sidebar:not(.hidden):not(.collapsed))
+    #drawer-backdrop,
+  body.narrow #main-container:has(#outline-sidebar:not(.hidden)) #drawer-backdrop {
+    display: block;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Two side-by-side panes can't share <640px — show one pane. The
+     existing split-mode toggle still chooses editor vs preview; we only
+     drop the simultaneous two-pane layout. Default (no mode class) shows
+     the editor. */
+  #editor-split:not(.split-mode-preview) #preview-pane,
+  #editor-split:not(.split-mode-preview) #split-divider {
+    display: none;
+  }
+  #editor-split:not(.split-mode-preview) #editor-pane {
+    flex: 1 1 auto;
+  }
+  #editor-split.split-mode-preview #editor-pane,
+  #editor-split.split-mode-preview #split-divider {
+    display: none;
+  }
+  #editor-split.split-mode-preview #preview-pane {
+    flex: 1 1 auto;
+  }
+
+  /* Formatting toolbar: scroll the button strip horizontally instead of
+     clipping it. Save/Discard stay pinned at the right edge. */
+  #edit-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  #edit-toolbar .fmt-content {
+    grid-column: 1;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  #edit-toolbar .fmt-content::-webkit-scrollbar {
+    display: none;
+  }
+  #edit-toolbar .edit-actions {
+    grid-column: 2;
+  }
+}
+

@@ -1,0 +1,1312 @@
+/* ── Settings: tab bar ────────────────────────────────────────────── */
+#settings-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px 0;
+  /* Narrow windows: let the category tabs scroll horizontally rather
+     than wrap (wrapping would break the seamless tab→body fill). */
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--bg-settings-hd);
+  /* Inset shadow so the active tab's body-color fill can cover its
+     own width of the separator and flow seamlessly into #settings-body
+     below (Notepad-style tabs). */
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+#settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+.settings-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  /* Keep full size so the strip scrolls (see #settings-tabs) instead of
+     the tabs squishing on narrow windows. */
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 8px 14px 9px;
+  border-radius: 7px 7px 0 0;
+  position: relative;
+  transition:
+    color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+.settings-tab:hover {
+  color: var(--fg);
+  background: var(--bg-btn-hover);
+}
+.settings-tab.active {
+  color: var(--fg);
+  background: var(--bg-settings);
+}
+.settings-tab:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+#settings-body {
+  padding: 18px 22px 20px;
+  display: flex;
+  flex-direction: column;
+  /* Fixed-height body so the dialog is the same size on every tab —
+     switching categories never resizes the modal. The body scrolls
+     internally. The height is the original 600px on roomy windows but
+     caps to the viewport on short ones so the dialog still fits. */
+  height: min(600px, calc(100vh - 200px));
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+#settings-body::-webkit-scrollbar {
+  width: 10px;
+}
+#settings-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+#settings-body::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+#settings-body:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+}
+#settings-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-muted);
+}
+#settings-body::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Thematic break between groups of settings rows. Matches the hairline used
+   in the About panel (var(--border-subtle)); the panel's row gap supplies the
+   spacing above/below, so the rule itself carries no margin. */
+.settings-divider {
+  height: 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-row label {
+  width: 180px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-toolbar);
+  letter-spacing: 0.01em;
+}
+
+/* The Markdown-extensions row is a multi-line control (chips + input + error
+   message), so top-align the row and nudge the label down to sit beside the
+   first chip line, rather than floating against the middle of the stack. */
+.settings-row:has(.tags-field) {
+  align-items: flex-start;
+}
+.settings-row:has(.tags-field) label {
+  padding-top: 4px;
+}
+
+/* Plain text input for free-form settings values (e.g. the Markdown
+   extension list). Mirrors the sidebar filter field's look so it sits
+   consistently among the segmented/number controls. */
+.settings-text-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+.settings-text-input::placeholder {
+  color: var(--fg-dim);
+}
+.settings-text-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Tags field — the Markdown-extensions editor. A list of removable chips
+   (the current value) sits above a dedicated input for adding more; the two
+   are separate elements. Tokens are validated on commit, so a typo can't
+   silently become an unmatchable extension — the input shakes to reject it. */
+.tags-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tags-list .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg);
+}
+.tags-list .chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+.tags-list .chip-remove:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+}
+.tags-list .chip-remove:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+.tags-empty-hint {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--fg-dim);
+}
+.tags-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tags-field.full-width .tags-list {
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+.tags-field.full-width .tags-input-row {
+  justify-content: flex-start;
+}
+.tags-field.full-width .tags-input {
+  flex: 1;
+  max-width: 300px;
+}
+.tags-input {
+  width: 170px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-family: var(--font-family);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+.tags-input::placeholder {
+  color: var(--fg-dim);
+}
+.tags-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+.tags-input.tags-input-invalid {
+  animation: tags-shake 0.3s var(--ease);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-danger-hover);
+}
+@keyframes tags-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+/* Honor reduced-motion: keep the red border + shadow as the invalid cue,
+   drop the shake. The role="alert" message carries the reason regardless. */
+@media (prefers-reduced-motion: reduce) {
+  .tags-input.tags-input-invalid {
+    animation: none;
+  }
+}
+/* Inline validation message: a warning icon + reason, anchored directly
+   under the input row so the cause→fix link is immediate. Hidden until
+   setError() adds `.is-visible`; persists while the bad input remains and
+   clears on the next keystroke. Distinct from toasts (which are transient,
+   detached app-level notices); framed with a 1px danger border so it reads
+   as a self-contained error card. */
+.tags-error {
+  display: none;
+  /* Hug the message rather than stretch across the whole column, so it
+     reads as a compact banner like the toast (not a full-width bar). */
+  align-self: flex-start;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
+}
+.tags-error.is-visible {
+  display: flex;
+}
+.tags-error-icon {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  /* nudge the glyph onto the first text line's baseline */
+  margin-top: 1px;
+}
+
+/* Small "i in a circle" affordance next to a settings label — hover or
+   keyboard focus surfaces the explanatory text. Sits inline with the
+   label text; uses the help cursor so it reads as informational, not
+   clickable. */
+.settings-info-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  color: var(--fg-muted);
+  cursor: help;
+  border-radius: 50%;
+}
+.settings-info-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.settings-info-icon:hover {
+  color: var(--accent);
+}
+.settings-info-icon:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* The explanatory text, pulled straight from `aria-label`, shown on both
+   hover and keyboard focus. A native `title` only appears on mouse hover
+   (and not at all reliably in WebKitGTK), so keyboard users would never
+   see it; this covers them. Screen readers read the `aria-label` itself. */
+.settings-info-icon::after {
+  content: attr(aria-label);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 240px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+}
+.settings-info-icon.tooltip-left::after {
+  left: auto;
+  right: 0;
+}
+.settings-info-icon:hover::after,
+.settings-info-icon:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Custom number input */
+.custom-number {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.custom-number-value {
+  flex: 1;
+  text-align: center;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  padding: 6px 0;
+  user-select: none;
+}
+.custom-number-btn {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  font-size: 14px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition:
+    background var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease);
+  line-height: 1;
+  border-radius: 6px;
+  margin: 2px;
+}
+.custom-number-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+/* Inset focus ring (mirrors `.segmented > button`): the parent
+   `.custom-number` is `overflow: hidden`, so a default/outset outline
+   gets clipped and renders as a stray sliver. Keeping it inset and
+   matching the button's own radius makes it sit cleanly inside the pill. */
+.custom-number-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+  z-index: 1;
+}
+
+/* Segmented control — two-option pill used for binary settings.
+   Sits at intrinsic width, pushed to the row's trailing edge so the
+   On/Off pills line up vertically across rows instead of stretching
+   to fill the column like the dropdowns and text inputs. */
+.segmented {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.segmented > button {
+  flex: 0 0 auto;
+  min-width: 56px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 6px 14px;
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease);
+}
+.segmented > button + button {
+  border-left: 1px solid var(--border);
+}
+.segmented > button:hover:not([aria-pressed="true"]) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+.segmented > button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+/* Gap ring: `--border-focus` and `--accent` are the same blue, so a
+   plain accent-colored ring on an unpressed button looked identical to
+   the accent-filled pressed button. The inner 2px ring of the button's
+   own background detaches the focus ring so it clearly reads as
+   "focused" rather than "selected", on pressed and unpressed alike. */
+.segmented > button:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 2px var(--bg),
+    inset 0 0 0 4px var(--border-focus);
+  z-index: 1;
+}
+
+/* Custom select dropdown */
+.custom-select {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  user-select: none;
+}
+.custom-select-trigger {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  padding: 6px 28px 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.custom-select.open .custom-select-trigger {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.custom-select-options {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 0;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.custom-select.open .custom-select-options {
+  display: block;
+}
+.custom-select-option {
+  padding: 6px 10px;
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease);
+}
+.custom-select-option:hover {
+  background: var(--bg-btn-hover);
+}
+.custom-select-option.selected {
+  color: var(--accent);
+}
+.custom-select-option.focused {
+  background: var(--bg-btn-hover);
+}
+
+/* ── Settings: Shortcuts panel ────────────────────────────────────── */
+.shortcuts-intro {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+.shortcuts-intro kbd {
+  display: inline-block;
+  padding: 0 5px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.shortcut-group-title {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-toolbar);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.shortcut-group-title:first-child {
+  margin-top: 0;
+}
+
+.shortcut-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.shortcut-edit-row:hover {
+  background: var(--bg-btn-hover);
+}
+.shortcut-edit-label {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--fg);
+  min-width: 0;
+}
+.shortcut-edit-label-note {
+  display: block;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+.shortcut-edit-pill {
+  min-width: 140px;
+  padding: 5px 10px;
+  font-family: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background 100ms,
+    border-color 100ms;
+}
+.shortcut-edit-pill:hover {
+  border-color: var(--border-focus);
+}
+.shortcut-edit-pill:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+.shortcut-edit-pill.capturing {
+  color: var(--accent);
+  border-color: var(--border-focus);
+  background: var(--bg-btn-hover);
+  animation: shortcut-capture-pulse 1.4s ease-in-out infinite;
+}
+@keyframes shortcut-capture-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(97, 175, 239, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(97, 175, 239, 0);
+  }
+}
+
+.shortcut-edit-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition:
+    background 100ms,
+    color 100ms,
+    border-color 100ms;
+}
+.shortcut-edit-reset:hover {
+  color: var(--fg);
+  background: var(--bg-btn-hover);
+  border-color: var(--border);
+}
+.shortcut-edit-reset:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+.shortcut-edit-reset[disabled] {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+.shortcut-edit-reset svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+}
+
+.shortcut-edit-row.locked .shortcut-edit-pill {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.shortcut-edit-row.locked .shortcut-edit-pill:hover {
+  border-color: var(--border);
+}
+
+.shortcuts-conflict {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--fg);
+  background: rgba(224, 108, 117, 0.14);
+  border: 1px solid rgba(224, 108, 117, 0.4);
+}
+.shortcuts-conflict.hidden {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shortcut-edit-pill.capturing {
+    animation: none;
+  }
+}
+
+/* ── Custom font options (dynamic) ────────────────────────────────── */
+.custom-font-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.custom-font-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-font-remove {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  opacity: 0;
+  transition:
+    opacity var(--dur-xs) var(--ease),
+    background var(--dur-xs) var(--ease),
+    color var(--dur-xs) var(--ease),
+    border-color var(--dur-xs) var(--ease);
+}
+.custom-font-option:hover .custom-font-remove {
+  opacity: 0.65;
+}
+.custom-font-remove:hover {
+  opacity: 1 !important;
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.font-empty-hint {
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  font-style: italic;
+}
+
+/* Section headers inside the Themes / Fonts dropdowns — bracket each
+   header label above and below with a divider so "Included" and
+   "Imported" read as section separators, not loose labels. Static,
+   not selectable, no hover affordance. */
+.dropdown-section-header {
+  padding: 6px 10px;
+  margin: 4px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+.dropdown-section-header:first-child {
+  margin-top: 0;
+}
+
+/* Keyboard focus for custom select trigger */
+.custom-select-trigger:focus-visible {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  outline: none;
+}
+
+/* Color cards: framed swatch + label + hex code */
+.color-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.color-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+.color-card:hover {
+  border-color: var(--border-focus);
+  background: var(--bg-btn-hover);
+}
+.color-card:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.color-card .color-swatch {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 2px;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color var(--dur-sm) var(--ease);
+}
+.color-card .color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-card .color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+.color-card .color-swatch:focus {
+  outline: none;
+}
+.color-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: 1.2;
+}
+.color-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.005em;
+}
+.color-hex {
+  font-size: 10.5px;
+  color: var(--fg-dim);
+  font-family: ui-monospace, "SF Mono", Consolas, "Roboto Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* Section headings inside the Colors panel — split the content swatches
+   from the interface-palette swatches, with sub-labels per palette
+   group. Styled after .settings-preview-label. */
+.color-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+  margin-top: 6px;
+}
+.color-subsection-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.01em;
+}
+
+#settings-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--bg-settings-ft);
+  border-top: 1px solid var(--border);
+}
+
+#settings-footer button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 18px;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+#settings-footer button:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#settings-footer button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+#settings-footer #settings-reset {
+  margin-right: auto;
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+#settings-footer #settings-reset:hover {
+  color: var(--accent);
+  background: var(--bg-btn-hover);
+}
+
+#settings-footer #settings-save {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 700;
+  padding: 7px 24px;
+}
+#settings-footer #settings-save:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+#settings-footer #settings-save:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+#settings-footer #settings-save:disabled {
+  background: var(--bg);
+  color: var(--fg-muted);
+  border-color: var(--border);
+  cursor: default;
+  filter: none;
+}
+#settings-footer #settings-save:disabled:hover {
+  filter: none;
+  color: var(--fg-muted);
+}
+
+/* ── Settings: update section ─────────────────────────────────────── */
+.settings-value {
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#btn-check-updates,
+.settings-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 18px;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+#btn-check-updates:hover:not(:disabled),
+.settings-action-btn:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#btn-check-updates:disabled,
+.settings-action-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#btn-check-updates:focus-visible,
+.settings-action-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#btn-check-updates svg,
+.settings-action-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ── Settings: update status notification ─────────────────────────── */
+.update-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+  color: var(--fg);
+  animation: update-status-in var(--dur) var(--ease-out);
+}
+.update-status.hidden {
+  display: none;
+}
+.update-status svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.update-status .update-message {
+  flex: 1;
+  line-height: 1.4;
+  min-width: 0;
+}
+.update-status .update-version {
+  font-weight: 700;
+}
+.update-status.available {
+  background: var(--status-ok-glow);
+  border-color: var(--status-ok);
+  color: var(--status-ok);
+}
+.update-status.current {
+  color: var(--status-ok);
+}
+.update-status.error {
+  background: var(--bg-danger-hover);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.update-status .update-download {
+  flex-shrink: 0;
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  transition: filter var(--dur-sm) var(--ease);
+}
+.update-status.available .update-download {
+  background: var(--status-ok);
+  border: 1px solid var(--status-ok);
+}
+.update-status.error .update-download {
+  background: var(--danger);
+  border: 1px solid var(--danger);
+}
+.update-status .update-download:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+.update-status .update-download:active {
+  filter: brightness(0.95);
+}
+.update-status .update-download:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+/* Inline progress strip shown while an update is downloading +
+   installing. The bar sits flush against the right edge of the
+   status row so the message text keeps its space. `.indeterminate`
+   sweeps when the server didn't send a content-length so we can't
+   compute a true percentage. */
+.update-status .update-progress-bar {
+  flex-shrink: 0;
+  width: 120px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-subtle, var(--border));
+  overflow: hidden;
+}
+.update-status .update-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--status-ok);
+  border-radius: inherit;
+  transition: width var(--dur-sm) var(--ease);
+}
+.update-status .update-progress-fill.indeterminate {
+  animation: update-progress-sweep 1.4s var(--ease) infinite;
+  transform-origin: left center;
+}
+.update-status .update-progress-text {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+@keyframes update-progress-sweep {
+  0%   { transform: translateX(-100%) scaleX(0.35); }
+  50%  { transform: translateX(0)      scaleX(0.55); }
+  100% { transform: translateX(100%)  scaleX(0.35); }
+}
+
+@keyframes update-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Settings: color preview ──────────────────────────────────────── */
+.settings-preview {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+}
+.settings-preview-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-preview-card .preview-h1 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--preview-h1, var(--h1-color));
+  letter-spacing: -0.01em;
+}
+.settings-preview-card .preview-h2 {
+  font-size: 14.5px;
+  font-weight: 650;
+  color: var(--preview-h2, var(--h2-color));
+}
+.settings-preview-card .preview-h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--preview-h3, var(--h3-color));
+}
+.settings-preview-card .preview-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.settings-preview-card .preview-list li::marker {
+  color: var(--preview-bullet, var(--bullet-color));
+  font-weight: 600;
+}
+.settings-preview-card .preview-code {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  font-family:
+    "Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, monospace;
+  font-size: 11.5px;
+  background: var(--preview-code-bg, var(--code-bg, var(--bg-code)));
+  border: 1px solid var(--border);
+  border-left: 3px solid
+    var(--preview-code-accent, var(--code-accent, var(--accent)));
+  border-radius: 6px;
+  color: var(--fg);
+  overflow-x: auto;
+}
+.settings-preview-card .preview-note {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-style: italic;
+  background: var(--preview-note-bg, var(--note-bg, var(--accent-glow)));
+  border-left: 3px solid
+    var(--preview-note-accent, var(--note-accent, var(--quote-border)));
+  border-radius: 0 6px 6px 0;
+  color: var(--fg);
+}
+
+/* ── Settings: About panel ────────────────────────────────────────── */
+.about-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 12px;
+}
+.about-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.about-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  margin-top: 4px;
+}
+.about-tagline {
+  font-size: 12px;
+  color: var(--fg-muted);
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.about-version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.about-version {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.about-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+.about-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.about-meta-row + .about-meta-row {
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+}
+.about-meta-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+.about-meta-value {
+  font-size: 12px;
+  color: var(--fg);
+  font-weight: 500;
+}
+.about-link {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--dur-sm) var(--ease);
+}
+.about-link:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+.about-link:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* About tab has no resettable/persisted settings: Reset and Save are
+   hidden via `el.hidden` in activateSettingsTab. The `on-about` class
+   still drives Cancel's right-alignment so it sits flush on that tab. */
+#settings-dialog.on-about #settings-cancel {
+  margin-left: auto;
+}
+

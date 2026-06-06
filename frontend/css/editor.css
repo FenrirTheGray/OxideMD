@@ -1,0 +1,652 @@
+/* ── Edit toggle ───────────────────────────────────────────────────── */
+/* Inherits #toolbar-buttons button styling. aria-pressed reflects whether
+   the active tab is in edit mode; the pressed visual reuses the .active
+   treatment from the toolbar rules above. */
+#btn-mode-toggle[aria-pressed="true"]:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+
+/* ── Tab dirty indicator ──────────────────────────────────────────── */
+/* A tab with an unsaved buffer (dirty, or a recovered draft — both set
+   the `.dirty` class via isDirty()) carries an accent dot before its
+   title. Sized + ringed for contrast against both the active tab (body
+   bg) and inactive tabs (toolbar bg); the dot stays full-opacity even
+   though inactive tab text is dimmed, so it never washes out. */
+.tab.dirty .tab-title::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+  margin-right: 7px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ── Edit mode: split editor + live preview ──────────────────────────
+   While editing, #content is hidden and #editor-split takes over the
+   scroll area. Each pane scrolls independently, so the wrapper itself
+   must not scroll — otherwise the whole split would drift as one. */
+body.editing #content {
+  display: none;
+}
+body.editing #content-scroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Visibility is entirely driven by body.editing — no per-tab juggling
+   of the `hidden` attribute is needed. */
+#editor-split {
+  /* Fraction of width given to the editor pane; the divider sets this. */
+  --editor-frac: 50%;
+  display: none;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+body.editing #editor-split {
+  display: flex;
+}
+
+#editor-pane {
+  flex: 0 0 var(--editor-frac);
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+/* Affordance while image files are dragged over the editor — see the
+   onDragDropEvent handler. Inset outline so it reads over the CodeMirror
+   surface without shifting layout. */
+#editor-pane.drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+  background: var(--accent-glow);
+}
+
+#preview-pane {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: clamp(16px, 3vw, 28px) clamp(16px, 4vw, 32px);
+  cursor: text;
+  user-select: text;
+  background: var(--bg);
+}
+
+/* Split-mode classes set on #editor-split by editor.js. The default (no
+   class) is the resizable split layout above. These hide one pane and
+   the divider so the remaining pane fills the row. */
+#editor-split.split-mode-editor #preview-pane,
+#editor-split.split-mode-editor #split-divider {
+  display: none;
+}
+#editor-split.split-mode-editor #editor-pane {
+  flex: 1 1 auto;
+}
+#editor-split.split-mode-preview #editor-pane,
+#editor-split.split-mode-preview #split-divider {
+  display: none;
+}
+#editor-split.split-mode-preview #preview-pane {
+  flex: 1 1 auto;
+}
+
+/* Drag handle between the two panes. The hit area is a bit wider than
+   the visible line so a slight miss still grabs it (no-precision-required). */
+#split-divider {
+  flex: 0 0 6px;
+  align-self: stretch;
+  background: var(--border);
+  border-left: 1px solid transparent;
+  border-right: 1px solid transparent;
+  cursor: col-resize;
+  transition: background var(--dur-sm) var(--ease);
+  user-select: none;
+}
+#split-divider:hover,
+#split-divider.dragging,
+#split-divider:focus-visible {
+  background: var(--accent);
+  outline: none;
+}
+
+/* Editor and preview share the same webkit scrollbar treatment as the
+   main content scroll. */
+#editor-pane::-webkit-scrollbar,
+#preview-pane::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+#editor-pane::-webkit-scrollbar-track,
+#preview-pane::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+#editor-pane::-webkit-scrollbar-thumb,
+#preview-pane::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  min-height: 40px;
+  transition: background-color var(--dur-sm) var(--ease);
+}
+#editor-pane:hover::-webkit-scrollbar-thumb,
+#preview-pane:hover::-webkit-scrollbar-thumb {
+  background-color: var(--fg-muted);
+}
+#editor-pane::-webkit-scrollbar-thumb:hover,
+#preview-pane::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-toolbar);
+}
+#editor-pane::-webkit-scrollbar-thumb:active,
+#preview-pane::-webkit-scrollbar-thumb:active {
+  background-color: var(--accent);
+}
+
+/* While dragging the divider, freeze text selection everywhere so the
+   cursor doesn't accidentally select page text as it moves. */
+body.resizing-split,
+body.resizing-split * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* CodeMirror 6 root. The view fills the pane; the inner .cm-scroller is
+   the actual scroll container. Padding and font come from a CM6 theme
+   (oxideCmTheme in editor.js); only structural rules live here. */
+.md-editor.cm-editor {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--fg);
+  border: none;
+  outline: none;
+}
+
+.md-editor.cm-editor.cm-focused {
+  outline: none;
+}
+
+/* CM6 sets a default outline on the focused content; suppress it to
+   match the textarea look. */
+.md-editor .cm-content {
+  outline: none;
+}
+
+/* CM6 find/replace panel — mirrors the read-mode #search-bar so the
+   edit-mode surface feels like a continuation of the same feature.
+   Selectors are bumped one class above CM6's base theme
+   (.cm-panel.cm-search …) so our skin always wins regardless of the
+   stylesheet injection order. CM6 also applies a per-element
+   margin: .2em .6em .2em 0 to inputs/buttons/labels and absolutely
+   positions the close button — both are reset here so flex gap drives
+   the rhythm and the close button sits inline like #search-close. */
+.md-editor .cm-panels {
+  background: var(--bg-search);
+  color: var(--fg);
+}
+.md-editor .cm-panels-top {
+  border-bottom: 1px solid var(--border);
+}
+
+.md-editor .cm-panel.cm-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  position: static;
+  font-family: var(--font-family);
+  font-size: 13px;
+}
+.md-editor .cm-panel.cm-search br {
+  display: none;
+}
+.md-editor .cm-panel.cm-search input,
+.md-editor .cm-panel.cm-search button,
+.md-editor .cm-panel.cm-search label {
+  margin: 0;
+}
+
+.md-editor .cm-panel.cm-search .cm-textfield {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  min-width: 200px;
+  outline: none;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    box-shadow var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search .cm-textfield::placeholder {
+  color: var(--fg-dim);
+}
+.md-editor .cm-panel.cm-search .cm-textfield:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.md-editor .cm-panel.cm-search .cm-button {
+  background: transparent;
+  background-image: none;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+  text-transform: none;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search .cm-button:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search .cm-button:focus-visible {
+  outline: none;
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+}
+
+/* Option toggles (match case / regexp / by word). Styled as compact
+   pill-labels that pick up --accent-glow when their checkbox is :checked —
+   same active treatment as #search-case in the read-mode bar. */
+.md-editor .cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  user-select: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search label:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search label:has(input:checked) {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition:
+    background var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.md-editor .cm-panel.cm-search label input[type="checkbox"]:checked::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--bg);
+  clip-path: polygon(14% 50%, 0 64%, 36% 100%, 100% 28%, 86% 14%, 36% 70%);
+}
+
+/* Close button — borderless, danger-hover treatment matching #search-close.
+   CM6's base positions this absolutely (top: 0; right: 4px); reset to
+   inline so it flows at the end of the row alongside the toggles. */
+.md-editor .cm-panel.cm-search [name="close"] {
+  position: static;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 8px;
+  margin-left: auto;
+  cursor: pointer;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.md-editor .cm-panel.cm-search [name="close"]:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.md-editor .cm-panel.cm-search [name="close"]:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Edit formatting toolbar ──────────────────────────────────────── */
+/* Shown only while a tab is in edit mode. Visibility is driven by the
+   `hidden` attribute on the element (set/cleared in syncToolbar) —
+   display:grid by default, display:none when [hidden] is present.
+   Three-column grid keeps the formatting cluster visually centered
+   while anchoring the primary Save CTA at the right edge. */
+#edit-toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 4px 12px;
+  min-height: 38px;
+  flex-shrink: 0;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+#edit-toolbar[hidden] {
+  display: none;
+}
+
+#edit-toolbar .fmt-content {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+#edit-toolbar .fmt-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+#edit-toolbar .fmt-divider {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+
+#edit-toolbar .fmt-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+#edit-toolbar .fmt-btn:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border);
+}
+#edit-toolbar .fmt-btn:active:not(:disabled) {
+  background: var(--accent-glow);
+}
+#edit-toolbar .fmt-btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+#edit-toolbar .fmt-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#edit-toolbar .fmt-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Save is the sole primary CTA while editing. Solid accent fill (the
+   prior gradient + drop-shadow read as a marketing CTA against the flat
+   formatting icons); position alone provides the weight. Discard sits
+   beside it as a quieter secondary — same height, transparent fill,
+   border that activates only on hover so it doesn't compete visually. */
+#edit-toolbar .edit-actions {
+  grid-column: 3;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#edit-toolbar #btn-discard,
+#edit-toolbar #btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    opacity var(--dur-sm) var(--ease);
+}
+#edit-toolbar #btn-discard svg,
+#edit-toolbar #btn-save svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+#edit-toolbar #btn-save {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+#edit-toolbar #btn-save:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+#edit-toolbar #btn-save:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+#edit-toolbar #btn-save:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#edit-toolbar #btn-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#edit-toolbar #btn-discard {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-toolbar);
+}
+#edit-toolbar #btn-discard:hover:not(:disabled) {
+  background: var(--bg-btn-hover);
+  border-color: var(--border);
+}
+#edit-toolbar #btn-discard:active:not(:disabled) {
+  background: var(--accent-glow);
+}
+#edit-toolbar #btn-discard:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#edit-toolbar #btn-discard:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONFIRM DIALOG (unsaved changes)
+   ═══════════════════════════════════════════════════════════════════ */
+#confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+#confirm-overlay.hidden {
+  display: none;
+}
+#confirm-overlay.closing {
+  animation: overlay-fade-out var(--dur) var(--ease) forwards;
+}
+#confirm-overlay.closing #confirm-dialog {
+  animation: dialog-disappear var(--dur) var(--ease) forwards;
+}
+
+#confirm-dialog {
+  background: var(--bg-settings);
+  border-radius: 14px;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  box-shadow: var(--shadow-dialog);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  animation: dialog-appear var(--dur) var(--ease-out);
+}
+
+#confirm-header {
+  padding: 15px 20px;
+  background: var(--bg-settings-hd);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+#confirm-body {
+  padding: 18px 22px 20px;
+  line-height: 1.55;
+  color: var(--fg);
+}
+#confirm-body p {
+  margin: 0;
+}
+.confirm-file-name {
+  font-weight: 600;
+  color: var(--accent);
+  word-break: break-all;
+}
+
+#confirm-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  background: var(--bg-settings-ft);
+  border-top: 1px solid var(--border);
+}
+#confirm-footer button {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 7px 18px;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease),
+    transform var(--dur-sm) var(--ease),
+    opacity var(--dur-sm) var(--ease);
+}
+#confirm-footer button:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#confirm-footer button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+#confirm-footer #confirm-cancel {
+  margin-right: auto;
+}
+#confirm-footer #confirm-discard:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* Solid accent CTA, matching the toolbar Save button. The prior gradient
+   + drop-shadow was the only remaining instance of the marketing-CTA
+   look across the chrome — drop it for visual consistency. */
+#confirm-footer #confirm-save.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 700;
+  padding: 7px 24px;
+}
+#confirm-footer #confirm-save.primary:hover {
+  filter: brightness(1.08);
+  color: #fff;
+}
+#confirm-footer #confirm-save.primary:active {
+  filter: brightness(0.95);
+}
+.confirm-conflict {
+  display: block;
+  margin-top: 0.6em;
+  color: var(--danger);
+  font-weight: 600;
+}
+

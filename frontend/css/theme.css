@@ -1,0 +1,129 @@
+/* ── Design tokens ────────────────────────────────────────────────── */
+:root {
+  --h1-color: #e06c75;
+  --h2-color: #61afef;
+  --h3-color: #e5c07b;
+  --bullet-color: #c678dd;
+  --font-family:
+    "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-size: 16px;
+
+  /* Motion tokens (prefers-reduced-motion override at bottom) */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --dur-xs: 80ms;
+  --dur-sm: 130ms;
+  --dur: 200ms;
+  --dur-lg: 300ms;
+}
+
+/* ── Dark theme — Atom One Dark ───────────────────────────────────── */
+body.theme-dark {
+  color-scheme: dark;
+  --bg: #282c34;
+  --bg-toolbar: #21252b;
+  --bg-elevated: #2c313c;
+  --bg-code: #1e2127;
+  --bg-table-hd: #2a2f3a;
+  --bg-table-row: #272b33;
+  --bg-search: #21252b;
+  --bg-settings: #2c313c;
+  --bg-settings-hd: #31363f;
+  --bg-settings-ft: #21252b;
+  --bg-btn-hover: rgba(97, 175, 239, 0.1);
+  --bg-tab-hover: rgba(97, 175, 239, 0.13);
+  --bg-danger-hover: rgba(224, 108, 117, 0.1);
+
+  --fg: #abb2bf;
+  --fg-dim: #7a8799;
+  --fg-muted: #8994a5;
+  --fg-toolbar: #9da5b4;
+
+  --border: #3b4048;
+  --border-subtle: rgba(59, 64, 72, 0.6);
+  --border-focus: #61afef;
+
+  --accent: #61afef;
+  --accent-2: #56b6c2;
+  --accent-glow: rgba(97, 175, 239, 0.18);
+  --danger: #e06c75;
+
+  --link: #56b6c2;
+  --link-hover: #80cad1;
+  --quote-border: #c678dd;
+  --hr: var(--border);
+
+  --mark: rgba(97, 175, 239, 0.22);
+  --mark-current: #61afef;
+  --mark-current-fg: #282c34;
+
+  --scrollbar-thumb: #3b4048;
+  --scrollbar-hover: #4b5263;
+
+  --tab-indicator: linear-gradient(90deg, #61afef 0%, #56b6c2 100%);
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.75);
+  --shadow-dialog: 0 0 0 1px var(--border), 0 24px 64px rgba(0, 0, 0, 0.75);
+
+  --status-ok: #98c379;
+  --status-ok-glow: rgba(152, 195, 121, 0.5);
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23abb2bf'/%3E%3C/svg%3E");
+}
+
+/* ── Light theme — Atom One Light ─────────────────────────────────── */
+body.theme-light {
+  color-scheme: light;
+  --bg: #fafafa;
+  --bg-toolbar: #f0f0f0;
+  --bg-elevated: #ffffff;
+  --bg-code: #f0f0f0;
+  --bg-table-hd: #e8e8e8;
+  --bg-table-row: #f5f5f5;
+  --bg-search: #f0f0f0;
+  --bg-settings: #ffffff;
+  --bg-settings-hd: #f0f0f0;
+  --bg-settings-ft: #fafafa;
+  --bg-btn-hover: rgba(64, 120, 242, 0.14);
+  --bg-tab-hover: rgba(64, 120, 242, 0.16);
+  --bg-danger-hover: rgba(228, 86, 73, 0.1);
+
+  --fg: #383a42;
+  --fg-dim: #696c77;
+  --fg-muted: #6a7387;
+  --fg-toolbar: #4a4a4f;
+
+  --border: #d8d8d8;
+  --border-subtle: rgba(216, 216, 216, 0.7);
+  --border-focus: #4078f2;
+
+  --accent: #4078f2;
+  --accent-2: #0184bc;
+  --accent-glow: rgba(64, 120, 242, 0.12);
+  --danger: #e45649;
+
+  --link: #0184bc;
+  --link-hover: #005f8a;
+  --quote-border: #a626a4;
+  --hr: #d8d8d8;
+
+  --mark: rgba(64, 120, 242, 0.14);
+  --mark-current: #4078f2;
+  --mark-current-fg: #fff;
+
+  --scrollbar-thumb: #cccccc;
+  --scrollbar-hover: #b8b8b8;
+
+  --tab-indicator: linear-gradient(90deg, #4078f2 0%, #0184bc 100%);
+
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.18);
+  --shadow-dialog: 0 0 0 1px var(--border), 0 24px 64px rgba(0, 0, 0, 0.18);
+
+  --status-ok: #50a14f;
+  --status-ok-glow: rgba(80, 161, 79, 0.4);
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23696c77'/%3E%3C/svg%3E");
+}
+
