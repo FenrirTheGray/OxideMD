@@ -20,10 +20,11 @@ Release tags are the version prefixed with `v`:
 ## Release process
 
 1. Update `CHANGELOG.md` with the new version and its notes.
-2. Bump the version in all three manifests so they agree:
-   - `package.json`
-   - `src-tauri/tauri.conf.json`
+2. Bump the version so the manifests agree:
+   - `src-tauri/tauri.conf.json` (the source of truth the release build reads)
    - `src-tauri/Cargo.toml`
+   - `src-tauri/Cargo.lock` (the `oxidemd` package entry — runs automatically on the
+     next `cargo` build, or edit it to match)
 3. Commit the bump (see the [Commit Style Guide](COMMIT_STYLE.md)).
 4. Tag the release and push the tag:
 
