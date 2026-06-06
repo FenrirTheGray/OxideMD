@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import {
   parseAccel, formatAccelParts, canonicalizeAccel, normalizeKey,
-} from './accel.js';
+} from "./accel.ts";
 
 test('parseAccel: basic modifier + key', () => {
   assert.deepEqual(parseAccel('Mod+Shift+K'),

@@ -16,8 +16,8 @@ function getDoc(view) { return view.state.doc.toString(); }
 // selection coordinates are absolute positions in the *new* doc, so callers
 // compute them in terms of the inserted text's length. Re-focuses the view
 // because toolbar clicks pull focus away.
-function edit(view, from, to, insert, selFrom, selTo) {
-  const tr = { changes: { from, to, insert } };
+function edit(view: any, from: any, to: any, insert: any, selFrom?: any, selTo?: any) {
+  const tr: any = { changes: { from, to, insert } };
   if (selFrom != null) {
     tr.selection = EditorSelection.range(selFrom, selTo ?? selFrom);
   }

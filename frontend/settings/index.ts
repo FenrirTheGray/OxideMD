@@ -11,7 +11,7 @@ import {
   searchBar,
   hasActiveOverlay,
   MD_EXTS_DEFAULT,
-} from "./state.js";
+} from "../core/state.ts";
 import {
   activeTab,
   applyZoom,
@@ -19,9 +19,9 @@ import {
   clearStatus,
   renderContent,
   applyRecentFiles,
-} from "./tabs.js";
-import { setPreviewHtml, promptResetSettings } from "./editor.js";
-import { closeSearch } from "./search.js";
+} from "../ui/tabs.ts";
+import { setPreviewHtml, promptResetSettings } from "../editor/editor.ts";
+import { closeSearch } from "../features/search.ts";
 import {
   ACTIONS,
   effectiveBindings,
@@ -30,10 +30,10 @@ import {
   accelToTokens,
   canonicalizeAccel,
   MODIFIER_ONLY_KEYS,
-} from "./keybindings.js";
-import { renderShortcutsUI } from "./shortcuts-display.js";
-import { updateToolbarLayout } from "./window-size.js";
-import { logWarn } from "./logger.js";
+} from "../core/keybindings.ts";
+import { renderShortcutsUI } from "../ui/shortcuts-display.ts";
+import { updateToolbarLayout } from "../ui/window-size.ts";
+import { logWarn } from "../core/logger.ts";
 import {
   BG_DEFAULTS,
   effectiveBgColor,
@@ -42,10 +42,10 @@ import {
   effectivePalette,
   applyPaletteToBody,
   setBodyTheme,
-} from "./settings/palette.js";
-import { checkForUpdates, hideUpdateStatus } from "./settings/updates.js";
-import { trapFocus } from "./settings/controls.js";
-import { fontSelect, rebuildFontDropdown } from "./settings/fonts.js";
+} from "./palette.ts";
+import { checkForUpdates, hideUpdateStatus } from "./updates.ts";
+import { trapFocus } from "./controls.ts";
+import { fontSelect, rebuildFontDropdown } from "./fonts.ts";
 
 // ── Settings tab structure & placement convention ──────────────────────────
 // The Settings modal has six tabs. When adding a new setting row, decide
@@ -176,7 +176,7 @@ customThemeTrigger.textContent = CUSTOM_THEME_PLACEHOLDER;
 // = no selection (custom edits, or never picked). Value persists to
 // config.custom_theme on Save so the label survives a restart.
 function setCustomThemeSelection(value, label) {
-  customThemeSelect.dataset.value = value || "";
+  (customThemeSelect as HTMLElement).dataset.value = value || "";
   customThemeTrigger.textContent = value
     ? label || value
     : CUSTOM_THEME_PLACEHOLDER;
@@ -242,12 +242,12 @@ customThemeTrigger.addEventListener("keydown", (e) => {
   );
   let focusedIdx = opts.findIndex((o) => o.classList.contains("focused"));
 
-  switch (e.key) {
+  switch ((e as KeyboardEvent).key) {
     case "Enter":
     case " ":
       e.preventDefault();
       if (customThemeSelect.classList.contains("open") && focusedIdx >= 0) {
-        opts[focusedIdx].click();
+        (opts[focusedIdx] as HTMLElement).click();
       } else {
         openCustomThemeSelect();
       }
@@ -261,7 +261,7 @@ customThemeTrigger.addEventListener("keydown", (e) => {
       focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
       opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
       if (opts[focusedIdx])
-        opts[focusedIdx].scrollIntoView({ block: "nearest" });
+        (opts[focusedIdx] as HTMLElement).scrollIntoView({ block: "nearest" });
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -272,14 +272,14 @@ customThemeTrigger.addEventListener("keydown", (e) => {
       focusedIdx = Math.max(focusedIdx - 1, 0);
       opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
       if (opts[focusedIdx])
-        opts[focusedIdx].scrollIntoView({ block: "nearest" });
+        (opts[focusedIdx] as HTMLElement).scrollIntoView({ block: "nearest" });
       break;
     case "Escape":
       if (customThemeSelect.classList.contains("open")) {
         e.preventDefault();
         e.stopPropagation();
         closeCustomThemeSelect();
-        customThemeTrigger.focus();
+        (customThemeTrigger as HTMLElement).focus();
       }
       break;
     case "Tab":
@@ -317,7 +317,7 @@ const ATOM_ONE_LIGHT = {
 function appendThemeOption(theme) {
   const opt = document.createElement("div");
   opt.className = "custom-select-option custom-font-option";
-  opt.dataset.value = theme.filename;
+  (opt as HTMLElement).dataset.value = theme.filename;
   opt.setAttribute("role", "option");
 
   const label = document.createElement("span");
@@ -381,7 +381,7 @@ function rebuildCustomThemeDropdown() {
 
 // Event delegation for custom theme dropdown clicks
 customThemeOptionsContainer.addEventListener("click", async (e) => {
-  const removeBtn = e.target.closest(".custom-font-remove");
+  const removeBtn = (e.target as HTMLElement).closest(".custom-font-remove");
   if (removeBtn) {
     e.stopPropagation();
     const opt = removeBtn.closest(".custom-select-option");
@@ -391,16 +391,16 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
       !confirm(`Remove "${themeName}"? The saved theme file will be deleted.`)
     )
       return;
-    const filename = opt.dataset.value;
+    const filename = (opt as HTMLElement).dataset.value;
     await invoke("delete_custom_theme", { filename });
     state.customThemes = await invoke("list_custom_themes");
-    if (customThemeSelect.dataset.value === filename)
+    if ((customThemeSelect as HTMLElement).dataset.value === filename)
       clearCustomThemeSelection();
     rebuildCustomThemeDropdown();
     return;
   }
 
-  const opt = e.target.closest(".custom-select-option");
+  const opt = (e.target as HTMLElement).closest(".custom-select-option");
   if (!opt) return;
 
   // Atom One Dark / Atom One Light — the bundled-by-name handles for
@@ -408,11 +408,11 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
   // Each pins its own mode so the label always matches what the user
   // sees, no matter what was applied before.
   if (
-    opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE ||
-    opt.dataset.value === CUSTOM_THEME_DEFAULT_LIGHT_VALUE
+    (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_VALUE ||
+    (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_LIGHT_VALUE
   ) {
     const mode =
-      opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE ? "dark" : "light";
+      (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_VALUE ? "dark" : "light";
     const defaults = await invoke("get_default_config");
     const colors = {
       theme: mode,
@@ -428,11 +428,15 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
     };
     applyThemeToControls(colors);
     const pretty =
-      opt.dataset.value === CUSTOM_THEME_DEFAULT_VALUE
+      (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_VALUE
         ? ATOM_ONE_DARK.name
         : ATOM_ONE_LIGHT.name;
-    setCustomThemeSelection(opt.dataset.value, pretty);
+    setCustomThemeSelection((opt as HTMLElement).dataset.value, pretty);
     closeCustomThemeSelect();
+    // This path awaited get_default_config before applying, so the dialog's
+    // delegated click dirty-check already ran against the pre-apply state.
+    // Recompute explicitly or Save stays stale until the next interaction.
+    refreshSaveButtonState();
     return;
   }
 
@@ -440,7 +444,7 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
   // Colors-tab controls + preview. Looks across bundled + imported lists
   // (both trusted: built-in JSON ships with the app, list_custom_themes
   // is the only writer of the user themes dir).
-  const theme = findThemeByFilename(opt.dataset.value);
+  const theme = findThemeByFilename((opt as HTMLElement).dataset.value);
   if (theme) {
     applyThemeToControls(theme.colors);
     setCustomThemeSelection(theme.filename, theme.name);
@@ -577,7 +581,7 @@ document.addEventListener(
     e.preventDefault();
     e.stopPropagation();
 
-    if (e.key === "Escape") {
+    if ((e as KeyboardEvent).key === "Escape") {
       endShortcutCapture();
       renderShortcutsPanel();
       return;
@@ -626,9 +630,12 @@ let populatingSettings = false;
 // nothing falls back to the defaults so the folder browser never shows
 // zero files.
 function parseMdExtensions(raw) {
+  // Accepts either the chips control's normalized array (`.value`) or a
+  // raw comma string, so the same fallback-to-defaults logic covers both.
+  const parts = Array.isArray(raw) ? raw : String(raw || "").split(",");
   const seen = new Set();
   const out = [];
-  for (const part of String(raw || "").split(",")) {
+  for (const part of parts) {
     const ext = part.trim().toLowerCase().replace(/^\.+/, "");
     if (ext && !seen.has(ext)) {
       seen.add(ext);
@@ -648,70 +655,73 @@ export function openSettings(tabName) {
   });
   populatingSettings = true;
   const resolved = resolvedTheme(state.config.theme);
-  document.getElementById("setting-theme").value = state.config.theme;
+  (document.getElementById("setting-theme") as HTMLInputElement).value = state.config.theme;
   rebuildFontDropdown();
-  fontSelect.value = state.config.font_family;
-  document.getElementById("setting-size").value = state.config.font_size;
-  document.getElementById("setting-line-height").value =
+  (fontSelect as HTMLSelectElement).value = state.config.font_family;
+  (document.getElementById("setting-size") as HTMLInputElement).value = state.config.font_size;
+  (document.getElementById("setting-line-height") as HTMLInputElement).value =
     state.config.line_height;
-  document.getElementById("setting-reading-width").value =
+  (document.getElementById("setting-reading-width") as HTMLInputElement).value =
     state.config.reading_width;
-  document.getElementById("setting-h1").value = state.config.h1_color;
-  document.getElementById("setting-h2").value = state.config.h2_color;
-  document.getElementById("setting-h3").value = state.config.h3_color;
-  document.getElementById("setting-bullet").value = state.config.bullet_color;
-  document.getElementById("setting-code-bg").value = effectiveBgColor(
+  (document.getElementById("setting-h1") as HTMLInputElement).value = state.config.h1_color;
+  (document.getElementById("setting-h2") as HTMLInputElement).value = state.config.h2_color;
+  (document.getElementById("setting-h3") as HTMLInputElement).value = state.config.h3_color;
+  (document.getElementById("setting-bullet") as HTMLInputElement).value = state.config.bullet_color;
+  (document.getElementById("setting-code-bg") as HTMLInputElement).value = effectiveBgColor(
     state.config.code_bg_color,
     "code_bg_color",
     resolved,
   );
-  document.getElementById("setting-code-accent").value =
+  (document.getElementById("setting-code-accent") as HTMLInputElement).value =
     state.config.code_accent_color;
-  document.getElementById("setting-note-bg").value = effectiveBgColor(
+  (document.getElementById("setting-note-bg") as HTMLInputElement).value = effectiveBgColor(
     state.config.note_bg_color,
     "note_bg_color",
     resolved,
   );
-  document.getElementById("setting-note-accent").value =
+  (document.getElementById("setting-note-accent") as HTMLInputElement).value =
     state.config.note_accent_color;
-  document.getElementById("setting-toolbar-compact").value = state.config
+  (document.getElementById("setting-toolbar-compact") as HTMLInputElement).value = state.config
     .toolbar_compact
     ? "true"
     : "false";
-  document.getElementById("setting-show-recent-files").value =
+  (document.getElementById("setting-show-recent-files") as HTMLInputElement).value =
     state.config.show_recent_files !== false ? "true" : "false";
-  document.getElementById("setting-printer-friendly").value = state.config
+  (document.getElementById("setting-printer-friendly") as HTMLInputElement).value = state.config
     .printer_friendly
     ? "true"
     : "false";
-  document.getElementById("setting-preserve-line-breaks").value = state.config
+  (document.getElementById("setting-preserve-line-breaks") as HTMLInputElement).value = state.config
     .preserve_line_breaks
     ? "true"
     : "false";
-  document.getElementById("setting-md-extensions").value = (
+  (document.getElementById("setting-load-remote-images") as HTMLInputElement).value = state.config
+    .load_remote_images
+    ? "true"
+    : "false";
+  (document.getElementById("setting-md-extensions") as HTMLInputElement).value =
     Array.isArray(state.config.md_extensions) &&
     state.config.md_extensions.length
       ? state.config.md_extensions
-      : MD_EXTS_DEFAULT
-  ).join(", ");
-  document.getElementById("setting-word-wrap").value =
+      : MD_EXTS_DEFAULT;
+  (document.getElementById("setting-word-wrap") as HTMLInputElement).value =
     state.config.editor_word_wrap !== false ? "true" : "false";
-  document.getElementById("setting-spell-check").value = state.config
+  (document.getElementById("setting-spell-check") as HTMLInputElement).value = state.config
     .editor_spell_check
     ? "true"
     : "false";
-  document.getElementById("setting-line-numbers").value = state.config
+  (document.getElementById("setting-line-numbers") as HTMLInputElement).value = state.config
     .editor_line_numbers
     ? "true"
     : "false";
-  document.getElementById("setting-format-on-save").value = state.config
+  (document.getElementById("setting-format-on-save") as HTMLInputElement).value = state.config
     .editor_format_on_save
     ? "true"
     : "false";
   // Interface-palette swatches — saved overrides over the theme defaults.
   const effPalette = effectivePalette(resolved, state.config.palette);
   for (const key of BASE_PALETTE_TOKENS) {
-    document.getElementById(`setting-${key}`).value = effPalette[key];
+    (document.getElementById(`setting-${key}`) as HTMLInputElement).value = effPalette[key];
   }
   populatingSettings = false;
   updatePreviewColors();
@@ -761,15 +771,15 @@ function activateSettingsTab(name) {
   const tabs = document.querySelectorAll(".settings-tab");
   const panels = document.querySelectorAll(".settings-panel");
   tabs.forEach((t) => {
-    const on = t.dataset.tab === name;
+    const on = (t as HTMLElement).dataset.tab === name;
     t.classList.toggle("active", on);
     t.setAttribute("aria-selected", on ? "true" : "false");
-    t.tabIndex = on ? 0 : -1;
+    (t as HTMLElement).tabIndex = on ? 0 : -1;
   });
   panels.forEach((p) => {
     const on = p.id === `settings-panel-${name}`;
     p.classList.toggle("active", on);
-    p.hidden = !on;
+    (p as HTMLElement).hidden = !on;
   });
   document
     .getElementById("settings-dialog")
@@ -796,7 +806,7 @@ function updatePreviewColors() {
     "note-accent",
   ];
   keys.forEach((k) => {
-    const v = document.getElementById(`setting-${k}`).value;
+    const v = (document.getElementById(`setting-${k}`) as HTMLInputElement).value;
     body.setProperty(`--preview-${k}`, v);
     const hex = document.getElementById(`setting-${k}-hex`);
     if (hex) hex.textContent = v.toLowerCase();
@@ -810,8 +820,8 @@ function updatePaletteHexLabels() {
   for (const key of BASE_PALETTE_TOKENS) {
     const hex = document.getElementById(`setting-${key}-hex`);
     if (hex)
-      hex.textContent = document
-        .getElementById(`setting-${key}`)
+      hex.textContent = (document
+        .getElementById(`setting-${key}`) as HTMLInputElement)
         .value.toLowerCase();
   }
 }
@@ -824,7 +834,7 @@ function collectPaletteFromInputs(resolved) {
   const map = {};
   let allDefault = true;
   for (const key of BASE_PALETTE_TOKENS) {
-    const v = document.getElementById(`setting-${key}`).value;
+    const v = (document.getElementById(`setting-${key}`) as HTMLInputElement).value;
     map[key] = v;
     if (v.toLowerCase() !== DEFAULT_PALETTE[resolved][key].toLowerCase())
       allDefault = false;
@@ -863,12 +873,12 @@ function showSettingsError(msg) {
 // same values saveSettings would persist) into the flat JSON shape and
 // hands them to the backend's native save dialog.
 async function exportTheme() {
-  const theme = { theme: document.getElementById("setting-theme").value };
+  const theme: any = { theme: (document.getElementById("setting-theme") as HTMLInputElement).value };
   // Inherit the currently-applied theme's display name when one is
   // selected so the export carries a meaningful label. Manual edits
   // clear the selection, in which case the backend falls back to the
   // saved file's stem.
-  const ctValue = customThemeSelect.dataset.value || "";
+  const ctValue = (customThemeSelect as HTMLElement).dataset.value || "";
   if (ctValue === CUSTOM_THEME_DEFAULT_VALUE) theme.name = ATOM_ONE_DARK.name;
   else if (ctValue === CUSTOM_THEME_DEFAULT_LIGHT_VALUE)
     theme.name = ATOM_ONE_LIGHT.name;
@@ -877,12 +887,12 @@ async function exportTheme() {
     if (match) theme.name = match.name;
   }
   for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
-    theme[field] = document.getElementById(id).value;
+    theme[field] = (document.getElementById(id) as HTMLInputElement).value;
   }
   // Carry the full base UI palette too, so an exported theme is a
   // complete skin rather than just the content colors.
   for (const key of BASE_PALETTE_TOKENS) {
-    theme[key] = document.getElementById(`setting-${key}`).value;
+    theme[key] = (document.getElementById(`setting-${key}`) as HTMLInputElement).value;
   }
   try {
     await invoke("export_theme", { theme });
@@ -904,7 +914,13 @@ async function addFontFromDialog() {
   if (!result) return;
   state.customFonts = await invoke("list_custom_fonts");
   rebuildFontDropdown();
-  fontSelect.value = `custom:${result.filename}`;
+  (fontSelect as HTMLSelectElement).value = `custom:${result.filename}`;
+  // This selection happens asynchronously, after the Import click was
+  // already diffed by the dialog's delegated listeners, and it mutates
+  // the dropdown programmatically (no input/change event). Recompute the
+  // dirty state explicitly or the Save button stays stale until the next
+  // interaction.
+  refreshSaveButtonState();
 }
 
 // Native open dialog → validate → persist → apply. Triggered by the
@@ -971,6 +987,10 @@ async function importThemeFromDialog() {
   applyThemeToControls(colors);
   setCustomThemeSelection(saved.filename, saved.name);
   rebuildCustomThemeDropdown();
+  // Same async/programmatic-mutation caveat as addFontFromDialog: these
+  // updates land after the Import click was diffed and fire no events, so
+  // recompute the dirty state to enable Save without an extra interaction.
+  refreshSaveButtonState();
 }
 
 // Applies a flat theme color map to the Colors-tab controls and refreshes
@@ -991,13 +1011,13 @@ function applyThemeToControls(colors) {
     typeof colors.theme === "string" &&
     THEME_VALID_THEMES.includes(colors.theme)
   ) {
-    document.getElementById("setting-theme").value = colors.theme;
+    (document.getElementById("setting-theme") as HTMLInputElement).value = colors.theme;
     setBodyTheme(resolvedTheme(colors.theme));
   }
   for (const [field, id] of Object.entries(THEME_COLOR_FIELDS)) {
     const value = colors[field];
     if (typeof value === "string" && THEME_HEX_RE.test(value.trim())) {
-      document.getElementById(id).value = value.trim();
+      (document.getElementById(id) as HTMLInputElement).value = value.trim();
     }
   }
   // Base UI palette tokens. Setting an <input type="color"> .value
@@ -1006,7 +1026,7 @@ function applyThemeToControls(colors) {
   for (const key of BASE_PALETTE_TOKENS) {
     const value = colors[key];
     if (typeof value === "string" && THEME_HEX_RE.test(value.trim())) {
-      const input = document.getElementById(`setting-${key}`);
+      const input = document.getElementById(`setting-${key}`) as HTMLInputElement;
       input.value = value.trim();
       document.body.style.setProperty(`--${key}`, input.value);
     }
@@ -1053,51 +1073,53 @@ export function closeSettings() {
 function buildCandidateConfig() {
   return {
     ...state.config,
-    theme: document.getElementById("setting-theme").value,
-    font_family: fontSelect.value,
-    font_size: parseInt(document.getElementById("setting-size").value, 10),
+    theme: (document.getElementById("setting-theme") as HTMLInputElement).value,
+    font_family: (fontSelect as HTMLSelectElement).value,
+    font_size: parseInt((document.getElementById("setting-size") as HTMLInputElement).value, 10),
     line_height: parseFloat(
-      document.getElementById("setting-line-height").value,
+      (document.getElementById("setting-line-height") as HTMLInputElement).value,
     ),
     reading_width: parseInt(
-      document.getElementById("setting-reading-width").value,
+      (document.getElementById("setting-reading-width") as HTMLInputElement).value,
       10,
     ),
-    h1_color: document.getElementById("setting-h1").value,
-    h2_color: document.getElementById("setting-h2").value,
-    h3_color: document.getElementById("setting-h3").value,
-    bullet_color: document.getElementById("setting-bullet").value,
-    code_bg_color: document.getElementById("setting-code-bg").value,
-    code_accent_color: document.getElementById("setting-code-accent").value,
-    note_bg_color: document.getElementById("setting-note-bg").value,
-    note_accent_color: document.getElementById("setting-note-accent").value,
+    h1_color: (document.getElementById("setting-h1") as HTMLInputElement).value,
+    h2_color: (document.getElementById("setting-h2") as HTMLInputElement).value,
+    h3_color: (document.getElementById("setting-h3") as HTMLInputElement).value,
+    bullet_color: (document.getElementById("setting-bullet") as HTMLInputElement).value,
+    code_bg_color: (document.getElementById("setting-code-bg") as HTMLInputElement).value,
+    code_accent_color: (document.getElementById("setting-code-accent") as HTMLInputElement).value,
+    note_bg_color: (document.getElementById("setting-note-bg") as HTMLInputElement).value,
+    note_accent_color: (document.getElementById("setting-note-accent") as HTMLInputElement).value,
     toolbar_compact:
-      document.getElementById("setting-toolbar-compact").value === "true",
+      (document.getElementById("setting-toolbar-compact") as HTMLInputElement).value === "true",
     show_recent_files:
-      document.getElementById("setting-show-recent-files").value === "true",
+      (document.getElementById("setting-show-recent-files") as HTMLInputElement).value === "true",
     printer_friendly:
-      document.getElementById("setting-printer-friendly").value === "true",
+      (document.getElementById("setting-printer-friendly") as HTMLInputElement).value === "true",
     preserve_line_breaks:
-      document.getElementById("setting-preserve-line-breaks").value === "true",
+      (document.getElementById("setting-preserve-line-breaks") as HTMLInputElement).value === "true",
+    load_remote_images:
+      (document.getElementById("setting-load-remote-images") as HTMLInputElement).value === "true",
     md_extensions: parseMdExtensions(
-      document.getElementById("setting-md-extensions").value,
+      (document.getElementById("setting-md-extensions") as HTMLInputElement).value,
     ),
     editor_word_wrap:
-      document.getElementById("setting-word-wrap").value === "true",
+      (document.getElementById("setting-word-wrap") as HTMLInputElement).value === "true",
     editor_spell_check:
-      document.getElementById("setting-spell-check").value === "true",
+      (document.getElementById("setting-spell-check") as HTMLInputElement).value === "true",
     editor_line_numbers:
-      document.getElementById("setting-line-numbers").value === "true",
+      (document.getElementById("setting-line-numbers") as HTMLInputElement).value === "true",
     editor_format_on_save:
-      document.getElementById("setting-format-on-save").value === "true",
+      (document.getElementById("setting-format-on-save") as HTMLInputElement).value === "true",
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
     // Compared against the theme being saved, so an in-dialog mode flip
     // is handled; an all-default palette collapses to {} (keeps tracking
     // dark/light), otherwise the full explicit map is stored.
     palette: collectPaletteFromInputs(
-      resolvedTheme(document.getElementById("setting-theme").value),
+      resolvedTheme((document.getElementById("setting-theme") as HTMLInputElement).value),
     ),
-    custom_theme: customThemeSelect.dataset.value || "",
+    custom_theme: (customThemeSelect as HTMLElement).dataset.value || "",
   };
 }
 
@@ -1125,7 +1147,7 @@ function settingsAreDirty() {
 }
 
 function refreshSaveButtonState() {
-  const btn = document.getElementById("settings-save");
+  const btn = document.getElementById("settings-save") as HTMLButtonElement;
   if (!btn) return;
   btn.disabled = !settingsAreDirty();
 }
@@ -1134,6 +1156,10 @@ async function saveSettings() {
   // Captured before state.config is replaced — preserve_line_breaks
   // changes the rendered HTML, so a change needs open docs re-rendered.
   const prevPreserveLineBreaks = state.config.preserve_line_breaks;
+  // load_remote_images doesn't change the cached HTML (the renderer always
+  // emits inert remote-image placeholders); flipping it just re-hydrates
+  // the visible view to load or drop the live srcs.
+  const prevLoadRemoteImages = state.config.load_remote_images;
   const newConfig = buildCandidateConfig();
   setLoading();
   try {
@@ -1178,6 +1204,19 @@ async function saveSettings() {
         else renderContent(tab.html);
       }
     }
+    // load_remote_images flips which remote images are live without
+    // changing the cached HTML, so just re-mount the active view to re-run
+    // image hydration with the new setting — loading remote images, or
+    // dropping them back to inert placeholders. Skipped when the line-break
+    // re-render above already refreshed the same view.
+    if (
+      prevLoadRemoteImages !== newConfig.load_remote_images &&
+      prevPreserveLineBreaks === newConfig.preserve_line_breaks &&
+      tab
+    ) {
+      if (tab.editing) setPreviewHtml(tab.html);
+      else renderContent(tab.html);
+    }
     // Save persists without closing the modal; the Close button is the
     // only way out. This lets the user iterate on settings while
     // watching the live preview behind the dialog without reopening
@@ -1192,8 +1231,9 @@ async function saveSettings() {
 
 // Human-readable name for each settings tab, used in the reset confirm
 // copy so the prompt names exactly what's about to be clobbered.
-const SETTINGS_TAB_LABELS = {
+const SETTINGS_TAB_LABELS: Record<string, string> = {
   general: "General",
+  associations: "Associations",
   reading: "Reading",
   editor: "Editor",
   colors: "Colors",
@@ -1201,7 +1241,7 @@ const SETTINGS_TAB_LABELS = {
 };
 
 async function resetSettings() {
-  const activeTabName = document.querySelector(".settings-tab.active")?.dataset
+  const activeTabName = (document.querySelector(".settings-tab.active") as HTMLElement)?.dataset
     .tab;
   // The About tab has no resettable settings — nothing to confirm or do.
   if (!activeTabName || !(activeTabName in SETTINGS_TAB_LABELS)) return;
@@ -1216,59 +1256,59 @@ async function resetSettings() {
 
   const defaults = await invoke("get_default_config");
   if (activeTabName === "general") {
-    document.getElementById("setting-toolbar-compact").value =
+    (document.getElementById("setting-toolbar-compact") as HTMLInputElement).value =
       defaults.toolbar_compact ? "true" : "false";
-    document.getElementById("setting-show-recent-files").value =
+    (document.getElementById("setting-show-recent-files") as HTMLInputElement).value =
       defaults.show_recent_files !== false ? "true" : "false";
-    document.getElementById("setting-printer-friendly").value =
+    (document.getElementById("setting-printer-friendly") as HTMLInputElement).value =
       defaults.printer_friendly ? "true" : "false";
-    document.getElementById("setting-md-extensions").value = (
+  } else if (activeTabName === "associations") {
+    (document.getElementById("setting-md-extensions") as HTMLInputElement).value =
       Array.isArray(defaults.md_extensions) && defaults.md_extensions.length
         ? defaults.md_extensions
-        : MD_EXTS_DEFAULT
-    ).join(", ");
+        : MD_EXTS_DEFAULT;
   } else if (activeTabName === "reading") {
     rebuildFontDropdown();
-    fontSelect.value = defaults.font_family;
-    document.getElementById("setting-size").value = defaults.font_size;
-    document.getElementById("setting-line-height").value = defaults.line_height;
-    document.getElementById("setting-reading-width").value =
+    (fontSelect as HTMLSelectElement).value = defaults.font_family;
+    (document.getElementById("setting-size") as HTMLInputElement).value = defaults.font_size;
+    (document.getElementById("setting-line-height") as HTMLInputElement).value = defaults.line_height;
+    (document.getElementById("setting-reading-width") as HTMLInputElement).value =
       defaults.reading_width;
-    document.getElementById("setting-preserve-line-breaks").value =
+    (document.getElementById("setting-preserve-line-breaks") as HTMLInputElement).value =
       defaults.preserve_line_breaks ? "true" : "false";
   } else if (activeTabName === "editor") {
-    document.getElementById("setting-word-wrap").value =
+    (document.getElementById("setting-word-wrap") as HTMLInputElement).value =
       defaults.editor_word_wrap !== false ? "true" : "false";
-    document.getElementById("setting-spell-check").value =
+    (document.getElementById("setting-spell-check") as HTMLInputElement).value =
       defaults.editor_spell_check ? "true" : "false";
-    document.getElementById("setting-line-numbers").value =
+    (document.getElementById("setting-line-numbers") as HTMLInputElement).value =
       defaults.editor_line_numbers ? "true" : "false";
-    document.getElementById("setting-format-on-save").value =
+    (document.getElementById("setting-format-on-save") as HTMLInputElement).value =
       defaults.editor_format_on_save ? "true" : "false";
   } else if (activeTabName === "colors") {
-    document.getElementById("setting-theme").value = defaults.theme;
-    document.getElementById("setting-h1").value = defaults.h1_color;
-    document.getElementById("setting-h2").value = defaults.h2_color;
-    document.getElementById("setting-h3").value = defaults.h3_color;
-    document.getElementById("setting-bullet").value = defaults.bullet_color;
+    (document.getElementById("setting-theme") as HTMLInputElement).value = defaults.theme;
+    (document.getElementById("setting-h1") as HTMLInputElement).value = defaults.h1_color;
+    (document.getElementById("setting-h2") as HTMLInputElement).value = defaults.h2_color;
+    (document.getElementById("setting-h3") as HTMLInputElement).value = defaults.h3_color;
+    (document.getElementById("setting-bullet") as HTMLInputElement).value = defaults.bullet_color;
     // Bg defaults follow the currently-selected theme so Reset under
     // Light leaves readable light backgrounds rather than dark-on-dark.
     const resolved = resolvedTheme(
-      document.getElementById("setting-theme").value,
+      (document.getElementById("setting-theme") as HTMLInputElement).value,
     );
-    document.getElementById("setting-code-bg").value =
+    (document.getElementById("setting-code-bg") as HTMLInputElement).value =
       BG_DEFAULTS[resolved].code_bg_color;
-    document.getElementById("setting-code-accent").value =
+    (document.getElementById("setting-code-accent") as HTMLInputElement).value =
       defaults.code_accent_color;
-    document.getElementById("setting-note-bg").value =
+    (document.getElementById("setting-note-bg") as HTMLInputElement).value =
       BG_DEFAULTS[resolved].note_bg_color;
-    document.getElementById("setting-note-accent").value =
+    (document.getElementById("setting-note-accent") as HTMLInputElement).value =
       defaults.note_accent_color;
     updatePreviewColors();
     // Interface palette back to the built-in defaults for the resolved
     // theme, applied live so the reset is visible immediately.
     for (const key of BASE_PALETTE_TOKENS) {
-      document.getElementById(`setting-${key}`).value =
+      (document.getElementById(`setting-${key}`) as HTMLInputElement).value =
         DEFAULT_PALETTE[resolved][key];
     }
     updatePaletteHexLabels();
@@ -1335,22 +1375,22 @@ const settingsTabButtons = Array.from(
   document.querySelectorAll(".settings-tab"),
 );
 settingsTabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => activateSettingsTab(btn.dataset.tab));
+  btn.addEventListener("click", () => activateSettingsTab((btn as HTMLElement).dataset.tab));
 });
 document.getElementById("settings-tabs").addEventListener("keydown", (e) => {
-  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if ((e as KeyboardEvent).key !== "ArrowLeft" && (e as KeyboardEvent).key !== "ArrowRight") return;
   const idx = settingsTabButtons.findIndex((b) =>
     b.classList.contains("active"),
   );
   if (idx === -1) return;
   e.preventDefault();
-  const delta = e.key === "ArrowRight" ? 1 : -1;
+  const delta = (e as KeyboardEvent).key === "ArrowRight" ? 1 : -1;
   const next =
     settingsTabButtons[
       (idx + delta + settingsTabButtons.length) % settingsTabButtons.length
     ];
-  activateSettingsTab(next.dataset.tab);
-  next.focus();
+  activateSettingsTab((next as HTMLElement).dataset.tab);
+  (next as HTMLElement).focus();
 });
 
 // Live preview updates. The trigger label tracks the *last applied*
@@ -1376,9 +1416,9 @@ document.getElementById("settings-tabs").addEventListener("keydown", (e) => {
 // re-applies the saved config, so a Cancel reverts these edits.
 for (const key of BASE_PALETTE_TOKENS) {
   document.getElementById(`setting-${key}`).addEventListener("input", (e) => {
-    document.body.style.setProperty(`--${key}`, e.target.value);
+    document.body.style.setProperty(`--${key}`, (e.target as HTMLInputElement).value);
     const hex = document.getElementById(`setting-${key}-hex`);
-    if (hex) hex.textContent = e.target.value.toLowerCase();
+    if (hex) hex.textContent = (e.target as HTMLInputElement).value.toLowerCase();
     clearCustomThemeSelection();
   });
 }
@@ -1387,6 +1427,6 @@ for (const key of BASE_PALETTE_TOKENS) {
 document.querySelectorAll(".about-link[data-url]").forEach((a) => {
   a.addEventListener("click", (e) => {
     e.preventDefault();
-    invoke("open_url", { url: a.dataset.url });
+    invoke("open_url", { url: (a as HTMLElement).dataset.url });
   });
 });

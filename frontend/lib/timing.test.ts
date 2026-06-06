@@ -4,7 +4,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { debounce, throttle } from './timing.js';
+import { debounce, throttle } from "./timing.ts";
 
 test('debounce: fires once, trailing, after the quiet window', () => {
   mock.timers.enable({ apis: ['setTimeout'] });

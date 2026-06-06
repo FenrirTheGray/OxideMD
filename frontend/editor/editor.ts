@@ -5,7 +5,7 @@
 // time; switching tabs preserves the other tabs' edit state in memory.
 
 import {
-  invoke, convertFileSrc,
+  invoke,
   state,
   contentEl, contentScroll,
   editorSplit, editorPane, previewPane, splitDivider,
@@ -13,19 +13,20 @@ import {
   statusIndicator, statusText, statusCountsEl,
   confirmOverlay, confirmDialogTitle, confirmDialogBody,
   confirmCancelBtn, confirmDiscardBtn, confirmSaveBtn,
-} from './state.js';
-import { syncToolbar, renderTabBar, rerender } from './tabs.js';
+} from "../core/state.ts";
+import { syncToolbar, renderTabBar, rerender } from "../ui/tabs.ts";
 import {
-  activeTab, isDirty, renderContent,
+  activeTab, isDirty, renderContent, hydrateImages,
   setLoading, clearStatus, applyZoom,
-} from './tab-state.js';
-import { closeSearch } from './search.js';
-import { applyFormat } from './editor-format.js';
-import { registerHandler, dispatchKey } from './keybindings.js';
-import { writeDraft, clearDraft } from './draft-store.js';
-import { refreshOutline } from './outline.js';
-import { logError } from './logger.js';
-import { formatMarkdownBuffer } from './lib/md-table.js';
+} from "../core/tab-state.ts";
+import { closeSearch } from "../features/search.ts";
+import { applyFormat } from "./editor-format.ts";
+import { registerHandler, dispatchKey } from "../core/keybindings.ts";
+import { writeDraft, clearDraft } from "../core/draft-store.ts";
+import { refreshOutline } from "../ui/outline.ts";
+import { logError } from "../core/logger.ts";
+import { showToast } from "../ui/toast.ts";
+import { formatMarkdownBuffer } from "../lib/md-table.ts";
 
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec } from '@codemirror/state';
@@ -114,7 +115,7 @@ function countsLabel(text) {
        + `${chars} char${chars === 1 ? '' : 's'}`;
 }
 
-export function updateCounts(value, selectionText) {
+export function updateCounts(value: any, selectionText?: any) {
   if (!statusCountsEl) return;
   const text = value ?? '';
   let label = countsLabel(text);
@@ -310,12 +311,12 @@ function buildView(tab) {
     if (!cur || !cur.editing) return;
     cur.raw = newDoc;
     const dirty = isDirty(cur);
-    btnSave.disabled = !dirty;
-    if (btnDiscard) btnDiscard.disabled = !dirty;
+    (btnSave as HTMLButtonElement).disabled = !dirty;
+    if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
     const tabEl = document.querySelector(`.tab[data-tab-id="${cur.id}"]`);
     if (tabEl) tabEl.classList.toggle('dirty', dirty);
     scheduleDraftWrite(cur);
-    schedulePreviewRender();
+    schedulePreviewRender(undefined);
     // Headings may have been added/removed/edited — keep the outline
     // sidebar fresh. Cheap parse, and a no-op while it's hidden.
     refreshOutline();
@@ -424,6 +425,80 @@ function blobToBase64(blob) {
   });
 }
 
+// ── Drag-and-drop image insertion ──────────────────────────────────────────
+// Image extensions accepted via drag-and-drop. Mirrors the backend's
+// DROP_IMAGE_EXTS so both ends agree on what counts as an image.
+const DROP_IMAGE_EXTS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico', 'tif', 'tiff',
+]);
+
+function fileExt(path) {
+  const base = path.split(/[\\/]/).pop() || '';
+  const dot = base.lastIndexOf('.');
+  return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
+}
+
+// True when the editor is mounted (edit mode) and the client point lands on
+// the CodeMirror surface — the gate for treating a file drop as an image
+// insertion rather than an "open this file" drop.
+function pointInEditor(x, y) {
+  if (!editorView || !document.body.classList.contains('editing')) return false;
+  const el = document.elementFromPoint(x, y);
+  return !!el && editorView.dom.contains(el);
+}
+
+// Toggle the drop affordance while files are dragged over the window.
+export function updateEditorDropHint(x, y) {
+  editorPane.classList.toggle('drop-target', pointInEditor(x, y));
+}
+export function clearEditorDropHint() {
+  editorPane.classList.remove('drop-target');
+}
+
+// Handle a file drop that landed on the editor: copy each dropped image into
+// the document's assets/ folder (like paste) and insert a markdown image
+// reference at the drop point. Returns true when the drop was over the editor
+// and consumed here, so the caller skips its open-file fallback.
+export async function dropImagesIntoEditor(paths, x, y) {
+  if (!pointInEditor(x, y)) return false;
+  const images = paths.filter((p) => DROP_IMAGE_EXTS.has(fileExt(p)));
+  if (!images.length) return false; // non-images fall through (e.g. a .md)
+
+  const tab = activeTab();
+  if (!tab?.path) {
+    // assets/ lives beside the file; an unsaved buffer has nowhere to put it.
+    showToast('Save the document before adding images', 'error');
+    return true; // consumed: don't also try to "open" the image
+  }
+
+  // Insert where the user dropped, falling back to the cursor position.
+  let pos = editorView.state.selection.main.from;
+  const at = editorView.posAtCoords({ x, y });
+  if (at != null) pos = at;
+
+  const refs = [];
+  for (const src of images) {
+    try {
+      const result = await invoke('import_dropped_image', {
+        basePath: tab.path,
+        sourcePath: src,
+      });
+      refs.push(`![](${result.relative_href})`);
+    } catch (err) {
+      logError('editor', 'image drop import failed', err);
+    }
+  }
+  if (!refs.length) return true;
+
+  const insertion = refs.join('\n');
+  editorView.dispatch({
+    changes: { from: pos, to: pos, insert: insertion },
+    selection: { anchor: pos + insertion.length },
+  });
+  editorView.focus();
+  return true;
+}
+
 // Mounts the split editor/preview layout for the given tab. Shared by
 // enterEditMode (initial entry) and applyActiveTab (switching between
 // editing tabs): both rebuild the view against the active tab's raw
@@ -440,7 +515,7 @@ export function mountEditor(tab) {
 
   // Restore this tab's split layout (frac + mode) before the panes paint.
   applySplitToTab(tab);
-  updateCounts(tab.raw ?? '');
+  updateCounts(tab.raw ?? '', undefined);
 
   // Seed the preview with the last rendered HTML so the pane isn't empty
   // for a frame; then kick off a fresh render to pick up any unsaved edits.
@@ -462,11 +537,9 @@ function unmountEditor() {
 
 export function setPreviewHtml(html) {
   previewPane.innerHTML = html;
-  // Local images arrive as `<img data-oxide-src="/abs/path">`; rewrite to
-  // asset:// URLs so the webview can actually load them.
-  for (const img of previewPane.querySelectorAll('img[data-oxide-src]')) {
-    img.src = convertFileSrc(img.dataset.oxideSrc);
-  }
+  // Resolve local images to asset:// URLs and promote remote images only
+  // if the user has enabled them — see hydrateImages.
+  hydrateImages(previewPane);
   // After a re-render the preview's scrollHeight usually grows/shrinks
   // while its scrollTop stays pinned, so proportional alignment with the
   // editor drifts as the user types. Re-mirror once here so the preview
@@ -523,7 +596,7 @@ const LARGE_FILE_DEBOUNCE_MS = 600;
 let previewTimer = null;
 let previewRenderSeq = 0;
 
-function schedulePreviewRender(delay) {
+function schedulePreviewRender(delay?: number) {
   if (previewTimer) clearTimeout(previewTimer);
   let computed = delay;
   if (computed === undefined) {
@@ -606,7 +679,7 @@ export function exitEditMode({ keepHtml = true } = {}) {
   if (keepHtml) renderContent(tab.html);
   // Switch the status-bar counts from the live buffer back to the tab's
   // raw source (no selection segment in read mode).
-  updateCounts(tab.raw ?? '');
+  updateCounts(tab.raw ?? '', undefined);
   applyZoom(tab.zoom);
   rerender();
   requestAnimationFrame(() => { contentScroll.scrollTop = tab.scrollTop || 0; });
@@ -687,8 +760,9 @@ export async function discardActiveFile() {
     });
     editorView.focus();
   }
-  btnSave.disabled = true;
-  if (btnDiscard) btnDiscard.disabled = true;
+  const dirty = isDirty(tab);
+  (btnSave as HTMLButtonElement).disabled = true;
+  if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = true;
   const tabEl = document.querySelector(`.tab[data-tab-id="${tab.id}"]`);
   if (tabEl) tabEl.classList.remove('dirty');
   updateCounts(restored);
@@ -708,10 +782,10 @@ if (editToolbarEl) {
   editToolbarEl.addEventListener('mousedown', (e) => {
     // Prevent the click from stealing focus from the editor — otherwise
     // the format dispatch lands while focus is somewhere else.
-    if (e.target.closest('.fmt-btn')) e.preventDefault();
+    if ((e.target as HTMLElement).closest('.fmt-btn')) e.preventDefault();
   });
   editToolbarEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('.fmt-btn');
+    const btn = (e.target as HTMLElement).closest('.fmt-btn') as HTMLElement;
     if (!btn) return;
     const action = btn.dataset.format;
     if (!action) return;
@@ -766,7 +840,7 @@ export function tryOpenEditorSearch() {
 // mutate the document instead of the panel input.
 document.addEventListener('keydown', (e) => {
   if (!(e.target instanceof Element)) return;
-  if (!e.target.closest('.cm-content')) return;
+  if (!(e.target as HTMLElement).closest('.cm-content')) return;
   if (dispatchKey(e, state.bindings, 'editor')) e.stopPropagation();
 }, true);
 
@@ -794,7 +868,7 @@ function escapeHtml(s) {
 // nonsensical). `primary` selects which button gets the initial focus
 // and the Enter accelerator: 'save' for the unsaved-changes prompt,
 // 'discard' for the explicit Discard click, 'cancel' otherwise.
-function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, primary }) {
+function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, primary }: any) {
   confirmDialogTitle.textContent = title;
   confirmDialogBody.innerHTML = bodyHtml;
   confirmSaveBtn.textContent = saveLabel ?? 'Save';

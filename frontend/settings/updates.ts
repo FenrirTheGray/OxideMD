@@ -5,7 +5,7 @@
 // #btn-check-updates). settings.js imports `checkForUpdates` (button wiring)
 // and `hideUpdateStatus` (called when opening the dialog).
 
-import { invoke, listen } from "../state.js";
+import { invoke, listen } from "../core/state.ts";
 
 const UPDATE_ICON_AVAILABLE =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>';
@@ -58,8 +58,8 @@ async function installUpdate(version) {
     <span class="update-message">Installing <span class="update-version">v${version}</span>… <span class="update-progress-text">starting</span></span>
     <div class="update-progress-bar" aria-hidden="true"><div class="update-progress-fill"></div></div>
   `;
-  const progressText = el.querySelector(".update-progress-text");
-  const progressFill = el.querySelector(".update-progress-fill");
+  const progressText = el.querySelector(".update-progress-text") as HTMLElement;
+  const progressFill = el.querySelector(".update-progress-fill") as HTMLElement;
 
   // Listener returns an unlisten fn; tear it down on either outcome
   // so a later check/install doesn't accumulate stale handlers.
@@ -112,7 +112,7 @@ async function installUpdate(version) {
 }
 
 export async function checkForUpdates() {
-  const btn = document.getElementById("btn-check-updates");
+  const btn = document.getElementById("btn-check-updates") as HTMLButtonElement;
   const origHTML = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML =

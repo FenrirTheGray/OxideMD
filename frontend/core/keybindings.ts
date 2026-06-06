@@ -14,12 +14,12 @@
 //
 // Modifiers are alphabetized on save so two accels compare as strings.
 
-import { isMac } from './state.js';
-import { logWarn } from './logger.js';
+import { isMac } from "./state.ts";
+import { logWarn } from "./logger.ts";
 import {
   NAMED_KEYS,
   parseAccel, formatAccelParts, canonicalizeAccel,
-} from './lib/accel.js';
+} from "../lib/accel.ts";
 
 // Re-export the pure accel helpers so existing importers (settings.js,
 // shortcuts-display.js) keep importing them from keybindings.js unchanged.
@@ -207,7 +207,7 @@ const handlers = new Map();
 
 export function registerHandler(id, fn) {
   if (!ACTION_BY_ID.has(id)) {
-    logWarn('keybindings', `registerHandler: unknown action "${id}"`);
+    logWarn('keybindings', `registerHandler: unknown action "${id}"`, undefined);
     return;
   }
   handlers.set(id, fn);
