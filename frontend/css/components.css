@@ -1,0 +1,476 @@
+/* ── Search highlights ──────────────────────────────────────────────
+   Painted via the CSS Custom Highlight API — no <mark> wrapper is
+   inserted into the DOM. ::highlight() only honours a limited subset
+   of properties (background-color, color, text-decoration, etc.), so
+   the old border-radius/padding don't carry over. */
+::highlight(oxide-match) {
+  background-color: var(--mark);
+}
+::highlight(oxide-current) {
+  background-color: var(--mark-current);
+  color: var(--mark-current-fg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SETTINGS MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+
+#picker-backdrop,
+#settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 200;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+#picker-backdrop,
+#settings-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#picker-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 28px;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  animation: dialog-appear var(--dur) var(--ease);
+}
+#picker-loader.hidden {
+  display: none;
+}
+.picker-loader-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.picker-loader-label {
+  line-height: 1;
+}
+#picker-backdrop.hidden,
+#settings-overlay.hidden {
+  display: none;
+}
+
+/* Settings exit animation */
+@keyframes overlay-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-disappear {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.94) translateY(-12px);
+  }
+}
+#settings-overlay.closing {
+  animation: overlay-fade-out var(--dur) var(--ease) forwards;
+}
+#settings-overlay.closing #settings-dialog {
+  animation: dialog-disappear var(--dur) var(--ease) forwards;
+}
+
+@keyframes overlay-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+#settings-dialog {
+  background: var(--bg-settings);
+  border-radius: 14px;
+  width: min(660px, calc(100vw - 32px));
+  /* Never taller than the viewport — on short windows the body scrolls
+     instead of pushing the dialog off-screen. */
+  max-height: calc(100vh - 32px);
+  box-shadow: var(--shadow-dialog);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  animation: dialog-appear var(--dur) var(--ease-out);
+}
+
+@keyframes dialog-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+#settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  background: var(--bg-settings-hd);
+  border-bottom: 1px solid var(--border);
+}
+
+#settings-header span {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+#settings-header button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  font-size: 18px;
+  line-height: 1;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+#settings-header button:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#settings-header button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
+}
+
+/* ── Context menu ──────────────────────────────────────────────────
+   Replaces the webview's default right-click menu (whose "Reload"
+   entry would wipe app state). Positioned absolutely at the cursor;
+   the JS module clamps it into the viewport. */
+.ctx-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  user-select: none;
+  animation: ctx-menu-in 120ms var(--ease-out);
+}
+@keyframes ctx-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-xs) var(--ease);
+}
+.ctx-item:hover:not(:disabled),
+.ctx-item:focus-visible {
+  background: var(--accent-glow);
+  outline: none;
+}
+.ctx-item:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+.ctx-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctx-shortcut {
+  color: var(--fg-muted);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.ctx-sep {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 4px 2px;
+}
+
+/* ── Print to PDF ─────────────────────────────────────────────────── */
+/* print.js renders the active tab's Markdown into #print-root and calls
+   window.print(). On screen the element is never visible; the @media
+   print block below isolates it so only the rendered Markdown reaches
+   the PDF. */
+#print-root {
+  display: none;
+}
+
+@media print {
+  /* Isolate #print-root: hide every other top-level node so only the
+     rendered Markdown reaches the page — no toolbar, sidebar, tabs,
+     status bar, overlays, or popovers. */
+  body > *:not(#print-root) {
+    display: none !important;
+  }
+
+  html,
+  body {
+    height: auto;
+    overflow: visible;
+  }
+
+  /* @page margin is 0 so the page background reaches every edge of the
+     sheet; the page inset lives on #print-root's padding instead.
+     Without this the @page margin band stays paper-white and a
+     dark-theme PDF prints as a dark card floating in a white border. */
+  @page {
+    margin: 0;
+  }
+
+  #print-root {
+    display: block;
+    position: static;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 1.6cm;
+    box-sizing: border-box;
+  }
+
+  /* Default (printer-friendly off): the PDF matches the app's current
+     theme. The background is set on <body> too so it propagates to the
+     page canvas (the whole sheet), and #print-root inherits the live
+     theme variables from <body>. */
+  body,
+  #print-root {
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  /* "Printer Friendly PDFs" = on: force a white sheet with dark text
+     regardless of the active theme. print.js puts `.print-friendly` on
+     <body> (not #print-root) so this rule can flip the page canvas too.
+     The markdown-relevant CSS custom properties are overridden to the
+     Atom One Light values (copied from `body.theme-light`); --code-bg /
+     --note-bg are normally set inline on <body> per-theme, so they're
+     overridden here too. */
+  body.print-friendly,
+  body.print-friendly #print-root {
+    background: #fff;
+  }
+  body.print-friendly #print-root {
+    --bg: #fafafa;
+    --fg: #383a42;
+    --fg-dim: #696c77;
+    --fg-muted: #6a7387;
+    --fg-toolbar: #4a4a4f;
+    --border: #d8d8d8;
+    --border-subtle: rgba(216, 216, 216, 0.7);
+    --bg-table-hd: #e8e8e8;
+    --bg-table-row: #f5f5f5;
+    --bg-code: #f0f0f0;
+    --code-bg: #f0f0f0;
+    --note-bg: #eaeef8;
+    color: var(--fg);
+  }
+
+  /* Keep colors, syntax highlighting and theme backgrounds in the PDF —
+     including the <body> background that fills the page canvas. */
+  html,
+  body,
+  #print-root,
+  #print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Page-break hygiene: don't orphan headings or split atomic blocks. */
+  #print-root h1,
+  #print-root h2,
+  #print-root h3,
+  #print-root h4,
+  #print-root h5,
+  #print-root h6 {
+    break-after: avoid;
+  }
+  #print-root pre,
+  #print-root blockquote,
+  #print-root table,
+  #print-root img,
+  #print-root tr {
+    break-inside: avoid;
+  }
+
+  /* Carried from the pre-3.2.0 branch: #print-root holds the rendered
+     Markdown, so its code blocks carry the copy button + language label
+     chrome — hide both so neither prints into the PDF. */
+  #print-root .codeblock-copy,
+  #print-root .codeblock-lang {
+    display: none !important;
+  }
+}
+
+/* ── Print-to-PDF loader overlay ──────────────────────────────────── */
+/* Shown by print.js for the whole export (render → native print dialog),
+   hidden on `afterprint` or on failure. On-screen UI only — kept outside
+   the @media print block above, and the `body > *:not(#print-root)`
+   isolation rule already keeps it out of the PDF. Mirrors the
+   #picker-backdrop > #picker-loader structure. z-index sits above the
+   Settings overlay (200) so it covers everything while exporting. */
+#print-loader-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 300;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+#print-loader-overlay.hidden {
+  display: none;
+}
+#print-loader-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 28px;
+  background: var(--bg-settings);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  animation: dialog-appear var(--dur) var(--ease);
+}
+.print-loader-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+.print-loader-label {
+  line-height: 1;
+}
+
+/* ── Toast notifications ──────────────────────────────────────────── */
+/* toast.js appends `.toast` cards into #toast-container; each auto-
+   dismisses after ~4s. The container is click-through (pointer-events:
+   none) so toasts never block the UI underneath; toasts re-enable
+   pointer events on themselves. z-index above the print loader (300)
+   so a finish toast is visible even mid-teardown. */
+#toast-container {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  max-width: 320px;
+  padding: 11px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: toast-in var(--dur) var(--ease-out);
+}
+/* No dedicated --success token in the palette; --accent (blue) reads as
+   the positive accent and keeps dark/light theming intact. */
+.toast.success {
+  border-left-color: var(--accent);
+}
+.toast.error {
+  border-left-color: var(--danger);
+}
+/* Exit transition — toast.js adds `.leaving`, then removes the node
+   after the animation (~260ms, kept in sync with TOAST_EXIT_MS). */
+.toast.leaving {
+  animation: toast-out 0.26s var(--ease) forwards;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
