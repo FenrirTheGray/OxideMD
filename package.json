@@ -1,20 +1,27 @@
 {
-  "type": "module",
-  "scripts": {
-    "build:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --minify --outfile=frontend/dist/bundle.js",
-    "watch:frontend": "esbuild frontend/app.js --bundle --format=iife --target=es2020 --outfile=frontend/dist/bundle.js --watch --sourcemap",
-    "test": "node --test \"frontend/**/*.test.js\""
-  },
-  "dependencies": {
-    "@codemirror/commands": "^6.10.3",
-    "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language": "^6.12.3",
-    "@codemirror/search": "^6.6.0",
-    "@codemirror/state": "^6.6.0",
-    "@codemirror/view": "^6.41.1",
-    "@resvg/resvg-js": "^2.6.2"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.0"
-  }
+	"type": "module",
+	"scripts": {
+		"build:frontend": "esbuild frontend/app.ts --bundle --format=iife --target=es2025 --minify --outfile=frontend/dist/bundle.js",
+		"watch:frontend": "esbuild frontend/app.ts --bundle --format=iife --target=es2025 --outfile=frontend/dist/bundle.js --watch --sourcemap",
+		"typecheck": "tsc --noEmit",
+		"test": "node --import tsx --test \"frontend/**/*.test.ts\""
+	},
+	"dependencies": {
+		"@codemirror/commands": "^6.10.3",
+		"@codemirror/lang-markdown": "^6.5.0",
+		"@codemirror/language": "^6.12.3",
+		"@codemirror/search": "^6.6.0",
+		"@codemirror/state": "^6.6.0",
+		"@codemirror/view": "^6.41.1",
+		"@resvg/resvg-js": "^2.6.2"
+	},
+	"devDependencies": {
+		"@types/node": "^25.9.2",
+		"esbuild": "^0.28.0",
+		"tsx": "^4.22.4",
+		"typescript": "^6.0.3"
+	},
+	"allowScripts": {
+		"esbuild@0.28.0": true
+	}
 }

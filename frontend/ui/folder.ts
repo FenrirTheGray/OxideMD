@@ -6,10 +6,10 @@ import {
   sidebarEl, sidebarDivider, sidebarFolderName, sidebarTreeEl,
   sidebarFilterInput, sidebarFilterClearBtn,
   hasActiveOverlay,
-} from './state.js';
-import { activeTab, loadFile, renderContent } from './tabs.js';
-import { saveRecentlyFor } from './editor.js';
-import { updateProjectSearchAvailability, closeProjectSearch } from './search-project.js';
+} from "../core/state.ts";
+import { activeTab, loadFile, renderContent } from "./tabs.ts";
+import { saveRecentlyFor } from "../editor/editor.ts";
+import { updateProjectSearchAvailability, closeProjectSearch } from "../features/search-project.ts";
 
 const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
 const SVG_FOLDER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
@@ -119,7 +119,7 @@ export function setFolder(tree) {
 
 function resetFilter() {
   state.treeFilter = '';
-  if (sidebarFilterInput) sidebarFilterInput.value = '';
+  if (sidebarFilterInput) (sidebarFilterInput as HTMLInputElement).value = '';
   if (sidebarFilterClearBtn) sidebarFilterClearBtn.classList.add('hidden');
 }
 
@@ -132,7 +132,7 @@ export function setTreeFilter(query) {
 }
 
 export function clearTreeFilter() {
-  if (!state.treeFilter && !(sidebarFilterInput && sidebarFilterInput.value)) return;
+  if (!state.treeFilter && !(sidebarFilterInput && (sidebarFilterInput as HTMLInputElement).value)) return;
   resetFilter();
   renderFolderTree();
 }
@@ -235,10 +235,10 @@ export function renderFolderTree() {
   const active = sidebarTreeEl.querySelector('.tree-row.active');
   const first = sidebarTreeEl.querySelector('.tree-row');
   const entry = active || first;
-  if (entry) entry.tabIndex = 0;
+  if (entry) (entry as HTMLElement).tabIndex = 0;
 }
 
-function buildTreeNode(node, opts = {}) {
+function buildTreeNode(node: any, opts: any = {}) {
   const forceExpand = !!opts.forceExpand;
   const highlight = opts.highlight || '';
 
@@ -337,28 +337,28 @@ function renderHighlightedLabel(label, text, query) {
 }
 
 function visibleTreeRows() {
-  return Array.from(sidebarTreeEl.querySelectorAll('.tree-row')).filter(r => r.offsetParent !== null);
+  return Array.from(sidebarTreeEl.querySelectorAll('.tree-row')).filter(r => (r as HTMLElement).offsetParent !== null);
 }
 
 function focusTreeRow(row) {
   if (!row) return;
-  sidebarTreeEl.querySelectorAll('.tree-row[tabindex="0"]').forEach(r => { r.tabIndex = -1; });
+  sidebarTreeEl.querySelectorAll('.tree-row[tabindex="0"]').forEach(r => { (r as HTMLElement).tabIndex = -1; });
   row.tabIndex = 0;
   row.focus();
   row.scrollIntoView({ block: 'nearest' });
 }
 
 sidebarTreeEl.addEventListener('focusin', (e) => {
-  const row = e.target.closest('.tree-row');
+  const row = (e.target as HTMLElement).closest('.tree-row') as HTMLElement;
   if (!row) return;
   sidebarTreeEl.querySelectorAll('.tree-row[tabindex="0"]').forEach(r => {
-    if (r !== row) r.tabIndex = -1;
+    if (r !== row) (r as HTMLElement).tabIndex = -1;
   });
   row.tabIndex = 0;
 });
 
 sidebarTreeEl.addEventListener('keydown', (e) => {
-  const row = e.target.closest('.tree-row');
+  const row = (e.target as HTMLElement).closest('.tree-row') as HTMLElement;
   if (!row || !sidebarTreeEl.contains(row)) return;
 
   const rows = visibleTreeRows();

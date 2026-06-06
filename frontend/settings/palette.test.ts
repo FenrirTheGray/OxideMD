@@ -11,7 +11,7 @@ import {
   BASE_PALETTE_TOKENS,
   DEFAULT_PALETTE,
   effectivePalette,
-} from "./palette.js";
+} from "./palette.ts";
 
 test("effectiveBgColor: swaps the other theme's default to the resolved one", () => {
   // Saved value is the dark default while resolving to light → swap to light.

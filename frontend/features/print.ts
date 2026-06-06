@@ -32,9 +32,10 @@
 // The only failures we can genuinely detect are a `render_preview`
 // throw or a `window.print()` throw; those get an error toast instead.
 
-import { invoke, convertFileSrc, state } from './state.js';
-import { activeTab } from './tabs.js';
-import { showToast } from './toast.js';
+import { invoke, state } from "../core/state.ts";
+import { activeTab } from "../ui/tabs.ts";
+import { hydrateImages } from "../core/tab-state.ts";
+import { showToast } from "../ui/toast.ts";
 
 const printRoot = document.getElementById('print-root');
 const loaderOverlay = document.getElementById('print-loader-overlay');
@@ -66,11 +67,10 @@ export async function printActiveTab() {
   }
   printRoot.innerHTML = html;
 
-  // Local images arrive as `<img data-oxide-src="/abs/path">`; rewrite to
-  // asset:// URLs so the webview can actually load them for the print.
-  for (const img of printRoot.querySelectorAll('img[data-oxide-src]')) {
-    img.src = convertFileSrc(img.dataset.oxideSrc);
-  }
+  // Resolve local images to asset:// URLs; remote images print only if the
+  // user has enabled them (consistent with on-screen rendering) — see
+  // hydrateImages.
+  hydrateImages(printRoot);
 
   // Printer-friendly = light background / dark text. Default is on, so
   // only an explicit `false` opts into "match the app's current theme".

@@ -13,8 +13,8 @@ import {
   sidebarTreeEl, sidebarFilterEl,
   sidebarSearchToggle, sidebarSearchPanel,
   sidebarSearchInput, sidebarSearchClearBtn, sidebarSearchResultsEl,
-} from './state.js';
-import { loadFile } from './tabs.js';
+} from "../core/state.ts";
+import { loadFile } from "../ui/tabs.ts";
 
 const SVG_FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
@@ -160,8 +160,8 @@ export function openProjectSearch() {
     sidebarSearchToggle.classList.add('active');
     sidebarSearchToggle.setAttribute('aria-pressed', 'true');
   }
-  sidebarSearchInput.focus();
-  sidebarSearchInput.select();
+  (sidebarSearchInput as HTMLInputElement).focus();
+  (sidebarSearchInput as HTMLInputElement).select();
 }
 
 export function closeProjectSearch() {
@@ -177,7 +177,7 @@ export function closeProjectSearch() {
   // folder) starts clean rather than showing a stale query + results.
   if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
   searchSeq++; // cancel any in-flight search
-  if (sidebarSearchInput) sidebarSearchInput.value = '';
+  if (sidebarSearchInput) (sidebarSearchInput as HTMLInputElement).value = '';
   if (sidebarSearchClearBtn) sidebarSearchClearBtn.classList.add('hidden');
   sidebarSearchResultsEl.innerHTML = '';
 }
@@ -194,7 +194,7 @@ if (sidebarSearchToggle) {
 
 if (sidebarSearchInput) {
   sidebarSearchInput.addEventListener('input', () => {
-    const v = sidebarSearchInput.value;
+    const v = (sidebarSearchInput as HTMLInputElement).value;
     if (sidebarSearchClearBtn) sidebarSearchClearBtn.classList.toggle('hidden', v === '');
     scheduleSearch(v);
   });
@@ -208,7 +208,7 @@ if (sidebarSearchInput) {
 
 if (sidebarSearchClearBtn) {
   sidebarSearchClearBtn.addEventListener('click', () => {
-    sidebarSearchInput.value = '';
+    (sidebarSearchInput as HTMLInputElement).value = '';
     sidebarSearchClearBtn.classList.add('hidden');
     if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
     searchSeq++; // cancel any in-flight search

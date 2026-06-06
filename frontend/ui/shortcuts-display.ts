@@ -6,14 +6,14 @@
 // showWelcome() rewrites contentEl, and after renderTabBar() rebuilds tab
 // close buttons (so per-tab close tooltips reflect the live binding).
 
-import { ACTIONS, getAction, accelToTokens } from './keybindings.js';
+import { ACTIONS, getAction, accelToTokens } from "../core/keybindings.ts";
 import {
   state,
   shortcutsPopover, contentEl,
   btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnPrint,
   btnModeToggle, btnSave,
   btnZoomOut, btnZoomIn, zoomLabel, sidebarCloseBtn, tabBarEl,
-} from './state.js';
+} from "../core/state.ts";
 
 // Welcome screen ordering (curated; not every action belongs here). Static
 // rows for non-rebindable keys append at the end.
@@ -139,13 +139,13 @@ function renderWelcome() {
   // gets its kbds rebuilt per current binding. Scope to #welcome so we
   // never reach into rendered markdown that happens to use the attr.
   contentEl.querySelectorAll('#welcome [data-shortcut]').forEach(el => {
-    const id = el.dataset.shortcut;
-    el.innerHTML = tokensToHtml(tokensFor(id));
+    const id = (el as HTMLElement).dataset.shortcut;
+    if (id) el.innerHTML = tokensToHtml(tokensFor(id));
   });
 }
 
 function renderToolbarTooltips() {
-  const map = [
+  const map: [HTMLElement | null, string][] = [
     [btnNew,          'newFile'],
     [btnOpen,         'openFile'],
     [btnOpenFolder,   'openFolder'],
@@ -161,17 +161,18 @@ function renderToolbarTooltips() {
   ];
   for (const [el, id] of map) {
     if (!el) continue;
-    el.title = tooltipFor(TOOLBAR_LABELS[id] || id, tokensFor(id));
+    el.title = tooltipFor(TOOLBAR_LABELS[id as keyof typeof TOOLBAR_LABELS] || id, tokensFor(id));
   }
 
   refreshTabCloseTitles();
 
   // Edit-toolbar formatting buttons that have a shortcut in the registry.
   document.querySelectorAll('#edit-toolbar .fmt-btn[data-format]').forEach(btn => {
-    const fmt = btn.dataset.format;
-    const actionId = FMT_TO_ACTION[fmt];
+    const fmt = (btn as HTMLElement).dataset.format;
+    if (!fmt) return;
+    const actionId = FMT_TO_ACTION[fmt as keyof typeof FMT_TO_ACTION];
     if (!actionId) return;
-    btn.title = tooltipFor(FMT_LABELS[fmt], tokensFor(actionId));
+    (btn as HTMLElement).title = tooltipFor(FMT_LABELS[fmt as keyof typeof FMT_LABELS], tokensFor(actionId));
   });
 }
 
@@ -181,7 +182,7 @@ function renderToolbarTooltips() {
 export function refreshTabCloseTitles() {
   if (!tabBarEl) return;
   const title = tooltipFor(TOOLBAR_LABELS.closeTab, tokensFor('closeTab'));
-  tabBarEl.querySelectorAll('.tab-close').forEach(b => { b.title = title; });
+  tabBarEl.querySelectorAll('.tab-close').forEach(b => { (b as HTMLElement).title = title; });
 }
 
 export function renderShortcutsUI() {

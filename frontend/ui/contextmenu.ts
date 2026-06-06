@@ -14,15 +14,15 @@ import {
   tabs,
   sidebarTreeEl, tabBarEl,
   previewPane, contentEl,
-} from './state.js';
+} from "../core/state.ts";
 import {
   loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
   createNewFile,
-} from './tabs.js';
-import { applyFormat } from './editor-format.js';
-import { getEditorView } from './editor.js';
-import { printActiveTab } from './print.js';
-import { logError } from './logger.js';
+} from "./tabs.ts";
+import { applyFormat } from "../editor/editor-format.ts";
+import { getEditorView } from "../editor/editor.ts";
+import { printActiveTab } from "../features/print.ts";
+import { logError } from "../core/logger.ts";
 import { EditorSelection } from '@codemirror/state';
 
 // ── Menu renderer ────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function showMenu(items, clientX, clientY) {
   // Focus the first enabled item so keyboard users can drive the menu
   // immediately; the pointer user will just ignore the outline.
   const firstEnabled = el.querySelector('.ctx-item:not([disabled])');
-  if (firstEnabled) firstEnabled.focus();
+  if (firstEnabled) (firstEnabled as HTMLElement).focus();
 
   // Dismissal listeners. Use `capture` for pointerdown so we see it
   // before the underlying element's own click handlers steal it.
@@ -122,7 +122,7 @@ function showMenu(items, clientX, clientY) {
       const cur = enabled.indexOf(document.activeElement);
       const delta = e.key === 'ArrowDown' ? 1 : -1;
       const next = (cur + delta + enabled.length) % enabled.length;
-      enabled[next].focus();
+      (enabled[next] as HTMLElement).focus();
     }
   };
   const onBlur = () => closeMenu();
@@ -244,7 +244,7 @@ function buildTabMenu(tabEl) {
   if (Number.isNaN(id)) return [];
   const tab = tabs.find(t => t.id === id);
   const multi = tabs.length > 1;
-  const items = [
+  const items: any[] = [
     { label: 'Close', action: () => closeTab(id), shortcut: `${modKey}+W` },
   ];
   if (multi) {
@@ -341,18 +341,18 @@ document.addEventListener('contextmenu', (e) => {
   // Our own menu: nothing to do (preventDefault already stops the webview
   // default). Other overlays are fine — the input/builder dispatch below
   // picks the right menu for form fields inside them.
-  if (e.target.closest('.ctx-menu')) return;
+  if ((e.target as HTMLElement).closest('.ctx-menu')) return;
 
   let items = [];
 
-  const treeNode = sidebarTreeEl?.contains(e.target) ? e.target.closest('.tree-node') : null;
-  const tabEl    = tabBarEl?.contains(e.target)      ? e.target.closest('.tab')       : null;
-  const mdEditor = e.target.closest('.cm-editor');
+  const treeNode = sidebarTreeEl?.contains(e.target as Node) ? (e.target as HTMLElement).closest('.tree-node') : null;
+  const tabEl    = tabBarEl?.contains(e.target as Node)      ? (e.target as HTMLElement).closest('.tab')       : null;
+  const mdEditor = (e.target as HTMLElement).closest('.cm-editor');
   const otherInput = !mdEditor
-    ? e.target.closest('input[type="text"], input[type="search"], input:not([type]), textarea')
+    ? (e.target as HTMLElement).closest('input[type="text"], input[type="search"], input:not([type]), textarea')
     : null;
-  const inPreview = previewPane?.contains(e.target);
-  const inContent = contentEl?.contains(e.target);
+  const inPreview = previewPane?.contains(e.target as Node);
+  const inContent = contentEl?.contains(e.target as Node);
 
   if (treeNode) {
     items = buildTreeMenu(treeNode);

@@ -7,7 +7,7 @@
 // (to repopulate on open / reset / import). The actual @font-face loading
 // (loadCustomFont) stays in settings.js since applyConfig/saveSettings own it.
 
-import { invoke, state } from "../state.js";
+import { invoke, state } from "../core/state.ts";
 
 const fontSelect = document.getElementById("setting-font");
 const fontTrigger = fontSelect.querySelector(".custom-select-trigger");
@@ -41,10 +41,10 @@ fontTrigger.addEventListener("click", () => {
   else openFontSelect();
 });
 
-fontTrigger.addEventListener("keydown", (e) => {
+fontTrigger.addEventListener("keydown", (e: KeyboardEvent) => {
   const opts = Array.from(
     fontOptionsContainer.querySelectorAll(".custom-select-option"),
-  );
+  ) as HTMLElement[];
   let focusedIdx = opts.findIndex((o) => o.classList.contains("focused"));
 
   switch (e.key) {
@@ -84,7 +84,7 @@ fontTrigger.addEventListener("keydown", (e) => {
         e.preventDefault();
         e.stopPropagation();
         closeFontSelect();
-        fontTrigger.focus();
+        (fontTrigger as HTMLElement).focus();
       }
       break;
     case "Tab":
@@ -100,7 +100,7 @@ Object.defineProperty(fontSelect, "value", {
   },
   set(v) {
     fontSelect.dataset.value = v;
-    const opts = fontSelect.querySelectorAll(".custom-select-option");
+    const opts = fontSelect.querySelectorAll(".custom-select-option") as NodeListOf<HTMLElement>;
     const match = fontSelect.querySelector(
       `.custom-select-option[data-value="${CSS.escape(v)}"]`,
     );
@@ -181,17 +181,19 @@ export function rebuildFontDropdown() {
   const current = fontSelect.dataset.value || "";
   fontOptionsContainer
     .querySelectorAll(".custom-select-option")
-    .forEach((o) => {
-      o.classList.toggle("selected", o.dataset.value === current);
+    .forEach((o: Element) => {
+      const el = o as HTMLElement;
+      el.classList.toggle("selected", el.dataset.value === current);
     });
 }
 
 // Event delegation for font dropdown clicks
-fontOptionsContainer.addEventListener("click", async (e) => {
-  const removeBtn = e.target.closest(".custom-font-remove");
+fontOptionsContainer.addEventListener("click", async (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  const removeBtn = target.closest(".custom-font-remove");
   if (removeBtn) {
     e.stopPropagation();
-    const opt = removeBtn.closest(".custom-select-option");
+    const opt = removeBtn.closest(".custom-select-option") as HTMLElement;
     const label = opt.querySelector(".custom-font-label");
     const fontName = label ? label.textContent : "this font";
     if (!confirm(`Remove "${fontName}"? The font file will be deleted.`))
@@ -201,18 +203,18 @@ fontOptionsContainer.addEventListener("click", async (e) => {
     state.customFonts = await invoke("list_custom_fonts");
     // If the removed font was selected, fall back to system-ui
     if (fontSelect.dataset.value === opt.dataset.value) {
-      fontSelect.value = "system-ui";
+      (fontSelect as any).value = "system-ui";
     }
     if (state.activeFontFilename === filename) state.activeFontFilename = null;
     rebuildFontDropdown();
     return;
   }
 
-  const opt = e.target.closest(".custom-select-option");
+  const opt = target.closest(".custom-select-option") as HTMLElement;
   if (!opt) return;
 
   // Normal font selection
-  fontSelect.value = opt.dataset.value;
+  (fontSelect as any).value = opt.dataset.value;
   fontSelect.classList.remove("open");
   fontTrigger.setAttribute("aria-expanded", "false");
 });

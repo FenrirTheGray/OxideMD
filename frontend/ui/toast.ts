@@ -1,6 +1,6 @@
 // Lightweight toast notifications. This is the app's first real toast
 // system, so it's deliberately small, dependency-free, and reusable —
-// other modules can `import { showToast } from './toast.js'` later.
+// other modules can `import { showToast } from "./toast.ts"` later.
 //
 // A toast is a `.toast` card appended into the `#toast-container`
 // element (a fixed, bottom-right, stacked column declared in
@@ -26,7 +26,7 @@ let container = null;
  *   longer lifetime for messages the user must read and act on (e.g.
  *   "relaunch to apply update") so they don't blink past.
  */
-export function showToast(message, kind = 'success', opts = {}) {
+export function showToast(message: any, kind = 'success', opts: any = {}) {
   if (!container) container = document.getElementById('toast-container');
   // No container in the DOM (shouldn't happen) → fail quietly rather
   // than throw into whatever called us.

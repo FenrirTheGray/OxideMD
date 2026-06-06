@@ -22,7 +22,7 @@ import {
   contentEl, previewPane,
   statusText, statusIndicator,
   zoomLabel, btnZoomIn, btnZoomOut,
-} from './state.js';
+} from "./state.ts";
 
 // ── Active tab ─────────────────────────────────────────────────────────────
 export function activeTab() {
@@ -46,11 +46,33 @@ export function isPreviewVisible() {
   return (tab.splitMode || 'split') !== 'editor';
 }
 
+// ── Image hydration ───────────────────────────────────────────────────────
+// Promote the renderer's image placeholders to live sources for a freshly
+// mounted container. Two kinds need work:
+//   • Local images arrive as `<img data-oxide-src="/abs/path">`; the webview
+//     can't load a raw filesystem path, so rewrite it to an asset:// URL.
+//   • Remote images (http(s)/protocol-relative) arrive as inert
+//     `<img class="md-remote-image" data-oxide-remote-src="https://…">` with
+//     NO live `src` — so an untrusted document can't phone home to an
+//     arbitrary host on open (an IP-leak / tracking-pixel vector). They're
+//     promoted to a real `src` only when the user has enabled remote images.
+// `data:` images already carry a real `src` from the renderer and need
+// nothing here. Shared by renderContent, the editor preview, and print so the
+// gating stays consistent across all three mount paths.
+export function hydrateImages(root) {
+  if (!root) return;
+  for (const img of root.querySelectorAll('img[data-oxide-src]')) {
+    img.src = convertFileSrc(img.dataset.oxideSrc);
+  }
+  if (state.config?.load_remote_images) {
+    for (const img of root.querySelectorAll('img[data-oxide-remote-src]')) {
+      img.src = img.dataset.oxideRemoteSrc;
+      img.classList.remove('md-remote-image');
+    }
+  }
+}
+
 // ── Content mount ────────────────────────────────────────────────────────────
-// Local images are emitted by the Rust renderer as `<img data-oxide-src="…">`
-// with an absolute path. The webview can't load a raw filesystem path, so we
-// rewrite it to an asset:// URL here. Remote images already carry a real `src`
-// and are untouched.
 export function renderContent(html) {
   // Any existing search highlights point to about-to-be-detached text nodes.
   // Drop them so the registry doesn't hold refs to orphaned ranges.
@@ -63,9 +85,7 @@ export function renderContent(html) {
     }
   }
   contentEl.innerHTML = html;
-  for (const img of contentEl.querySelectorAll('img[data-oxide-src]')) {
-    img.src = convertFileSrc(img.dataset.oxideSrc);
-  }
+  hydrateImages(contentEl);
 }
 
 // ── Status indicator ─────────────────────────────────────────────────────────
@@ -104,6 +124,6 @@ export function applyZoom(zoom) {
     contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
   }
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
-  btnZoomOut.disabled = zoom <= ZOOM_MIN;
-  btnZoomIn.disabled  = zoom >= ZOOM_MAX;
+  (btnZoomOut as HTMLButtonElement).disabled = zoom <= ZOOM_MIN;
+  (btnZoomIn as HTMLButtonElement).disabled  = zoom >= ZOOM_MAX;
 }

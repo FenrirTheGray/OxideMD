@@ -1,8 +1,8 @@
 // Installs window-level error / unhandled-rejection listeners that
 // forward into tauri-plugin-log. Must come before any other import so
 // errors thrown during the rest of the init sequence are captured.
-import './logger.js';
-import { logError } from './logger.js';
+import "./core/logger.js";
+import { logError } from "./core/logger.ts";
 
 import {
   invoke, listen, appWindow,
@@ -19,30 +19,33 @@ import {
   sidebarCloseBtn, sidebarExpandAllBtn, sidebarCollapseAllBtn,
   sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
   confirmOverlay,
-} from './state.js';
-import { effectiveBindings, registerHandler, dispatchKey, runAction } from './keybindings.js';
-import { debounce } from './lib/timing.js';
-import { renderShortcutsUI } from './shortcuts-display.js';
+} from "./core/state.ts";
+import { effectiveBindings, registerHandler, dispatchKey, runAction } from "./core/keybindings.ts";
+import { debounce } from "./lib/timing.ts";
+import { renderShortcutsUI } from "./ui/shortcuts-display.ts";
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
-} from './search.js';
-import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from './folder.js';
-import { openProjectSearch } from './search-project.js';
+} from "./features/search.ts";
+import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from "./ui/folder.ts";
+import { openProjectSearch } from "./features/search-project.ts";
 import {
   switchToTab, closeTab,
   zoomIn, zoomOut, resetZoom,
   renderTabBar,
   loadFile, reloadFile, handleAnchorClick, openFilePicker, createNewFile,
   applyRecentFiles,
-} from './tabs.js';
-import { loadCustomFont, applyConfig, openSettings, closeSettings } from './settings.js';
-import { enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch } from './editor.js';
-import { activeTab } from './tabs.js';
-import { printActiveTab } from './print.js';
-import { showToast } from './toast.js';
-import './contextmenu.js';
-import './window-size.js';
-import { applyOutlineVisibility, closeOutline } from './outline.js';
+} from "./ui/tabs.ts";
+import { loadCustomFont, applyConfig, openSettings, closeSettings } from "./settings/index.ts";
+import {
+  enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch,
+  updateEditorDropHint, clearEditorDropHint, dropImagesIntoEditor,
+} from "./editor/editor.ts";
+import { activeTab } from "./ui/tabs.ts";
+import { printActiveTab } from "./features/print.ts";
+import { showToast } from "./ui/toast.ts";
+import "./ui/contextmenu.js";
+import "./ui/window-size.js";
+import { applyOutlineVisibility, closeOutline } from "./ui/outline.ts";
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -96,15 +99,39 @@ async function init() {
     if (typeof e.payload === 'string') handleFsChange(e.payload);
   });
 
-  await appWindow.onDragDropEvent((e) => {
-    if (e.payload.type === 'drop') {
-      for (const path of e.payload.paths) {
+  await appWindow.onDragDropEvent(async (e) => {
+    const p = e.payload;
+    if (p.type === 'leave') {
+      clearEditorDropHint();
+      return;
+    }
+    if (p.type === 'enter' || p.type === 'over') {
+      const { x, y } = dropClientPoint(p.position);
+      updateEditorDropHint(x, y);
+      return;
+    }
+    if (p.type === 'drop') {
+      clearEditorDropHint();
+      const { x, y } = dropClientPoint(p.position);
+      // An image dropped onto the editor inserts a markdown reference;
+      // anything else (or a drop elsewhere) keeps the existing behavior of
+      // opening dropped .md files.
+      if (await dropImagesIntoEditor(p.paths, x, y)) return;
+      for (const path of p.paths) {
         if (isMarkdownPath(path)) loadFile(path);
       }
     }
   });
 
   syncMaximizeIcon();
+}
+
+// Tauri reports drag-drop coordinates in physical pixels relative to the
+// webview's client area; convert to CSS pixels so they match DOM hit-testing
+// (elementFromPoint / posAtCoords).
+function dropClientPoint(position) {
+  const dpr = window.devicePixelRatio || 1;
+  return { x: position.x / dpr, y: position.y / dpr };
 }
 
 // ── Event wiring ───────────────────────────────────────────────────────────
@@ -192,7 +219,7 @@ btnLogo.addEventListener('click', (e) => {
 // Click outside closes the pinned popover.
 document.addEventListener('mousedown', (e) => {
   if (shortcutsPopover.classList.contains('hidden')) return;
-  if (shortcutsPopover.contains(e.target) || btnLogo.contains(e.target)) return;
+  if (shortcutsPopover.contains(e.target as Node) || btnLogo.contains(e.target as Node)) return;
   closeShortcutsPopover();
 });
 
@@ -235,21 +262,21 @@ sidebarCollapseAllBtn.addEventListener('click', collapseAllFolders);
 // tree re-filter is debounced.
 const debouncedTreeFilter = debounce(setTreeFilter, 80);
 sidebarFilterInput.addEventListener('input', () => {
-  const value = sidebarFilterInput.value;
+  const value = (sidebarFilterInput as HTMLInputElement).value;
   sidebarFilterClearBtn.classList.toggle('hidden', value === '');
   debouncedTreeFilter(value);
 });
 sidebarFilterInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
-    if (sidebarFilterInput.value) {
+    if ((sidebarFilterInput as HTMLInputElement).value) {
       clearTreeFilter();
     } else {
       sidebarFilterInput.blur();
     }
   } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
     const firstRow = sidebarTreeEl.querySelector('.tree-row');
-    if (firstRow) { e.preventDefault(); firstRow.focus(); }
+    if (firstRow) { e.preventDefault(); (firstRow as HTMLElement).focus(); }
   }
 });
 sidebarFilterClearBtn.addEventListener('click', () => {
@@ -286,17 +313,18 @@ filePathEl.addEventListener('keydown', (e) => {
 // anchor (re-created on every tab switch / search render). A single listener
 // survives all DOM replacements inside contentEl.
 contentEl.addEventListener('click', (e) => {
-  if (e.target.closest('#welcome-new'))         { createNewFile(); return; }
-  if (e.target.closest('#welcome-open-folder')) { openFolder(); return; }
-  if (e.target.closest('#welcome-open'))        { openFilePicker(); return; }
-  const recentClear = e.target.closest('#welcome-recent-clear');
+  const target = e.target as HTMLElement;
+  if (target.closest('#welcome-new'))         { createNewFile(); return; }
+  if (target.closest('#welcome-open-folder')) { openFolder(); return; }
+  if (target.closest('#welcome-open'))        { openFilePicker(); return; }
+  const recentClear = target.closest('#welcome-recent-clear');
   if (recentClear) {
     invoke('clear_recent_files')
       .then(() => applyRecentFiles([]))
       .catch(() => {});
     return;
   }
-  const recentForget = e.target.closest('.welcome-recent-forget');
+  const recentForget = target.closest('.welcome-recent-forget') as HTMLElement;
   if (recentForget) {
     e.stopPropagation();
     invoke('forget_recent_file', { path: recentForget.dataset.path })
@@ -304,18 +332,18 @@ contentEl.addEventListener('click', (e) => {
       .catch(() => {});
     return;
   }
-  const recentLink = e.target.closest('.welcome-recent-link');
+  const recentLink = target.closest('.welcome-recent-link') as HTMLElement;
   if (recentLink) {
     loadFile(recentLink.dataset.path);
     return;
   }
-  const copyBtn = e.target.closest('.codeblock-copy');
+  const copyBtn = target.closest('.codeblock-copy');
   if (copyBtn) {
     e.preventDefault();
     copyCodeBlock(copyBtn);
     return;
   }
-  const anchor = e.target.closest('a');
+  const anchor = target.closest('a');
   if (anchor && contentEl.contains(anchor)) {
     e.preventDefault();
     handleAnchorClick(anchor);
@@ -324,7 +352,8 @@ contentEl.addEventListener('click', (e) => {
 
 if (previewPane) {
   previewPane.addEventListener('click', (e) => {
-    const copyBtn = e.target.closest('.codeblock-copy');
+    const target = e.target as HTMLElement;
+    const copyBtn = target.closest('.codeblock-copy');
     if (copyBtn) {
       e.preventDefault();
       copyCodeBlock(copyBtn);
@@ -353,7 +382,8 @@ async function copyCodeBlock(btn) {
 // app with it.
 if (previewPane) {
   previewPane.addEventListener('click', (e) => {
-    const anchor = e.target.closest('a');
+    const target = e.target as HTMLElement;
+    const anchor = target.closest('a');
     if (anchor && previewPane.contains(anchor)) {
       e.preventDefault();
       handleAnchorClick(anchor);
@@ -363,7 +393,7 @@ if (previewPane) {
 btnReload.addEventListener('click', reloadFile);
 btnSearch.addEventListener('click', toggleSearch);
 btnPrint.addEventListener('click', printActiveTab);
-btnSettings.addEventListener('click', () => openSettings());
+btnSettings.addEventListener('click', () => openSettings(undefined as any));
 btnModeToggle.addEventListener('click', () => {
   const tab = activeTab();
   if (!tab || !tab.path) return;
@@ -377,11 +407,11 @@ zoomLabel.addEventListener('click', resetZoom);
 searchCase.addEventListener('click', () => {
   state.searchCaseSensitive = !state.searchCaseSensitive;
   searchCase.classList.toggle('active', state.searchCaseSensitive);
-  searchCase.setAttribute('aria-pressed', state.searchCaseSensitive);
-  runSearch(searchInput.value);
+  searchCase.setAttribute('aria-pressed', state.searchCaseSensitive ? 'true' : 'false');
+  runSearch((searchInput as HTMLInputElement).value);
 });
 
-searchInput.addEventListener('input', debounce(() => runSearch(searchInput.value), 40));
+searchInput.addEventListener('input', debounce(() => runSearch((searchInput as HTMLInputElement).value), 40));
 searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.shiftKey ? prevMatch() : nextMatch(); e.preventDefault(); }
   if (e.key === 'Escape') { closeSearch(); e.preventDefault(); }

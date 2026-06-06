@@ -9,42 +9,42 @@ import {
   filePathEl,
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
-} from './state.js';
-import { clearSearch } from './search.js';
-import { syncWatcher, highlightActiveTreeItem } from './folder.js';
-import { saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, updateCounts, clearCounts } from './editor.js';
+} from "../core/state.ts";
+import { clearSearch } from "../features/search.ts";
+import { syncWatcher, highlightActiveTreeItem } from "./folder.ts";
+import { saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, updateCounts, clearCounts } from "../editor/editor.ts";
 import {
   activeTab, isDirty, isPreviewVisible,
   renderContent, setLoading, clearStatus, applyZoom,
-} from './tab-state.js';
+} from "../core/tab-state.ts";
 // Re-export the seam primitives that other modules still import from
 // tabs.js (settings.js, folder.js, print.js, app.js) so their imports
 // don't change after the move to tab-state.js.
 export {
   activeTab, renderContent, setLoading, clearStatus, applyZoom,
-} from './tab-state.js';
-import { isOutlineOpen, refreshOutline, applyOutlineVisibility } from './outline.js';
-import { renderShortcutsUI, refreshTabCloseTitles } from './shortcuts-display.js';
-import { readDraft, clearDraft } from './draft-store.js';
+} from "../core/tab-state.ts";
+import { isOutlineOpen, refreshOutline, applyOutlineVisibility } from "./outline.ts";
+import { renderShortcutsUI, refreshTabCloseTitles } from "./shortcuts-display.ts";
+import { readDraft, clearDraft } from "../core/draft-store.ts";
 
 export function syncToolbar() {
   const hasTab = state.activeTabId !== null;
   const tab = activeTab();
   const editing = !!tab?.editing;
-  btnReload.disabled = !hasTab || editing;
-  btnSearch.disabled = !hasTab || editing;
+  (btnReload as HTMLButtonElement).disabled = !hasTab || editing;
+  (btnSearch as HTMLButtonElement).disabled = !hasTab || editing;
   // Preview + Outline are independent toggles now (no mode swap on the
   // outline button). Preview is edit-mode only; Outline is always usable
   // while a tab is loaded. aria-pressed drives the active-state styling.
   if (btnPreview) {
-    btnPreview.disabled = !editing;
+    (btnPreview as HTMLButtonElement).disabled = !editing;
     const previewing = editing && isPreviewVisible();
     btnPreview.setAttribute('aria-pressed', previewing ? 'true' : 'false');
     btnPreview.setAttribute('aria-label', previewing ? 'Hide preview pane' : 'Show preview pane');
     btnPreview.title = previewing ? 'Hide preview pane' : 'Show preview pane';
   }
   if (btnOutline) {
-    btnOutline.disabled = !hasTab;
+    (btnOutline as HTMLButtonElement).disabled = !hasTab;
     const open = isOutlineOpen();
     btnOutline.setAttribute('aria-pressed', open ? 'true' : 'false');
     btnOutline.setAttribute('aria-label', open ? 'Hide document outline' : 'Show document outline');
@@ -52,10 +52,10 @@ export function syncToolbar() {
   }
   // Printing works in both read and edit mode — print.js renders the
   // live buffer fresh — so this only gates on having a tab at all.
-  btnPrint.disabled = !hasTab;
-  btnZoomIn.disabled  = !hasTab;
-  btnZoomOut.disabled = !hasTab;
-  zoomLabel.disabled  = !hasTab;
+  (btnPrint as HTMLButtonElement).disabled = !hasTab;
+  (btnZoomIn as HTMLButtonElement).disabled  = !hasTab;
+  (btnZoomOut as HTMLButtonElement).disabled = !hasTab;
+  (zoomLabel as HTMLButtonElement).disabled  = !hasTab;
   // Hide the zoom cluster entirely until a file is loaded.
   const zoomControls = document.getElementById('zoom-controls');
   if (zoomControls) zoomControls.classList.toggle('hidden', !hasTab);
@@ -63,12 +63,12 @@ export function syncToolbar() {
   // Mode toggle enabled only for file-backed tabs (welcome screen has
   // no file to edit). aria-pressed drives the pressed visual via CSS.
   const canToggle = hasTab && !!tab?.path;
-  btnModeToggle.disabled = !canToggle;
+  (btnModeToggle as HTMLButtonElement).disabled = !canToggle;
   btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
 
   const dirty = editing && ((tab?.raw ?? '') !== (tab?.savedRaw ?? ''));
-  btnSave.disabled = !dirty;
-  if (btnDiscard) btnDiscard.disabled = !dirty;
+  (btnSave as HTMLButtonElement).disabled = !dirty;
+  if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
   editToolbar.hidden = !editing;
 }
 
@@ -231,7 +231,7 @@ export function applyActiveTab() {
     state.originalContent = tab.html;
     // Read mode: counts come from the tab's raw markdown source. Runs on
     // every tab switch and on exiting edit mode (both route through here).
-    updateCounts(tab.raw ?? '');
+    updateCounts(tab.raw ?? '', '');
   }
 
   appWindow.setTitle(tab.title);
@@ -348,7 +348,7 @@ export function renderTabBar() {
     tabBarEl.appendChild(el);
 
     el.addEventListener('click', (e) => {
-      if (!e.target.closest('.tab-close')) switchToTab(tab.id);
+      if (!(e.target as Element).closest('.tab-close')) switchToTab(tab.id);
     });
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -367,7 +367,7 @@ export function renderTabBar() {
 }
 
 tabBarEl.addEventListener('keydown', (e) => {
-  const targetTab = e.target.closest('.tab');
+  const targetTab = (e.target as Element).closest('.tab');
   if (!targetTab || !tabBarEl.contains(targetTab)) return;
   const allTabs = Array.from(tabBarEl.querySelectorAll('.tab'));
   const idx = allTabs.indexOf(targetTab);
@@ -380,16 +380,16 @@ tabBarEl.addEventListener('keydown', (e) => {
   else if (e.key === 'End')        nextIdx = allTabs.length - 1;
   else if (e.key === 'Delete') {
     e.preventDefault();
-    const id = Number(targetTab.dataset.tabId);
+    const id = Number((targetTab as HTMLElement).dataset.tabId);
     if (!Number.isNaN(id)) {
       closeTab(id);
-      const newActive = tabBarEl.querySelector('.tab.active');
+      const newActive = tabBarEl.querySelector('.tab.active') as HTMLElement;
       if (newActive) newActive.focus();
     }
     return;
   } else if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
-    const id = Number(targetTab.dataset.tabId);
+    const id = Number((targetTab as HTMLElement).dataset.tabId);
     if (!Number.isNaN(id)) switchToTab(id);
     return;
   } else {
@@ -398,9 +398,9 @@ tabBarEl.addEventListener('keydown', (e) => {
 
   e.preventDefault();
   const nextTab = allTabs[nextIdx];
-  const id = Number(nextTab.dataset.tabId);
+  const id = Number((nextTab as HTMLElement).dataset.tabId);
   if (!Number.isNaN(id)) switchToTab(id);
-  nextTab.focus();
+  (nextTab as HTMLElement).focus();
 });
 
 export function updateTabOverflow() {
@@ -422,8 +422,8 @@ export function updateTabOverflow() {
   // shift as the user scrolls.
   tabScrollLeftEl.hidden   = false;
   tabScrollRightEl.hidden  = false;
-  tabScrollLeftEl.disabled  = !canScrollLeft;
-  tabScrollRightEl.disabled = !canScrollRight;
+  (tabScrollLeftEl as HTMLButtonElement).disabled  = !canScrollLeft;
+  (tabScrollRightEl as HTMLButtonElement).disabled = !canScrollRight;
 }
 
 function scrollTabsBy(direction) {

@@ -13,7 +13,7 @@
 // remember to wrap them. Import this module FIRST in app.js so the
 // handlers are live before any other code runs.
 
-import { invoke } from './state.js';
+import { invoke } from "./state.ts";
 
 // Numeric levels match the plugin's `LogLevel` enum (1=trace … 5=error).
 const LEVEL = Object.freeze({

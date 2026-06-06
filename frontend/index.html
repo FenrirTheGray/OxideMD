@@ -577,6 +577,9 @@
         <button class="settings-tab active" role="tab" data-tab="general"
                 id="settings-tab-general" aria-selected="true"
                 aria-controls="settings-panel-general">General</button>
+        <button class="settings-tab" role="tab" data-tab="associations"
+                id="settings-tab-associations" aria-selected="false" tabindex="-1"
+                aria-controls="settings-panel-associations">Associations</button>
         <button class="settings-tab" role="tab" data-tab="reading"
                 id="settings-tab-reading" aria-selected="false" tabindex="-1"
                 aria-controls="settings-panel-reading">Reading</button>
@@ -596,6 +599,43 @@
 
       <div id="settings-body">
 
+        <!-- ── Associations panel ───────────────────────────────────── -->
+        <div class="settings-panel" id="settings-panel-associations"
+             role="tabpanel" aria-labelledby="settings-tab-associations" hidden>
+          <div class="tags-field full-width" id="setting-md-extensions">
+            <div class="tags-input-row">
+              <input type="text" class="tags-input" placeholder="Add an extension…"
+                     autocomplete="off" spellcheck="false" enterkeyhint="done"
+                     aria-label="Add a Markdown file extension, then press Enter">
+              <button type="button" class="tags-add-btn settings-action-btn"
+                      aria-label="Add extension" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add
+              </button>
+              <span class="settings-info-icon tooltip-left" tabindex="0"
+                     aria-label="File extensions the folder browser, project search, and file opening treat as Markdown. Type one and press Enter to add it; remove all to fall back to the defaults (md, markdown, mdown, mkd).">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="11" x2="12" y2="16"/>
+                  <line x1="12" y1="8" x2="12.01" y2="8"/>
+                </svg>
+              </span>
+            </div>
+            <p class="tags-error" role="alert">
+              <svg class="tags-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span class="tags-error-text"></span>
+            </p>
+            <ul class="tags-list" aria-label="Markdown file extensions"></ul>
+          </div>
+        </div>
+
         <!-- ── General panel ────────────────────────────────────────── -->
         <div class="settings-panel active" id="settings-panel-general"
              role="tabpanel" aria-labelledby="settings-tab-general">
@@ -607,20 +647,6 @@
               <button type="button" data-value="false" aria-pressed="true">Icons + labels</button>
               <button type="button" data-value="true" aria-pressed="false">Icons only</button>
             </div>
-          </div>
-
-          <div class="settings-row">
-            <label>Markdown files<span class="settings-info-icon" tabindex="0"
-                   aria-label="Comma-separated file extensions the folder browser treats as Markdown. Leave blank to use the defaults (md, markdown, mdown, mkd).">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="11" x2="12" y2="16"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </span></label>
-            <input type="text" id="setting-md-extensions" class="settings-text-input"
-                   placeholder="md, markdown, mdown, mkd" autocomplete="off" spellcheck="false"
-                   aria-label="Markdown file extensions, comma-separated">
           </div>
 
           <div class="settings-row">
@@ -720,6 +746,22 @@
             </span></label>
             <div class="segmented" id="setting-preserve-line-breaks" role="radiogroup"
                  aria-label="Preserve line breaks">
+              <button type="button" data-value="true" aria-pressed="false">On</button>
+              <button type="button" data-value="false" aria-pressed="true">Off</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <label>Load remote images<span class="settings-info-icon" tabindex="0"
+                   aria-label="When off (default), images hosted on the web are not loaded — only local images and embedded data are shown. This keeps an untrusted document from contacting an external server (which could reveal your IP address) when you open it. Turn on to load remote images.">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span></label>
+            <div class="segmented" id="setting-load-remote-images" role="radiogroup"
+                 aria-label="Load remote images">
               <button type="button" data-value="true" aria-pressed="false">On</button>
               <button type="button" data-value="false" aria-pressed="true">Off</button>
             </div>

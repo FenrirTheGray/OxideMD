@@ -164,7 +164,7 @@ export function effectivePalette(resolved, palette) {
   return { ...DEFAULT_PALETTE[resolved], ...(palette || {}) };
 }
 // Push a full palette map onto <body> as `--<token>` custom properties.
-export function applyPaletteToBody(pal) {
+export function applyPaletteToBody(pal: Record<string, string>) {
   for (const [key, value] of Object.entries(pal)) {
     document.body.style.setProperty(`--${key}`, value);
   }

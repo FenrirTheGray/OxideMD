@@ -3,22 +3,22 @@ import {
   contentEl, contentScroll,
   searchBar, searchInput, searchCase, searchCount, btnSearch,
   supportsHighlights, matchHighlight, currentHighlight,
-} from './state.js';
+} from "../core/state.ts";
 
 export function toggleSearch() {
   if (!searchBar.classList.contains('hidden')) { closeSearch(); return; }
   if (hasActiveOverlay()) return;
   searchBar.classList.remove('hidden');
   btnSearch.classList.add('active');
-  searchInput.focus();
-  searchInput.select();
+  (searchInput as HTMLInputElement).focus();
+  (searchInput as HTMLInputElement).select();
 }
 
 export function closeSearch() {
   searchBar.classList.add('hidden');
   btnSearch.classList.remove('active');
   clearSearch();
-  searchInput.value = '';
+  (searchInput as HTMLInputElement).value = '';
   state.searchCaseSensitive = false;
   searchCase.classList.remove('active');
   searchCase.setAttribute('aria-pressed', 'false');
@@ -101,5 +101,5 @@ export function prevMatch() {
 function updateSearchCount() {
   searchCount.textContent = state.searchRanges.length
     ? `${state.searchCurrent + 1} / ${state.searchRanges.length}`
-    : (searchInput.value ? 'No matches' : '');
+    : ((searchInput as HTMLInputElement).value ? 'No matches' : '');
 }

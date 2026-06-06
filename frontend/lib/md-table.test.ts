@@ -7,7 +7,7 @@ import {
   splitTableCells, parseTableRow, isTableSeparator, hasUnescapedPipe,
   parseAlignments, visibleWidth, padCell,
   alignMarkdownTables, formatMarkdownBuffer,
-} from './md-table.js';
+} from "./md-table.ts";
 
 test('splitTableCells: respects escaped pipes', () => {
   assert.deepEqual(splitTableCells('a|b|c'), ['a', 'b', 'c']);

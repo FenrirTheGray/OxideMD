@@ -15,9 +15,9 @@
 // classes compose, so the auto behavior survives the user toggling
 // their preference and vice versa.
 
-import { appWindow } from './state.js';
-import { logError } from './logger.js';
-import { updateTabOverflow } from './tabs.js';
+import { appWindow } from "../core/state.ts";
+import { logError } from "../core/logger.ts";
+import { updateTabOverflow } from "./tabs.ts";
 
 const { LogicalSize } = window.__TAURI__.window;
 
@@ -256,13 +256,13 @@ if (btnMore) {
 if (moreMenu) {
   // Activating any relocated action closes the menu.
   moreMenu.addEventListener('click', (e) => {
-    if (e.target.closest('button')) closeMoreMenu();
+    if ((e.target as Element).closest('button')) closeMoreMenu();
   });
 }
 // Click-outside and Escape close the menu.
 document.addEventListener('mousedown', (e) => {
   if (!moreMenu || moreMenu.classList.contains('hidden')) return;
-  if (moreMenu.contains(e.target) || (btnMore && btnMore.contains(e.target))) return;
+  if (moreMenu.contains(e.target as Node) || (btnMore && btnMore.contains(e.target as Node))) return;
   closeMoreMenu();
 });
 document.addEventListener('keydown', (e) => {
@@ -292,10 +292,10 @@ window.addEventListener('resize', () => {
 // to the WM via `startResizeDragging` — from there it's identical to
 // dragging the edge of a native window.
 document.querySelectorAll('#resize-handles .resize-handle').forEach((handle) => {
-  const direction = handle.dataset.resize;
+  const direction = (handle as HTMLElement).dataset.resize;
   if (!direction) return;
   handle.addEventListener('mousedown', async (e) => {
-    if (e.button !== 0) return;
+    if ((e as MouseEvent).button !== 0) return;
     // Belt-and-suspenders: CSS already hides handles in these states
     // via `body.maximized` / `body.fullscreen`, but a stale class
     // would otherwise let a mousedown sneak through and call

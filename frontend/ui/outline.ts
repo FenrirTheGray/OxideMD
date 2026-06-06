@@ -19,9 +19,9 @@ import {
   state,
   contentEl, contentScroll,
   btnOutline, outlineSidebar, outlineSidebarBody, outlineSidebarCloseBtn,
-} from './state.js';
-import { activeTab, syncToolbar } from './tabs.js';
-import { getEditorView } from './editor.js';
+} from "../core/state.ts";
+import { activeTab, syncToolbar } from "./tabs.ts";
+import { getEditorView } from "../editor/editor.ts";
 import { EditorSelection } from '@codemirror/state';
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
@@ -202,7 +202,7 @@ if (outlineSidebarCloseBtn) {
 
 if (outlineSidebar) {
   outlineSidebar.addEventListener('click', (e) => {
-    const item = e.target.closest('.outline-item');
+    const item = (e.target as HTMLElement).closest('.outline-item') as HTMLElement;
     if (!item) return;
     const tab = activeTab();
     if (!tab) return;
