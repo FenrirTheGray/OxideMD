@@ -4,6 +4,33 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.5.0] - 2026-06-07
+
+### Added
+
+- Drag-and-drop image import: drop an image onto the editor to insert a Markdown image reference at the drop point. Dropped and pasted images are copied into an `assets/` folder beside the document and linked with a relative path
+- Opt-in remote images: a new setting gates loading of remote (`http`/`https`) images in rendered Markdown, off by default, so a document can't silently fetch from external hosts until you allow it
+- Dedicated "Associations" settings tab: the Markdown file-extension associations moved out of General into their own tab, with inline info icons in place of the previous help text
+
+### Changed
+
+- The frontend was migrated wholesale from JavaScript to TypeScript and reorganized from flat files into role-based module folders (`core`, `editor`, `features`, `lib`, `settings`, `ui`). A `typecheck` / `test` / `build` script set and a new CI workflow now guard the bundle on every pull request, and the release workflow installs with `npm ci` plus npm caching
+- The single large `style.css` was split into focused stylesheets (`base`, `layout`, `components`, `toolbar`, `editor`, `markdown`, `theme`, `settings`)
+- Update notifications now use the shared status-ok / danger palette tokens
+- Project documentation was rewritten and restructured under `docs/`
+
+### Fixed
+
+- File-watcher memory is now bounded on large folders — the set of tracked paths is capped so opening a huge project tree can't balloon memory
+- Code blocks fall back to plain text instead of failing to render when a syntax-highlighting theme can't be loaded
+- Saves are written atomically with a backup of the previous file, so an interrupted save can't truncate or corrupt the document
+- Associations tab layout polish: the horizontal scrollbar and tooltip overflow are gone, and the reset button and footer are restored
+
+### Security
+
+- Font and theme filenames are validated to reject path-traversal sequences before they're written into the config directory
+- `open_url` only hands `http`, `https`, and `mailto` URLs to the OS; other, potentially unsafe schemes are refused
+
 ## [4.4.0] - 2026-06-02
 
 ### Added
