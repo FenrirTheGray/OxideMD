@@ -10,6 +10,28 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_updater::UpdaterExt;
 
+/// Builds the `OpenResult` the frontend opens in a tab from a freshly
+/// `canonicalize`d path and the file's text. Centralizes the steps every
+/// file-producing command shares: strip the Windows `\\?\` verbatim
+/// prefix, render the markdown against the file's own directory (so
+/// relative images resolve), and derive the tab title. `raw` is both the
+/// source rendered and the buffer handed back verbatim.
+fn build_open_result(canonical: PathBuf, raw: String) -> OpenResult {
+    let canonical = strip_windows_verbatim(canonical);
+    let html = markdown::render(&raw, canonical.parent());
+    let title = canonical
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("OxideMD")
+        .to_string();
+    OpenResult {
+        html,
+        title,
+        path: canonical.to_string_lossy().into_owned(),
+        raw,
+    }
+}
+
 #[tauri::command]
 pub async fn open_file(path: String) -> Result<OpenResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -19,20 +41,7 @@ pub async fn open_file(path: String) -> Result<OpenResult, String> {
         // the same file, regardless of how it was first referenced (tree
         // entry, link, drop, CLI). This is the dedup key for tabs.
         let canonical = fs::canonicalize(&raw).unwrap_or(raw);
-        let canonical = strip_windows_verbatim(canonical);
-        let base_dir = canonical.parent();
-        let html = markdown::render(&content, base_dir);
-        let title = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("OxideMD")
-            .to_string();
-        Ok(OpenResult {
-            html,
-            title,
-            path: canonical.to_string_lossy().into_owned(),
-            raw: content,
-        })
+        Ok(build_open_result(canonical, content))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -58,20 +67,7 @@ pub async fn save_file(path: String, content: String) -> Result<OpenResult, Stri
         let raw = PathBuf::from(&path);
         fs::write(&raw, &content).map_err(|e| e.to_string())?;
         let canonical = fs::canonicalize(&raw).unwrap_or(raw);
-        let canonical = strip_windows_verbatim(canonical);
-        let base_dir = canonical.parent();
-        let html = markdown::render(&content, base_dir);
-        let title = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("OxideMD")
-            .to_string();
-        Ok(OpenResult {
-            html,
-            title,
-            path: canonical.to_string_lossy().into_owned(),
-            raw: content,
-        })
+        Ok(build_open_result(canonical, content))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -87,7 +83,9 @@ pub fn get_cli_files() -> Vec<String> {
 
 #[tauri::command]
 pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
-    let window = app.get_webview_window("main").unwrap();
+    let Some(window) = app.get_webview_window("main") else {
+        return Vec::new();
+    };
     tauri::async_runtime::spawn_blocking(move || {
         let exts = md_extensions(&load_config());
         let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
@@ -120,7 +118,9 @@ pub async fn create_file(
     app: tauri::AppHandle,
     dir: Option<String>,
 ) -> Result<Option<OpenResult>, String> {
-    let window = app.get_webview_window("main").unwrap();
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
     let picked = tauri::async_runtime::spawn_blocking(move || {
         let exts = md_extensions(&load_config());
         let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
@@ -150,20 +150,7 @@ pub async fn create_file(
         let path = ensure_md_extension(PathBuf::from(&chosen), &exts);
         fs::write(&path, "").map_err(|e| e.to_string())?;
         let canonical = fs::canonicalize(&path).unwrap_or(path);
-        let canonical = strip_windows_verbatim(canonical);
-        let base_dir = canonical.parent();
-        let html = markdown::render("", base_dir);
-        let title = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("OxideMD")
-            .to_string();
-        Ok(Some(OpenResult {
-            html,
-            title,
-            path: canonical.to_string_lossy().into_owned(),
-            raw: String::new(),
-        }))
+        Ok(Some(build_open_result(canonical, String::new())))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -357,7 +344,7 @@ fn build_folder_tree(root: &std::path::Path, exts: &[String]) -> FolderTree {
 // between the OS dialog closing and the tree being ready.
 #[tauri::command]
 pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
-    let window = app.get_webview_window("main").unwrap();
+    let window = app.get_webview_window("main")?;
     tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -428,17 +415,28 @@ fn truncate_line(line: &str, max: usize) -> String {
     }
 }
 
-/// Scans one file's text for a case-insensitive plain-substring match of
-/// `query_lower` (which the caller has already lowercased). Pure string
-/// logic — no filesystem, no regex — kept separate so it's unit-testable.
-/// Stops early once `remaining` matches have been collected and reports
-/// how many were left via the returned count.
-fn scan_lines(content: &str, query_lower: &str, max_line_len: usize, remaining: usize) -> Vec<SearchMatch> {
+/// Scans an iterator of lines for a case-insensitive plain-substring
+/// match of `query_lower` (which the caller has already lowercased).
+/// Pure string logic — no regex — and lazy in the input: it pulls one
+/// line at a time and stops as soon as `remaining` matches are found, so
+/// a caller streaming a huge file never has to hold the whole thing in
+/// memory. Stops early once `remaining` matches have been collected.
+fn scan_lines_iter<S, I>(
+    lines: I,
+    query_lower: &str,
+    max_line_len: usize,
+    remaining: usize,
+) -> Vec<SearchMatch>
+where
+    S: AsRef<str>,
+    I: IntoIterator<Item = S>,
+{
     let mut out: Vec<SearchMatch> = Vec::new();
     if query_lower.is_empty() || remaining == 0 {
         return out;
     }
-    for (i, line) in content.lines().enumerate() {
+    for (i, line) in lines.into_iter().enumerate() {
+        let line = line.as_ref();
         if line.to_lowercase().contains(query_lower) {
             out.push(SearchMatch {
                 line_number: i + 1,
@@ -450,6 +448,19 @@ fn scan_lines(content: &str, query_lower: &str, max_line_len: usize, remaining: 
         }
     }
     out
+}
+
+/// Convenience wrapper over [`scan_lines_iter`] for an in-memory string —
+/// used by the unit tests, which exercise the match/truncate/cap logic
+/// without a filesystem.
+#[cfg(test)]
+fn scan_lines(
+    content: &str,
+    query_lower: &str,
+    max_line_len: usize,
+    remaining: usize,
+) -> Vec<SearchMatch> {
+    scan_lines_iter(content.lines(), query_lower, max_line_len, remaining)
 }
 
 /// Recursively greps every Markdown file under `root` for `query`.
@@ -478,7 +489,13 @@ pub async fn search_project(query: String, root: String) -> Result<SearchResults
         let mut md_paths: Vec<PathBuf> = Vec::new();
         let mut visited: usize = 0;
         let mut walk_truncated = false;
-        collect_md_paths(&root_path, &exts, &mut md_paths, &mut visited, &mut walk_truncated);
+        collect_md_paths(
+            &root_path,
+            &exts,
+            &mut md_paths,
+            &mut visited,
+            &mut walk_truncated,
+        );
         md_paths.sort();
 
         let mut results: Vec<SearchFileResult> = Vec::new();
@@ -493,20 +510,13 @@ pub async fn search_project(query: String, root: String) -> Result<SearchResults
                 Ok(f) => f,
                 Err(_) => continue, // unreadable file — skip, don't abort
             };
-            let mut content = String::new();
-            // Read line by line so a single huge file can't blow memory;
-            // a read error mid-file just ends that file's scan.
-            for line in BufReader::new(file).lines() {
-                match line {
-                    Ok(l) => {
-                        content.push_str(&l);
-                        content.push('\n');
-                    }
-                    Err(_) => break,
-                }
-            }
-            let matches = scan_lines(
-                &content,
+            // Stream the file one line at a time. `map_while(Result::ok)`
+            // stops at the first read error (a mid-file IO error just ends
+            // that file's scan) and `scan_lines_iter` pulls lazily, so a
+            // multi-gigabyte file is never held in memory — only the
+            // matched lines (already capped and truncated) are retained.
+            let matches = scan_lines_iter(
+                BufReader::new(file).lines().map_while(Result::ok),
                 &needle,
                 SEARCH_MAX_LINE_LEN,
                 SEARCH_MAX_MATCHES - total,
@@ -643,8 +653,10 @@ pub fn save_config_cmd(config: Config) -> Result<(), String> {
     // takes effect immediately (live preview, reopened files) without a
     // restart. Only after a successful save — a failed write shouldn't
     // leave the renderer reflecting an unpersisted setting.
-    crate::markdown::PRESERVE_LINE_BREAKS
-        .store(config.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
+    crate::markdown::PRESERVE_LINE_BREAKS.store(
+        config.preserve_line_breaks,
+        std::sync::atomic::Ordering::Relaxed,
+    );
     Ok(())
 }
 
@@ -749,7 +761,10 @@ pub async fn write_pasted_image(
         fs::create_dir_all(&assets).map_err(|e| format!("Failed to create assets dir: {e}"))?;
 
         let ext = extension.trim_start_matches('.').to_lowercase();
-        let allowed = matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp");
+        let allowed = matches!(
+            ext.as_str(),
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp"
+        );
         if !allowed {
             return Err(format!("Unsupported image extension: {ext}"));
         }
@@ -767,6 +782,106 @@ pub async fn write_pasted_image(
         fs::write(&abs, &bytes).map_err(|e| format!("Failed to write image: {e}"))?;
 
         let canonical = fs::canonicalize(&abs).unwrap_or(abs);
+        let canonical = strip_windows_verbatim(canonical);
+        Ok(PastedImage {
+            absolute_path: canonical.to_string_lossy().into_owned(),
+            relative_href: format!("assets/{}", filename),
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Image extensions accepted for drag-and-drop import. Kept in sync with the
+/// frontend's `DROP_IMAGE_EXTS` so both sides agree on what counts as an image.
+const DROP_IMAGE_EXTS: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico", "tif", "tiff",
+];
+
+/// Sanitizes a dropped file's stem into a markdown-href-safe filename stem:
+/// keeps `[a-z0-9_]`, collapses every other run (spaces, dots, punctuation)
+/// to a single `-`, lowercases, and trims dashes. Unlike a display name, an
+/// asset filename can't contain spaces — a space terminates the URL in
+/// `![](assets/my photo.png)` — so they're folded to `-`. Falls back to
+/// `"image"` when nothing usable remains.
+fn sanitize_asset_stem(name: &str) -> String {
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    let trimmed = out.trim_matches('-');
+    if trimmed.is_empty() {
+        "image".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Returns a path in `dir` for `stem.ext` that doesn't yet exist, adding a
+/// `-1`, `-2`, … suffix on collision so a dropped image never overwrites an
+/// existing asset.
+fn unique_asset_path(dir: &std::path::Path, stem: &str, ext: &str) -> PathBuf {
+    let first = dir.join(format!("{stem}.{ext}"));
+    if !first.exists() {
+        return first;
+    }
+    let mut n = 1u32;
+    loop {
+        let candidate = dir.join(format!("{stem}-{n}.{ext}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Copies a dropped local image file into the `assets/` folder beside the
+/// markdown file `base_path`, preserving its (sanitized) name and
+/// de-duplicating on collision. Returns the absolute path and the
+/// markdown-relative href, mirroring [`write_pasted_image`].
+#[tauri::command]
+pub async fn import_dropped_image(
+    base_path: String,
+    source_path: String,
+) -> Result<PastedImage, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let src = PathBuf::from(&source_path);
+        let ext = src
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase())
+            .ok_or("Dropped file has no extension")?;
+        if !DROP_IMAGE_EXTS.contains(&ext.as_str()) {
+            return Err(format!("Unsupported image extension: {ext}"));
+        }
+        if !src.is_file() {
+            return Err("Dropped path is not a file".to_string());
+        }
+
+        let parent = PathBuf::from(&base_path)
+            .parent()
+            .ok_or("base_path has no parent directory")?
+            .to_path_buf();
+        let assets = parent.join("assets");
+        fs::create_dir_all(&assets).map_err(|e| format!("Failed to create assets dir: {e}"))?;
+
+        let stem = sanitize_asset_stem(src.file_stem().and_then(|s| s.to_str()).unwrap_or("image"));
+        let target = unique_asset_path(&assets, &stem, &ext);
+        fs::copy(&src, &target).map_err(|e| format!("Failed to copy image: {e}"))?;
+
+        let filename = target
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let canonical = fs::canonicalize(&target).unwrap_or(target);
         let canonical = strip_windows_verbatim(canonical);
         Ok(PastedImage {
             absolute_path: canonical.to_string_lossy().into_owned(),
@@ -837,11 +952,8 @@ pub async fn export_html(
 }
 
 #[tauri::command]
-pub async fn pick_export_path(
-    app: tauri::AppHandle,
-    suggested_name: String,
-) -> Option<String> {
-    let window = app.get_webview_window("main").unwrap();
+pub async fn pick_export_path(app: tauri::AppHandle, suggested_name: String) -> Option<String> {
+    let window = app.get_webview_window("main")?;
     tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -884,7 +996,9 @@ pub async fn export_theme(
     app: tauri::AppHandle,
     theme: std::collections::HashMap<String, String>,
 ) -> Result<bool, String> {
-    let window = app.get_webview_window("main").unwrap();
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
     let picked = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -941,10 +1055,10 @@ pub struct ImportedTheme {
 /// is surfaced as `Err`. The frontend validates the field names and
 /// values before applying.
 #[tauri::command]
-pub async fn import_theme(
-    app: tauri::AppHandle,
-) -> Result<Option<ImportedTheme>, String> {
-    let window = app.get_webview_window("main").unwrap();
+pub async fn import_theme(app: tauri::AppHandle) -> Result<Option<ImportedTheme>, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
     let picked = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -970,8 +1084,8 @@ pub async fn import_theme(
             .to_string();
         let content =
             fs::read_to_string(&path).map_err(|e| format!("Failed to read theme: {e}"))?;
-        let colors: std::collections::HashMap<String, String> = serde_json::from_str(&content)
-            .map_err(|e| format!("Not a valid theme file: {e}"))?;
+        let colors: std::collections::HashMap<String, String> =
+            serde_json::from_str(&content).map_err(|e| format!("Not a valid theme file: {e}"))?;
         // A `name` field in the JSON wins over the file stem so a theme
         // imported under a renamed file still surfaces its intended label.
         let name = colors
@@ -996,6 +1110,28 @@ pub struct CustomTheme {
     pub name: String,
     pub filename: String,
     pub colors: std::collections::HashMap<String, String>,
+}
+
+/// True when `name` is a single, safe path component — not empty, not
+/// `.`/`..`, no path separators, not absolute or drive-prefixed. The
+/// webview hands us bare filenames for fonts and themes; this guards the
+/// `dir.join(name)` calls against traversal (`../../etc/passwd`) and
+/// absolute-path replacement before we read, write, or delete. Both
+/// separators are rejected on every platform: a backslash isn't a
+/// separator on Linux, so `components()` alone would wave `..\foo`
+/// through, yet `dir.join` on Windows would treat it as one.
+fn is_safe_filename_component(name: &str) -> bool {
+    if name.is_empty() || name == "." || name == ".." {
+        return false;
+    }
+    if name.contains('/') || name.contains('\\') {
+        return false;
+    }
+    let mut components = std::path::Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(std::path::Component::Normal(_)), None)
+    )
 }
 
 /// Sanitizes a user-supplied theme name into a safe filename stem: drops
@@ -1069,11 +1205,11 @@ pub fn list_custom_themes() -> Vec<CustomTheme> {
             Ok(c) => c,
             Err(_) => continue,
         };
-        let colors: std::collections::HashMap<String, String> =
-            match serde_json::from_str(&content) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
+        let colors: std::collections::HashMap<String, String> = match serde_json::from_str(&content)
+        {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
         let filename = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -1097,7 +1233,7 @@ pub fn list_custom_themes() -> Vec<CustomTheme> {
             colors,
         });
     }
-    themes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    themes.sort_by_key(|t| t.name.to_lowercase());
     themes
 }
 
@@ -1107,14 +1243,23 @@ pub fn list_custom_themes() -> Vec<CustomTheme> {
 // for selection persistence so it can't collide with a user-imported
 // theme of the same name.
 const BUILTIN_THEMES: &[(&str, &str)] = &[
-    ("catppuccin-mocha", include_str!("../themes/catppuccin-mocha.json")),
-    ("dracula",          include_str!("../themes/dracula.json")),
-    ("gruvbox-dark",     include_str!("../themes/gruvbox-dark.json")),
-    ("nord",             include_str!("../themes/nord.json")),
-    ("rose-pine",        include_str!("../themes/rose-pine.json")),
-    ("solarized-light",  include_str!("../themes/solarized-light.json")),
-    ("tokyo-night",      include_str!("../themes/tokyo-night.json")),
-    ("tokyo-night-storm",include_str!("../themes/tokyo-night-storm.json")),
+    (
+        "catppuccin-mocha",
+        include_str!("../themes/catppuccin-mocha.json"),
+    ),
+    ("dracula", include_str!("../themes/dracula.json")),
+    ("gruvbox-dark", include_str!("../themes/gruvbox-dark.json")),
+    ("nord", include_str!("../themes/nord.json")),
+    ("rose-pine", include_str!("../themes/rose-pine.json")),
+    (
+        "solarized-light",
+        include_str!("../themes/solarized-light.json"),
+    ),
+    ("tokyo-night", include_str!("../themes/tokyo-night.json")),
+    (
+        "tokyo-night-storm",
+        include_str!("../themes/tokyo-night-storm.json"),
+    ),
 ];
 
 /// Returns the app's built-in theme set. Same shape as
@@ -1124,11 +1269,11 @@ const BUILTIN_THEMES: &[(&str, &str)] = &[
 pub fn list_builtin_themes() -> Vec<CustomTheme> {
     let mut themes = Vec::new();
     for (slug, content) in BUILTIN_THEMES {
-        let colors: std::collections::HashMap<String, String> =
-            match serde_json::from_str(content) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
+        let colors: std::collections::HashMap<String, String> = match serde_json::from_str(content)
+        {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
         let name = colors
             .get("name")
             .cloned()
@@ -1140,7 +1285,7 @@ pub fn list_builtin_themes() -> Vec<CustomTheme> {
             colors,
         });
     }
-    themes.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    themes.sort_by_key(|t| t.name.to_lowercase());
     themes
 }
 
@@ -1149,7 +1294,7 @@ pub fn list_builtin_themes() -> Vec<CustomTheme> {
 /// themes directory. Mirrors `remove_font`.
 #[tauri::command]
 pub fn delete_custom_theme(filename: String) -> Result<(), String> {
-    if filename.contains('/') || filename.contains('\\') || filename.contains("..") {
+    if !is_safe_filename_component(&filename) {
         return Err("Invalid theme filename".to_string());
     }
     let dir = themes_dir().ok_or("Could not determine themes directory")?;
@@ -1166,9 +1311,7 @@ pub fn delete_custom_theme(filename: String) -> Result<(), String> {
 /// URI handlers, etc.) or local-file access escalation (`file:`).
 fn is_allowed_open_url(url: &str) -> bool {
     let lower = url.to_lowercase();
-    lower.starts_with("http://")
-        || lower.starts_with("https://")
-        || lower.starts_with("mailto:")
+    lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")
 }
 
 #[tauri::command]
@@ -1176,11 +1319,9 @@ pub async fn open_url(url: String) -> Result<(), String> {
     if !is_allowed_open_url(&url) {
         return Err("Refusing to open URL: scheme not allowed".to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        open::that(&url).map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || open::that(&url).map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[derive(serde::Serialize)]
@@ -1191,7 +1332,9 @@ pub struct FontInfo {
 
 #[tauri::command]
 pub async fn install_font(app: tauri::AppHandle) -> Result<Option<FontInfo>, String> {
-    let window = app.get_webview_window("main").unwrap();
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
     let picked = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .file()
@@ -1231,6 +1374,9 @@ pub async fn install_font(app: tauri::AppHandle) -> Result<Option<FontInfo>, Str
 
 #[tauri::command]
 pub fn remove_font(filename: String) -> Result<(), String> {
+    if !is_safe_filename_component(&filename) {
+        return Err("Invalid font filename".to_string());
+    }
     let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
     let path = dir.join(&filename);
     if path.exists() {
@@ -1275,6 +1421,9 @@ pub fn list_custom_fonts() -> Vec<FontInfo> {
 
 #[tauri::command]
 pub async fn get_font_data(filename: String) -> Result<String, String> {
+    if !is_safe_filename_component(&filename) {
+        return Err("Invalid font filename".to_string());
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
         let path = dir.join(&filename);
@@ -1356,8 +1505,10 @@ mod tests {
 
     #[test]
     fn md_extensions_falls_back_to_defaults_when_empty() {
-        let mut cfg = Config::default();
-        cfg.md_extensions = Vec::new();
+        let mut cfg = Config {
+            md_extensions: Vec::new(),
+            ..Config::default()
+        };
         assert_eq!(md_extensions(&cfg), default_exts());
         // A non-empty list is returned unchanged.
         cfg.md_extensions = vec!["mdx".to_string()];
@@ -1489,6 +1640,42 @@ mod tests {
     }
 
     #[test]
+    fn safe_filename_accepts_plain_names() {
+        for ok in [
+            "font.ttf",
+            "My Font.otf",
+            "theme-dark.json",
+            "a.b.c.woff2",
+            "résumé.ttf",
+        ] {
+            assert!(is_safe_filename_component(ok), "should accept {ok:?}");
+        }
+    }
+
+    #[test]
+    fn safe_filename_rejects_traversal_and_separators() {
+        // Both separators are rejected on every platform — a backslash is
+        // a separator on Windows but a literal on Linux, so the guard
+        // can't lean on `Path::components` alone.
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../secret",
+            "..\\secret",
+            "a/b",
+            "a\\b",
+            "foo/",
+            "foo\\",
+            "/etc/passwd",
+            "C:\\Windows\\System32\\x",
+            "sub/dir/font.ttf",
+        ] {
+            assert!(!is_safe_filename_component(bad), "should reject {bad:?}");
+        }
+    }
+
+    #[test]
     fn md_href_filter_decodes_percent_sequences() {
         let exts = default_exts();
         assert_eq!(
@@ -1538,7 +1725,10 @@ mod tests {
         let cut = truncate_line(&line, 200);
         assert_eq!(cut.chars().count(), 200);
         // Round-tripping through chars() proves it's still valid UTF-8.
-        assert_eq!(cut.chars().count(), cut.chars().collect::<String>().chars().count());
+        assert_eq!(
+            cut.chars().count(),
+            cut.chars().collect::<String>().chars().count()
+        );
         // A short line is returned unchanged.
         assert_eq!(truncate_line("hôla", 200), "hôla");
     }
@@ -1602,7 +1792,10 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateResult, St
 /// Sentinel error returned when in-app update is impossible for the
 /// running install format (RPM/DEB on Linux). The frontend matches on
 /// this exact string to fall back to "open the releases page" instead
-/// of showing a generic failure toast.
+/// of showing a generic failure toast. Only the Linux build can hit the
+/// unsupported-package path, so the const is gated to that target to
+/// stay dead-code-clean elsewhere.
+#[cfg(target_os = "linux")]
 pub const UPDATE_UNSUPPORTED_PACKAGE: &str = "UNSUPPORTED_PACKAGE";
 
 /// Downloads the latest update, installs it in place, and restarts the

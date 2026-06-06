@@ -49,6 +49,13 @@ pub struct Config {
     // and the File menu picks them up so toggling back on restores them.
     pub show_recent_files: bool,
     pub preserve_line_breaks: bool,
+    // Whether images with http(s) / protocol-relative URLs are loaded in
+    // rendered documents. Off by default: an untrusted .md could otherwise
+    // phone home to an arbitrary host on open (a tracking-pixel / IP-leak
+    // vector). The Rust renderer always emits remote images as inert
+    // `data-oxide-remote-src`; the frontend only promotes them to a live
+    // `src` when this is on. Local and `data:` images are unaffected.
+    pub load_remote_images: bool,
     pub sidebar_width: u32,
     // Whether the right-side document outline sidebar is shown. Toggled
     // by the toolbar's outline button in read mode; persisted so the
@@ -122,6 +129,7 @@ impl Default for Config {
             printer_friendly: true,
             show_recent_files: true,
             preserve_line_breaks: false,
+            load_remote_images: false,
             sidebar_width: 240,
             outline_visible: false,
             keybindings: HashMap::new(),
@@ -164,7 +172,24 @@ pub fn load_config() -> Config {
         Ok(s) => s,
         Err(_) => return Config::default(),
     };
-    let mut config: Config = toml::from_str(&content).unwrap_or_default();
+    let mut config: Config = match toml::from_str(&content) {
+        Ok(c) => c,
+        Err(e) => {
+            // The file exists but won't parse. Defaulting here is fine, but
+            // the next `save_config` would overwrite it and silently lose
+            // whatever the user had. Move the unparseable file aside as a
+            // `.corrupt` backup first so it stays recoverable. Best-effort:
+            // a failed backup still falls back to defaults.
+            log::warn!(
+                "config at {} is unparseable ({e}); backing up and using defaults",
+                path.display()
+            );
+            let mut backup = path.clone().into_os_string();
+            backup.push(".corrupt");
+            let _ = fs::rename(&path, PathBuf::from(backup));
+            return Config::default();
+        }
+    };
     if config.config_version < CURRENT_CONFIG_VERSION {
         migrate_config(&mut config);
         config.config_version = CURRENT_CONFIG_VERSION;
@@ -194,5 +219,58 @@ pub fn save_config(config: &Config) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let content = toml::to_string_pretty(config).map_err(|e| e.to_string())?;
-    fs::write(&path, content).map_err(|e| e.to_string())
+    // Write to a sibling temp file then rename over the target, so a crash
+    // mid-write can't truncate the existing config into a half-written,
+    // unparseable state. `fs::rename` replaces an existing file atomically
+    // on every platform we ship (POSIX rename; Windows MoveFileEx with
+    // replace semantics) as long as both paths share a directory — they do.
+    let mut tmp = path.clone().into_os_string();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rename_replaces_existing_target() {
+        // `save_config`'s atomicity relies on `fs::rename` overwriting an
+        // existing file. That holds on POSIX but Windows has historically
+        // been fussy, so pin the behavior down on whatever platform CI runs.
+        let dir = std::env::temp_dir().join(format!(
+            "oxidemd-cfg-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("config.toml");
+        let tmp = dir.join("config.toml.tmp");
+        fs::write(&target, "old").unwrap();
+        fs::write(&tmp, "new").unwrap();
+
+        fs::rename(&tmp, &target).expect("rename over existing target must succeed");
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert!(!tmp.exists(), "temp file should be gone after rename");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn config_round_trips_through_toml() {
+        // A default config must serialize and parse back identically — the
+        // load path now treats a parse failure as corruption, so a silent
+        // serialize/parse drift would wrongly trip the backup branch.
+        let cfg = Config::default();
+        let s = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: Config = toml::from_str(&s).unwrap();
+        assert_eq!(parsed.config_version, cfg.config_version);
+        assert_eq!(parsed.md_extensions, cfg.md_extensions);
+        assert_eq!(parsed.theme, cfg.theme);
+    }
 }

@@ -1,23 +1,29 @@
 use crate::highlight::Highlighter;
 use crate::util::{html_escape, html_escape_attr};
-use pulldown_cmark::{
-    Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd,
-};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-/// Result of resolving an image src.
+/// How an image `src` should reach the rendered HTML.
 ///
-/// Remote URLs (http(s), protocol-relative, data:) are passed through as the
-/// element's `src`. Local files are emitted as `data-oxide-src` so the
-/// frontend can rewrite them via `convertFileSrc` to asset:// URLs — this
-/// avoids inlining the image bytes as base64 into the HTML string.
+/// - `AssetPath` — a real local file. Emitted as `data-oxide-src` so the
+///   frontend rewrites it via `convertFileSrc` to an asset:// URL rather
+///   than inlining the bytes as base64.
+/// - `Passthrough` — a `data:` URI (or an unresolvable relative ref).
+///   Self-contained, makes no network request, so it goes straight into
+///   `src`.
+/// - `RemoteGated` — an `http(s)` / protocol-relative URL. Loading it
+///   hits the network on render, leaking the reader's IP to an arbitrary
+///   host — a tracking-pixel vector in untrusted documents. Emitted as
+///   `data-oxide-remote-src` with no live `src`; the frontend promotes it
+///   to `src` only when the user has opted into remote images.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ResolvedImage {
     AssetPath(String),
     Passthrough(String),
+    RemoteGated(String),
 }
 
 static HIGHLIGHTER: OnceLock<Highlighter> = OnceLock::new();
@@ -30,7 +36,11 @@ static HIGHLIGHTER: OnceLock<Highlighter> = OnceLock::new();
 pub static PRESERVE_LINE_BREAKS: AtomicBool = AtomicBool::new(false);
 
 pub fn render(source: &str, base_dir: Option<&Path>) -> String {
-    render_with(source, base_dir, PRESERVE_LINE_BREAKS.load(Ordering::Relaxed))
+    render_with(
+        source,
+        base_dir,
+        PRESERVE_LINE_BREAKS.load(Ordering::Relaxed),
+    )
 }
 
 /// Core renderer. Split from `render` so tests can pass the soft-break
@@ -124,10 +134,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     format!("{}-{}", base, count)
                 };
                 *count += 1;
-                html.push_str(&format!(
-                    "<{} id=\"{}\">{}</{}>",
-                    tag, id, content, tag
-                ));
+                html.push_str(&format!("<{} id=\"{}\">{}</{}>", tag, id, content, tag));
                 heading_slug_buf.clear();
                 current_heading = None;
             }
@@ -210,9 +217,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             // the rendered body and divert it into the footnotes section.
             Event::Start(Tag::FootnoteDefinition(label)) => {
                 let next = footnote_numbers.len() + 1;
-                let num = *footnote_numbers
-                    .entry(label.to_string())
-                    .or_insert(next);
+                let num = *footnote_numbers.entry(label.to_string()).or_insert(next);
                 footnote_def = Some((num, html.len()));
             }
             Event::End(TagEnd::FootnoteDefinition) => {
@@ -223,9 +228,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             }
             Event::FootnoteReference(label) => {
                 let next = footnote_numbers.len() + 1;
-                let num = *footnote_numbers
-                    .entry(label.to_string())
-                    .or_insert(next);
+                let num = *footnote_numbers.entry(label.to_string()).or_insert(next);
                 html.push_str(&format!(
                     "<sup class=\"footnote-ref\"><a id=\"fnref{}\" href=\"#fn{}\">{}</a></sup>",
                     num, num, num
@@ -292,25 +295,46 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             Event::End(TagEnd::Strikethrough) => html.push_str("</del>"),
 
             Event::Start(Tag::Link { dest_url, .. }) => {
-                html.push_str(&format!(
-                    "<a href=\"{}\" class=\"md-link\">",
-                    html_escape_attr(&dest_url)
-                ));
+                if is_dangerous_link_scheme(&dest_url) {
+                    // Render the link inert: keep its text, drop the scheme
+                    // so it can never fire. Our in-app click handler already
+                    // refuses to navigate these, but an exported standalone
+                    // HTML file (`export_html`) carries the raw markup with
+                    // no such interceptor — neutralizing here closes that gap
+                    // and keeps links symmetric with the image gating.
+                    html.push_str("<a class=\"md-link md-link-blocked\">");
+                } else {
+                    html.push_str(&format!(
+                        "<a href=\"{}\" class=\"md-link\">",
+                        html_escape_attr(&dest_url)
+                    ));
+                }
             }
             Event::End(TagEnd::Link) => html.push_str("</a>"),
 
-            Event::Start(Tag::Image { dest_url, title, .. }) => {
+            Event::Start(Tag::Image {
+                dest_url, title, ..
+            }) => {
                 in_image = Some((dest_url.to_string(), title.to_string()));
                 image_alt_buf.clear();
             }
             Event::End(TagEnd::Image) => {
                 if let Some((src, title)) = in_image.take() {
-                    let (attr, value) = match resolve_image(&src, base_dir) {
-                        ResolvedImage::AssetPath(p) => ("data-oxide-src", p),
-                        ResolvedImage::Passthrough(u) => ("src", u),
+                    // Remote images get a neutral `data-oxide-remote-src`
+                    // (never a live `src`) plus a class the frontend and
+                    // CSS key off — so an untrusted doc can't phone home on
+                    // render. The frontend promotes them to `src` only when
+                    // the user has opted into remote images.
+                    let (attr, value, class) = match resolve_image(&src, base_dir) {
+                        ResolvedImage::AssetPath(p) => ("data-oxide-src", p, ""),
+                        ResolvedImage::Passthrough(u) => ("src", u, ""),
+                        ResolvedImage::RemoteGated(u) => {
+                            ("data-oxide-remote-src", u, " class=\"md-remote-image\"")
+                        }
                     };
                     html.push_str(&format!(
-                        "<img {}=\"{}\" alt=\"{}\" title=\"{}\" loading=\"lazy\">",
+                        "<img{} {}=\"{}\" alt=\"{}\" title=\"{}\" loading=\"lazy\">",
+                        class,
                         attr,
                         html_escape_attr(&value),
                         html_escape(&image_alt_buf),
@@ -402,14 +426,18 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 "<a href=\"#fnref{}\" class=\"footnote-backref\" aria-label=\"Back to reference {}\">\u{21a9}</a>",
                 num, num
             );
+            // Tuck the arrow inside the final paragraph — but only when a
+            // paragraph really is the last block. `rfind` alone would also
+            // match a `</p>` buried before a trailing list or code block and
+            // splice the arrow mid-footnote; guard on nothing but whitespace
+            // following the close so those cases fall through to an append.
             let body = match body.rfind("</p>\n") {
-                Some(pos) => format!("{}{}{}", &body[..pos], backref, &body[pos..]),
-                None => format!("{}{}", body, backref),
+                Some(pos) if body[pos + "</p>\n".len()..].trim().is_empty() => {
+                    format!("{}{}{}", &body[..pos], backref, &body[pos..])
+                }
+                _ => format!("{}{}", body, backref),
             };
-            html.push_str(&format!(
-                "<li id=\"fn{}\">{}</li>\n",
-                num, body
-            ));
+            html.push_str(&format!("<li id=\"fn{}\">{}</li>\n", num, body));
         }
         html.push_str("</ol>\n</section>\n");
     }
@@ -417,20 +445,28 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     html
 }
 
-/// Resolve an image src into either an absolute local path (for asset://)
-/// or a passthrough URL.
+/// Resolve an image src into a local asset path, an inline passthrough, or
+/// a gated remote URL — see [`ResolvedImage`].
 ///
-/// Remote URLs and data URIs are passed through unchanged. Local paths that
-/// resolve to an existing file are canonicalized and stripped of the Windows
-/// `\\?\` verbatim prefix so that `convertFileSrc` in the frontend produces
-/// a well-formed asset URL. Missing files fall back to passthrough so the
-/// browser renders a broken-image icon rather than a blank area.
+/// `http(s)` and protocol-relative URLs are gated (no network on render);
+/// `data:` URIs pass through inline. Local paths that resolve to an existing
+/// file are canonicalized and stripped of the Windows `\\?\` verbatim prefix
+/// so that `convertFileSrc` in the frontend produces a well-formed asset URL.
+/// Missing files fall back to passthrough so the browser renders a
+/// broken-image icon rather than a blank area.
 fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
-    if src.starts_with("http://")
-        || src.starts_with("https://")
-        || src.starts_with("data:")
-        || src.starts_with("//")
-    {
+    // The gate is a security boundary, so scheme detection can't be naive:
+    // URL schemes are case-insensitive (`HTTP://` loads just like `http://`),
+    // and the webview ignores leading whitespace/control chars in a `src`.
+    // Match on a trimmed, lowercased copy so `HTTP://`, `\thttp://`, etc. are
+    // still gated rather than slipping through to the live-passthrough
+    // fallback below.
+    let probe = src.trim_start_matches(|c: char| c.is_ascii_whitespace() || c.is_control());
+    let lower = probe.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") || probe.starts_with("//") {
+        return ResolvedImage::RemoteGated(src.to_string());
+    }
+    if lower.starts_with("data:") {
         return ResolvedImage::Passthrough(src.to_string());
     }
 
@@ -452,6 +488,20 @@ fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
     let canonical = std::fs::canonicalize(&path).unwrap_or(path);
     let stripped = crate::commands::strip_windows_verbatim(canonical);
     ResolvedImage::AssetPath(stripped.to_string_lossy().into_owned())
+}
+
+/// True when a link `href` uses a scheme that can execute script or
+/// smuggle active content if the anchor is ever followed outside our
+/// click interceptor (notably the standalone file `export_html` writes).
+/// Such links are rendered without an `href` so the document text stays
+/// but the scheme can't fire. Mirrors the case/whitespace care in
+/// `resolve_image`: URL schemes are case-insensitive and the webview
+/// ignores leading whitespace/control chars before the scheme, so the
+/// gate matches on a trimmed, lowercased probe rather than naively.
+fn is_dangerous_link_scheme(href: &str) -> bool {
+    let probe = href.trim_start_matches(|c: char| c.is_ascii_whitespace() || c.is_control());
+    let lower = probe.to_ascii_lowercase();
+    lower.starts_with("javascript:") || lower.starts_with("vbscript:") || lower.starts_with("data:")
 }
 
 fn slugify(text: &str) -> String {
@@ -551,6 +601,54 @@ mod tests {
     }
 
     #[test]
+    fn render_link_javascript_scheme_is_neutralized() {
+        // A `javascript:` href must never reach the rendered markup — it
+        // would execute if the anchor were followed outside our click
+        // interceptor (e.g. an exported standalone HTML file).
+        let out = render("[click](javascript:alert(1))", None);
+        assert!(
+            !out.contains("href=\"javascript"),
+            "javascript: href leaked: {out}"
+        );
+        assert!(
+            out.contains("class=\"md-link md-link-blocked\""),
+            "not marked blocked: {out}"
+        );
+        // The link text is preserved.
+        assert!(out.contains(">click</a>"), "link text lost: {out}");
+    }
+
+    #[test]
+    fn render_link_neutralizes_scheme_case_and_whitespace_variants() {
+        // The gate is a security control: a case-variant scheme or
+        // webview-ignored leading whitespace must not slip a live href
+        // through.
+        for href in [
+            "JavaScript:alert(1)",
+            "  javascript:alert(1)",
+            "\tvbscript:msgbox(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "VBScript:msgbox(1)",
+        ] {
+            let md = format!("[x]({href})");
+            let out = render(&md, None);
+            assert!(
+                out.contains("md-link-blocked") && !out.contains(" href="),
+                "scheme variant not neutralized: {href:?} -> {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_link_safe_schemes_keep_href() {
+        // Regression: ordinary links (http/https/mailto/relative) must
+        // still get a live href.
+        assert!(render("[a](https://example.com)", None).contains("href=\"https://example.com\""));
+        assert!(render("[a](mailto:x@y.z)", None).contains("href=\"mailto:x@y.z\""));
+        assert!(render("[a](./other.md)", None).contains("href=\"./other.md\""));
+    }
+
+    #[test]
     fn render_table_with_alignment() {
         let md = "| a | b |\n|:--|--:|\n| 1 | 2 |\n";
         let out = render(md, None);
@@ -576,7 +674,7 @@ mod tests {
     }
 
     #[test]
-    fn render_heading_with_bold_preserves_inline_tag_inside_hN() {
+    fn render_heading_with_bold_preserves_inline_tag_inside_hn() {
         let out = render("## **bold** x\n", None);
         // The <strong> must be INSIDE <h2>, not orphaned before it.
         assert!(
@@ -598,7 +696,7 @@ mod tests {
     }
 
     #[test]
-    fn render_heading_with_inline_code_preserves_code_inside_hN() {
+    fn render_heading_with_inline_code_preserves_code_inside_hn() {
         let out = render("## `code` x\n", None);
         assert!(
             out.contains("<h2 id=\"code-x\"><code>code</code> x</h2>"),
@@ -616,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    fn render_heading_with_link_preserves_anchor_inside_hN() {
+    fn render_heading_with_link_preserves_anchor_inside_hn() {
         let out = render("## [see](./x.md) this\n", None);
         assert!(out.contains("<h2 id=\"see-this\">"));
         assert!(out.contains("<a href=\"./x.md\""));
@@ -625,7 +723,7 @@ mod tests {
     }
 
     #[test]
-    fn render_heading_with_emphasis_preserves_em_inside_hN() {
+    fn render_heading_with_emphasis_preserves_em_inside_hn() {
         let out = render("### *emph* rest\n", None);
         assert!(out.contains("<h3 id=\"emph-rest\"><em>emph</em> rest</h3>"));
     }
@@ -680,7 +778,10 @@ mod tests {
             out.contains("task-list-checkbox") && out.contains("disabled"),
             "task list missing checkbox markup: {out}"
         );
-        assert!(!out.contains("checked"), "unchecked task should not have `checked`: {out}");
+        assert!(
+            !out.contains("checked"),
+            "unchecked task should not have `checked`: {out}"
+        );
     }
 
     #[test]
@@ -693,11 +794,17 @@ mod tests {
     #[test]
     fn render_code_block_wraps_with_codeblock_div_and_data_code() {
         let out = render("```\nhello\nworld\n```\n", None);
-        assert!(out.contains("class=\"codeblock\""), "missing wrapper: {out}");
+        assert!(
+            out.contains("class=\"codeblock\""),
+            "missing wrapper: {out}"
+        );
         assert!(out.contains("data-code=\""), "missing data-code: {out}");
         // Newlines get encoded as numeric entities so HTML5 attribute
         // parsing doesn't normalize them to spaces.
-        assert!(out.contains("hello&#10;world&#10;"), "newlines not encoded: {out}");
+        assert!(
+            out.contains("hello&#10;world&#10;"),
+            "newlines not encoded: {out}"
+        );
         // And the original <pre><code> structure is still there.
         assert!(out.contains("<pre><code>"), "lost pre/code: {out}");
     }
@@ -705,24 +812,55 @@ mod tests {
     #[test]
     fn render_code_block_with_language_emits_lang_label() {
         let out = render("```rust\nfn x() {}\n```\n", None);
-        assert!(out.contains("codeblock-lang"), "missing lang label span: {out}");
+        assert!(
+            out.contains("codeblock-lang"),
+            "missing lang label span: {out}"
+        );
         assert!(out.contains(">rust</span>"), "lang text wrong: {out}");
     }
 
     #[test]
-    fn resolve_image_remote_passthrough() {
+    fn resolve_image_remote_is_gated() {
+        // http(s) and protocol-relative URLs are gated — they must not
+        // become a live `src` that fires a request on render.
         assert_eq!(
             resolve_image("https://example.com/a.png", None),
-            ResolvedImage::Passthrough("https://example.com/a.png".into())
+            ResolvedImage::RemoteGated("https://example.com/a.png".into())
         );
         assert_eq!(
             resolve_image("http://example.com/a.png", None),
-            ResolvedImage::Passthrough("http://example.com/a.png".into())
+            ResolvedImage::RemoteGated("http://example.com/a.png".into())
         );
         assert_eq!(
             resolve_image("//cdn.example.com/a.png", None),
-            ResolvedImage::Passthrough("//cdn.example.com/a.png".into())
+            ResolvedImage::RemoteGated("//cdn.example.com/a.png".into())
         );
+    }
+
+    #[test]
+    fn resolve_image_gates_case_and_whitespace_variants() {
+        // The gate is a security control, so it must not be defeated by a
+        // case-variant scheme or webview-ignored leading whitespace — those
+        // would otherwise fall through to a live-passthrough `src` and leak
+        // the reader's IP on render even with remote images disabled.
+        for variant in [
+            "HTTP://example.com/a.png",
+            "HTTPS://example.com/a.png",
+            "HttpS://example.com/a.png",
+            "  http://example.com/a.png",
+            "\thttps://example.com/a.png",
+        ] {
+            assert_eq!(
+                resolve_image(variant, None),
+                ResolvedImage::RemoteGated(variant.into()),
+                "scheme variant not gated: {variant:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_image_data_uri_passes_through() {
+        // data: URIs are self-contained — no network, so they stay inline.
         assert_eq!(
             resolve_image("data:image/png;base64,AAAA", None),
             ResolvedImage::Passthrough("data:image/png;base64,AAAA".into())
@@ -803,10 +941,25 @@ mod tests {
     }
 
     #[test]
-    fn render_remote_image_emits_src_directly() {
+    fn render_remote_image_is_gated_not_live() {
         let out = render("![a](https://example.com/a.png)", None);
-        assert!(out.contains("src=\"https://example.com/a.png\""));
+        // Gated: a neutral data attribute plus the marker class, never a
+        // live `src` that would fire a request on render.
+        assert!(
+            out.contains("data-oxide-remote-src=\"https://example.com/a.png\""),
+            "remote url not gated: {out}"
+        );
+        assert!(
+            out.contains("class=\"md-remote-image\""),
+            "missing marker class: {out}"
+        );
         assert!(!out.contains("data-oxide-src"));
+        // A leading space distinguishes a real `src=` attribute from the
+        // `…-src=` tail of `data-oxide-remote-src`.
+        assert!(
+            !out.contains(" src=\"https"),
+            "remote url leaked into live src: {out}"
+        );
     }
 
     #[test]
@@ -857,8 +1010,14 @@ mod tests {
             "missing footnote reference markup: {out}"
         );
         // Definitions flush into a trailing <section class="footnotes">.
-        assert!(out.contains("<section class=\"footnotes\">"), "missing footnotes section: {out}");
-        assert!(out.contains("<li id=\"fn1\">"), "missing footnote definition item: {out}");
+        assert!(
+            out.contains("<section class=\"footnotes\">"),
+            "missing footnotes section: {out}"
+        );
+        assert!(
+            out.contains("<li id=\"fn1\">"),
+            "missing footnote definition item: {out}"
+        );
         assert!(out.contains("The note."), "footnote body lost: {out}");
         // And a back-reference arrow links the definition to its call site.
         assert!(
@@ -871,8 +1030,14 @@ mod tests {
     fn render_heading_explicit_id_overrides_slug() {
         let out = render("# Hello World {#custom}\n", None);
         // The explicit `{#id}` wins over the auto-generated slug.
-        assert!(out.contains("<h1 id=\"custom\">"), "explicit id not used: {out}");
-        assert!(!out.contains("id=\"hello-world\""), "auto slug leaked: {out}");
+        assert!(
+            out.contains("<h1 id=\"custom\">"),
+            "explicit id not used: {out}"
+        );
+        assert!(
+            !out.contains("id=\"hello-world\""),
+            "auto slug leaked: {out}"
+        );
         assert!(out.contains("Hello World"));
     }
 
@@ -881,8 +1046,14 @@ mod tests {
         // An explicit `{#custom}` still flows through `heading_counts`, so a
         // later auto-slug that collides with it gets a `-1` suffix.
         let out = render("# A {#custom}\n\n# Custom\n", None);
-        assert!(out.contains("<h1 id=\"custom\">"), "explicit id not used: {out}");
-        assert!(out.contains("<h1 id=\"custom-1\">"), "collision not disambiguated: {out}");
+        assert!(
+            out.contains("<h1 id=\"custom\">"),
+            "explicit id not used: {out}"
+        );
+        assert!(
+            out.contains("<h1 id=\"custom-1\">"),
+            "collision not disambiguated: {out}"
+        );
     }
 
     #[test]
@@ -895,6 +1066,4 @@ mod tests {
             "angle-bracket autolink not rendered as a link: {out}"
         );
     }
-
 }
-
