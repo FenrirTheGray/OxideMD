@@ -24,7 +24,9 @@ fn running_version_path() -> Option<PathBuf> {
 }
 
 fn write_running_version() {
-    let Some(path) = running_version_path() else { return; };
+    let Some(path) = running_version_path() else {
+        return;
+    };
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -173,10 +175,7 @@ pub fn run() {
     // Rotation is by size as a safety net; KeepAll preserves history so
     // we can ask users to attach the relevant day. Stdout target is gated
     // to debug builds so release binaries don't spam the user's terminal.
-    let log_file_name = format!(
-        "OxideMD-{}",
-        chrono::Local::now().format("%Y-%m-%d")
-    );
+    let log_file_name = format!("OxideMD-{}", chrono::Local::now().format("%Y-%m-%d"));
     // `mut` is only needed when the stdout target is conditionally
     // pushed below; in release builds that branch is stripped, so we
     // explicitly allow the otherwise-unused `mut` to keep CI clean.
@@ -235,6 +234,7 @@ pub fn run() {
             commands::clear_recent_files,
             commands::file_sha256,
             commands::write_pasted_image,
+            commands::import_dropped_image,
             commands::export_html,
             commands::pick_export_path,
             commands::export_theme,
@@ -244,12 +244,14 @@ pub fn run() {
             commands::list_builtin_themes,
             commands::delete_custom_theme,
         ])
-        .setup(|app| {
+        .setup(|_app| {
             let cfg = config::load_config();
             // Seed the renderer's soft-break mode from saved config so
             // files opened on launch render with the right setting.
-            crate::markdown::PRESERVE_LINE_BREAKS
-                .store(cfg.preserve_line_breaks, std::sync::atomic::Ordering::Relaxed);
+            crate::markdown::PRESERVE_LINE_BREAKS.store(
+                cfg.preserve_line_breaks,
+                std::sync::atomic::Ordering::Relaxed,
+            );
             // Window opens at the configured default size, centered,
             // every launch — see tauri.conf.json. We deliberately do
             // not persist size/maximize state: prior attempts mixed
@@ -263,11 +265,11 @@ pub fn run() {
             // window level so we handle them before the webview does.
             #[cfg(target_os = "linux")]
             {
-                let handle = app.handle().clone();
-                if let Some(window) = app.get_webview_window("main") {
+                let handle = _app.handle().clone();
+                if let Some(window) = _app.get_webview_window("main") {
                     window.with_webview(move |webview| {
-                        use gtk::prelude::*;
                         use gdk::keys::constants;
+                        use gtk::prelude::*;
 
                         let wv = webview.inner();
                         let wv_widget: &gtk::Widget = wv.as_ref();
@@ -314,4 +316,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running OxideMD");
 }
-
