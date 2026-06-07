@@ -67,8 +67,8 @@ Install from the OxideMD package repository (x86-64) to get updates through your
 package manager. One-time setup commands are on the
 [install page](https://fenrirthegray.github.io/OxideMD/):
 
-- **Debian / Ubuntu** — add the apt repo, then `sudo apt install oxidemd`
-- **Fedora / RHEL** — add the dnf repo, then `sudo dnf install oxidemd`
+- **Debian / Ubuntu** — add the apt repo, then `sudo apt install oxide-md`
+- **Fedora / RHEL** — add the dnf repo, then `sudo dnf install oxide-md`
 
 Afterward OxideMD updates with the rest of the system (`sudo apt upgrade` /
 `sudo dnf upgrade`). The loose installers above remain available for a one-off
