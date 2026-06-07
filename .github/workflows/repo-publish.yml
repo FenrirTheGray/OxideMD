@@ -1,0 +1,108 @@
+name: Publish APT/DNF repos
+
+# Rebuilds the signed APT + DNF repositories from every published release and
+# deploys them to GitHub Pages. Runs when a release is published (i.e. after
+# you review and publish the draft the Release workflow creates), so the public
+# repos only ever contain releases you've signed off on. workflow_dispatch lets
+# you re-publish manually (e.g. for the very first run, or after rotating keys).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Pages deployment needs id-token; downloading release assets needs contents.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Serialize deploys; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install repo tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro createrepo-c rpm gnupg
+
+      - name: Import GPG signing key
+        env:
+          REPO_GPG_PRIVATE_KEY: ${{ secrets.REPO_GPG_PRIVATE_KEY }}
+          REPO_GPG_PASSPHRASE: ${{ secrets.REPO_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${REPO_GPG_PRIVATE_KEY:-}" ]; then
+            echo "::error::REPO_GPG_PRIVATE_KEY secret must be set (armored private key of the repo signing key)."
+            exit 1
+          fi
+          # An empty passphrase is valid (a %no-protection key); only the
+          # private key itself is mandatory.
+          GNUPGHOME="$(mktemp -d)"
+          chmod 700 "$GNUPGHOME"
+          export GNUPGHOME
+          # Let reprepro's internal gpg calls use a preset passphrase instead
+          # of blocking on a pinentry prompt.
+          printf 'allow-loopback-pinentry\nallow-preset-passphrase\ndefault-cache-ttl 7200\nmax-cache-ttl 7200\n' \
+            > "$GNUPGHOME/gpg-agent.conf"
+          gpgconf --kill gpg-agent || true
+          printf '%s' "$REPO_GPG_PRIVATE_KEY" | gpg --batch --import
+          KEYID="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/ {print $10; exit}')"
+          # Preset the passphrase into the agent so reprepro's gpg calls don't
+          # prompt. Skip for passphrase-less keys (nothing to cache).
+          if [ -n "${REPO_GPG_PASSPHRASE:-}" ]; then
+            PRESET="$(gpgconf --list-dirs libexecdir)/gpg-preset-passphrase"
+            for grip in $(gpg --batch --with-colons --with-keygrip --list-secret-keys \
+                            | awk -F: '/^grp:/ {print $10}'); do
+              "$PRESET" --preset --passphrase "$REPO_GPG_PASSPHRASE" "$grip"
+            done
+          fi
+          PASSFILE="$GNUPGHOME/passphrase"
+          printf '%s' "$REPO_GPG_PASSPHRASE" > "$PASSFILE"
+          chmod 600 "$PASSFILE"
+          {
+            echo "GNUPGHOME=$GNUPGHOME"
+            echo "GPG_KEY_ID=$KEYID"
+            echo "REPO_PASSPHRASE_FILE=$PASSFILE"
+          } >> "$GITHUB_ENV"
+
+      - name: Download all published release packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p incoming
+          tags="$(gh release list --exclude-drafts --limit 200 --json tagName -q '.[].tagName')"
+          if [ -z "$tags" ]; then
+            echo "::warning::No published releases found; nothing to publish."
+          fi
+          for tag in $tags; do
+            echo "Fetching packages from $tag"
+            gh release download "$tag" -D incoming \
+              --pattern '*.deb' --pattern '*.rpm' --clobber || true
+          done
+          ls -la incoming || true
+
+      - name: Build APT + DNF repositories
+        run: bash packaging/repo/build-repo.sh "$PWD/incoming" "$PWD/public"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OxideMD — Linux package repositories</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.6;
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+      }
+      h1 { font-size: 1.9rem; margin-bottom: 0.25rem; }
+      h2 { margin-top: 2.5rem; }
+      .sub { opacity: 0.7; margin-top: 0; }
+      pre {
+        background: rgba(127, 127, 127, 0.14);
+        border-radius: 8px;
+        padding: 1rem 1.1rem;
+        overflow-x: auto;
+        font-size: 0.875rem;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .note {
+        border-left: 3px solid #d08; padding: 0.4rem 0 0.4rem 1rem;
+        opacity: 0.85; font-size: 0.95rem;
+      }
+      a { color: #c63; }
+      footer { margin-top: 3rem; opacity: 0.6; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <h1>OxideMD for Linux</h1>
+    <p class="sub">A lightweight, cross-platform Markdown viewer and editor.</p>
+
+    <p>
+      Signed APT and DNF repositories for <strong>x86-64 (amd64)</strong>. Once
+      added, OxideMD updates with the rest of your system through your package
+      manager.
+    </p>
+
+    <h2>Debian / Ubuntu (apt)</h2>
+    <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://fenrirthegray.github.io/OxideMD/oxidemd.gpg \
+  | sudo tee /etc/apt/keyrings/oxidemd.gpg > /dev/null
+
+sudo tee /etc/apt/sources.list.d/oxidemd.sources > /dev/null <<'EOF'
+Types: deb
+URIs: https://fenrirthegray.github.io/OxideMD/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/oxidemd.gpg
+EOF
+
+sudo apt update
+sudo apt install __APT_PKG__</code></pre>
+
+    <h2>Fedora / RHEL (dnf)</h2>
+    <pre><code>sudo tee /etc/yum.repos.d/oxidemd.repo > /dev/null <<'EOF'
+[oxidemd]
+name=OxideMD
+baseurl=https://fenrirthegray.github.io/OxideMD/rpm
+enabled=1
+gpgcheck=1
+gpgkey=https://fenrirthegray.github.io/OxideMD/oxidemd.asc
+EOF
+
+sudo dnf install __DNF_PKG__</code></pre>
+
+    <p class="note">
+      Only x86-64 builds are published. ARM (aarch64) is not yet available
+      through these repositories.
+    </p>
+
+    <footer>
+      Source &amp; releases:
+      <a href="https://github.com/FenrirTheGray/OxideMD">github.com/FenrirTheGray/OxideMD</a>
+    </footer>
+  </body>
+</html>
