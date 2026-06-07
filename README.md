@@ -58,8 +58,23 @@ Prebuilt installers are attached to every [release](https://github.com/FenrirThe
 | -------- | ------------------------------------------------------- |
 | Windows  | `.msi`, `.exe` (NSIS)                                   |
 | macOS    | `.dmg` (Apple Silicon and Intel)                        |
-| Linux    | `.AppImage`, `.deb`, `.rpm`                             |
+| Linux    | apt / dnf repository (auto-updating), `.AppImage`, `.deb`, `.rpm` |
 | Arch     | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro) |
+
+### Linux (apt / dnf) — recommended
+
+Install from the OxideMD package repository (x86-64) to get updates through your
+package manager. One-time setup commands are on the
+[install page](https://fenrirthegray.github.io/OxideMD/):
+
+- **Debian / Ubuntu** — add the apt repo, then `sudo apt install oxidemd`
+- **Fedora / RHEL** — add the dnf repo, then `sudo dnf install oxidemd`
+
+Afterward OxideMD updates with the rest of the system (`sudo apt upgrade` /
+`sudo dnf upgrade`). The loose installers above remain available for a one-off
+manual install (those don't auto-update).
+
+### Arch-based
 
 On Arch-based systems, grab `oxidemd-bin-<version>-1-x86_64.pkg.tar.zst` from the [latest release](https://github.com/FenrirTheGray/OxideMD/releases/latest) and install it:
 
