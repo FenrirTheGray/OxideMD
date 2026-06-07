@@ -59,7 +59,9 @@ Components: main
 Description: OxideMD APT repository (amd64)
 SignWith: $GPG_KEY_ID
 EOF
-  reprepro -b "$apt_build" includedeb stable "${debs[@]}"
+  # Tauri's .deb omits the Section/Priority control fields, and reprepro refuses
+  # packages that lack them ("No section given ... skipping"). Supply defaults.
+  reprepro -b "$apt_build" -S editors -P optional includedeb stable "${debs[@]}"
   mkdir -p "$OUTPUT/apt"
   cp -r "$apt_build/dists" "$apt_build/pool" "$OUTPUT/apt/"
   echo "APT repo built with package name: $apt_pkg"
