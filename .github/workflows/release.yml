@@ -16,7 +16,7 @@ jobs:
         include:
           - platform: windows-latest
             args: ""
-          - platform: ubuntu-22.04
+          - platform: ubuntu-24.04
             args: ""
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev rpm
@@ -66,8 +66,8 @@ jobs:
 
       # Hand the Linux .deb to the Arch packaging job (oxidemd-bin repackages it).
       - name: Stash Linux .deb for Arch packaging
-        if: matrix.platform == 'ubuntu-22.04'
-        uses: actions/upload-artifact@v4
+        if: matrix.platform == 'ubuntu-24.04'
+        uses: actions/upload-artifact@v7
         with:
           name: oxidemd-deb
           path: src-tauri/target/release/bundle/deb/*.deb
@@ -101,7 +101,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Download Linux .deb
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: oxidemd-deb
           path: deb-artifact
