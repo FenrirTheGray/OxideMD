@@ -4,6 +4,16 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.6.0] - 2026-06-07
+
+### Added
+
+- apt and dnf package repositories: signed APT (Debian/Ubuntu) and DNF (Fedora/RHEL) repositories are published to GitHub Pages, so OxideMD can be installed and kept up to date through the system package manager (`apt install oxidemd` / `dnf install oxidemd`) rather than one-off downloads. Setup commands are on the install page linked from the README
+
+### Changed
+
+- Linux release builds now target the glibc from Ubuntu 24.04 (the build runner is pinned to `ubuntu-24.04`): OxideMD runs on Ubuntu 24.04, Debian 13, Fedora 40, and newer. Older distributions are no longer supported
+
 ## [4.5.0] - 2026-06-07
 
 ### Added
