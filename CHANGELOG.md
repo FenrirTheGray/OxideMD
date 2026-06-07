@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- apt and dnf package repositories: signed APT (Debian/Ubuntu) and DNF (Fedora/RHEL) repositories are published to GitHub Pages, so OxideMD can be installed and kept up to date through the system package manager (`apt install oxidemd` / `dnf install oxidemd`) rather than one-off downloads. Setup commands are on the install page linked from the README
+- apt and dnf package repositories: signed APT (Debian/Ubuntu) and DNF (Fedora/RHEL) repositories are published to GitHub Pages, so OxideMD can be installed and kept up to date through the system package manager (`apt install oxide-md` / `dnf install oxide-md`) rather than one-off downloads. Setup commands are on the install page linked from the README
 
 ### Changed
 
