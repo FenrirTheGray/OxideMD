@@ -184,6 +184,7 @@ export const sidebarTreeEl   = document.getElementById('sidebar-tree');
 export const sidebarCloseBtn = document.getElementById('sidebar-close');
 export const sidebarExpandAllBtn   = document.getElementById('sidebar-expand-all');
 export const sidebarCollapseAllBtn = document.getElementById('sidebar-collapse-all');
+export const sidebarFilterToggle   = document.getElementById('sidebar-filter-toggle');
 export const sidebarFilterEl       = document.getElementById('sidebar-filter');
 export const sidebarFilterInput    = document.getElementById('sidebar-filter-input');
 export const sidebarFilterClearBtn = document.getElementById('sidebar-filter-clear');

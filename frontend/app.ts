@@ -17,7 +17,7 @@ import {
   searchBar, searchInput, searchCase, searchPrev, searchNext, searchClose,
   settingsOverlay, btnLogo, shortcutsPopover,
   sidebarCloseBtn, sidebarExpandAllBtn, sidebarCollapseAllBtn,
-  sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
+  sidebarFilterToggle, sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
   confirmOverlay,
 } from "./core/state.ts";
 import { effectiveBindings, registerHandler, dispatchKey, runAction } from "./core/keybindings.ts";
@@ -26,7 +26,7 @@ import { renderShortcutsUI } from "./ui/shortcuts-display.ts";
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
 } from "./features/search.ts";
-import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from "./ui/folder.ts";
+import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, toggleFilterMode, closeFilterMode, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from "./ui/folder.ts";
 import { openProjectSearch } from "./features/search-project.ts";
 import {
   switchToTab, closeTab,
@@ -257,6 +257,7 @@ if (drawerBackdrop) {
 }
 sidebarExpandAllBtn.addEventListener('click', expandAllFolders);
 sidebarCollapseAllBtn.addEventListener('click', collapseAllFolders);
+if (sidebarFilterToggle) sidebarFilterToggle.addEventListener('click', toggleFilterMode);
 
 // The clear-button toggle runs on every keystroke; only the (heavier)
 // tree re-filter is debounced.
@@ -272,7 +273,9 @@ sidebarFilterInput.addEventListener('keydown', (e) => {
     if ((sidebarFilterInput as HTMLInputElement).value) {
       clearTreeFilter();
     } else {
-      sidebarFilterInput.blur();
+      // Empty filter → Escape collapses the filter mode entirely, back
+      // to the plain tree (matches the content-search panel's Escape).
+      closeFilterMode();
     }
   } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
     const firstRow = sidebarTreeEl.querySelector('.tree-row');

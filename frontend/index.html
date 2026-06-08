@@ -198,6 +198,61 @@
     <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
   </div>
 
+  <!-- ── Main area: sidebar + content ───────────────────────────────── -->
+  <div id="main-container">
+
+    <!-- File tree sidebar (only shown when a folder is opened) -->
+    <aside id="sidebar" class="hidden" aria-label="File tree">
+      <div id="sidebar-header">
+        <span id="sidebar-folder-name" title=""></span>
+        <div class="sidebar-header-actions">
+          <button id="sidebar-filter-toggle" class="sidebar-header-btn" title="Filter files by name" aria-label="Filter files by name" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"/></svg>
+          </button>
+          <button id="sidebar-search-toggle" class="sidebar-header-btn hidden" title="Search in folder" aria-label="Search in folder" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </button>
+          <button id="sidebar-expand-all" class="sidebar-header-btn" title="Expand all folders" aria-label="Expand all folders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 6 12 11 17 6"/><polyline points="7 13 12 18 17 13"/></svg>
+          </button>
+          <button id="sidebar-collapse-all" class="sidebar-header-btn" title="Collapse all folders" aria-label="Collapse all folders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 11 12 6 17 11"/><polyline points="7 18 12 13 17 18"/></svg>
+          </button>
+          <button id="sidebar-close" title="Close folder" aria-label="Close folder">&#x2715;</button>
+        </div>
+      </div>
+      <div id="sidebar-filter" class="hidden">
+        <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="sidebar-filter-input" placeholder="Filter files…" autocomplete="off" spellcheck="false" aria-label="Filter files by name">
+        <button id="sidebar-filter-clear" class="hidden" title="Clear filter" aria-label="Clear filter">&#x2715;</button>
+      </div>
+      <div id="sidebar-tree" role="tree"></div>
+      <!-- Project-wide content search — swapped in for the tree by the
+           header's search toggle. Greps every Markdown file in the open
+           folder; results are grouped per file. -->
+      <div id="sidebar-search-panel" class="hidden">
+        <div id="sidebar-search-input-wrap">
+          <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="sidebar-search-input" placeholder="Search in folder…" autocomplete="off" spellcheck="false" aria-label="Search file contents in folder">
+          <button id="sidebar-search-clear" class="hidden" title="Clear search" aria-label="Clear search">&#x2715;</button>
+        </div>
+        <div id="sidebar-search-results"></div>
+      </div>
+    </aside>
+
+    <div id="sidebar-divider" role="separator" aria-orientation="vertical"
+         aria-label="Resize sidebar" aria-valuemin="180" aria-valuemax="480"
+         aria-valuenow="240" tabindex="0"></div>
+
+    <!-- Editor toolbar + content stacked in one column so the toolbar
+         spans only the editor/preview width — never the tree or outline. -->
+    <div id="content-column">
   <!-- ── Edit formatting toolbar (shown only in edit mode) ──────────── -->
   <div id="edit-toolbar" role="toolbar" aria-label="Formatting" hidden>
     <div class="fmt-content">
@@ -362,55 +417,6 @@
     </div>
   </div>
 
-  <!-- ── Main area: sidebar + content ───────────────────────────────── -->
-  <div id="main-container">
-
-    <!-- File tree sidebar (only shown when a folder is opened) -->
-    <aside id="sidebar" class="hidden" aria-label="File tree">
-      <div id="sidebar-header">
-        <span id="sidebar-folder-name" title=""></span>
-        <div class="sidebar-header-actions">
-          <button id="sidebar-search-toggle" class="sidebar-header-btn hidden" title="Search in folder" aria-label="Search in folder" aria-pressed="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </button>
-          <button id="sidebar-expand-all" class="sidebar-header-btn" title="Expand all folders" aria-label="Expand all folders">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 6 12 11 17 6"/><polyline points="7 13 12 18 17 13"/></svg>
-          </button>
-          <button id="sidebar-collapse-all" class="sidebar-header-btn" title="Collapse all folders" aria-label="Collapse all folders">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 11 12 6 17 11"/><polyline points="7 18 12 13 17 18"/></svg>
-          </button>
-          <button id="sidebar-close" title="Close folder" aria-label="Close folder">&#x2715;</button>
-        </div>
-      </div>
-      <div id="sidebar-filter">
-        <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <input type="text" id="sidebar-filter-input" placeholder="Filter files…" autocomplete="off" spellcheck="false" aria-label="Filter files by name">
-        <button id="sidebar-filter-clear" class="hidden" title="Clear filter" aria-label="Clear filter">&#x2715;</button>
-      </div>
-      <div id="sidebar-tree" role="tree"></div>
-      <!-- Project-wide content search — swapped in for the tree by the
-           header's search toggle. Greps every Markdown file in the open
-           folder; results are grouped per file. -->
-      <div id="sidebar-search-panel" class="hidden">
-        <div id="sidebar-search-input-wrap">
-          <svg class="sidebar-filter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8"/>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input type="text" id="sidebar-search-input" placeholder="Search in folder…" autocomplete="off" spellcheck="false" aria-label="Search file contents in folder">
-          <button id="sidebar-search-clear" class="hidden" title="Clear search" aria-label="Clear search">&#x2715;</button>
-        </div>
-        <div id="sidebar-search-results"></div>
-      </div>
-    </aside>
-
-    <div id="sidebar-divider" role="separator" aria-orientation="vertical"
-         aria-label="Resize sidebar" aria-valuemin="180" aria-valuemax="480"
-         aria-valuenow="240" tabindex="0"></div>
-
     <!-- Content area -->
     <div id="content-scroll">
       <!-- Split editor/preview layout (shown only in edit mode). The
@@ -495,6 +501,7 @@
       </div>
     </main>
     </div><!-- /#content-scroll -->
+    </div><!-- /#content-column -->
 
     <!-- Document outline sidebar (docked right; toggled by btn-outline in
          read mode). Filled live by outline.js — lists the active document's
