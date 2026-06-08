@@ -4,7 +4,7 @@ import {
   contentScroll,
   pickerBackdrop, pickerLoader,
   sidebarEl, sidebarDivider, sidebarFolderName, sidebarTreeEl,
-  sidebarFilterInput, sidebarFilterClearBtn,
+  sidebarFilterEl, sidebarFilterToggle, sidebarFilterInput, sidebarFilterClearBtn,
   hasActiveOverlay,
 } from "../core/state.ts";
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
@@ -121,6 +121,48 @@ function resetFilter() {
   state.treeFilter = '';
   if (sidebarFilterInput) (sidebarFilterInput as HTMLInputElement).value = '';
   if (sidebarFilterClearBtn) sidebarFilterClearBtn.classList.add('hidden');
+  // Collapse filter mode back to the plain tree (used when opening/closing
+  // a folder). Kept here so the toggle state can't drift from the panel.
+  filterMode = false;
+  if (sidebarFilterEl) sidebarFilterEl.classList.add('hidden');
+  if (sidebarFilterToggle) {
+    sidebarFilterToggle.classList.remove('active');
+    sidebarFilterToggle.setAttribute('aria-pressed', 'false');
+  }
+}
+
+// ── Filter-by-name mode ───────────────────────────────────────────────
+// The name filter is one of the sidebar's two mutually-exclusive search
+// modes (the other is the project-wide content search in
+// search-project.js). Each lives behind a header toggle; opening one
+// closes the other so the tree never shows two search affordances at once.
+let filterMode = false;
+export function openFilterMode() {
+  filterMode = true;
+  closeProjectSearch(); // mutual exclusion with content search
+  if (sidebarFilterEl) sidebarFilterEl.classList.remove('hidden');
+  if (sidebarFilterToggle) {
+    sidebarFilterToggle.classList.add('active');
+    sidebarFilterToggle.setAttribute('aria-pressed', 'true');
+  }
+  if (sidebarFilterInput) {
+    (sidebarFilterInput as HTMLInputElement).focus();
+    (sidebarFilterInput as HTMLInputElement).select();
+  }
+}
+export function closeFilterMode() {
+  filterMode = false;
+  if (sidebarFilterEl) sidebarFilterEl.classList.add('hidden');
+  if (sidebarFilterToggle) {
+    sidebarFilterToggle.classList.remove('active');
+    sidebarFilterToggle.setAttribute('aria-pressed', 'false');
+  }
+  clearTreeFilter();
+}
+export function toggleFilterMode() {
+  if (!state.currentFolder) return;
+  if (filterMode) closeFilterMode();
+  else openFilterMode();
 }
 
 export function setTreeFilter(query) {
@@ -137,22 +179,25 @@ export function clearTreeFilter() {
   renderFolderTree();
 }
 
-// Filter the tree entries by name (case-insensitive substring). A folder is
-// kept if it or any descendant matches; when a folder itself matches, all its
-// children are kept so the user can see what's inside.
+// Filter the tree entries by name (case-insensitive substring). Only names
+// that actually match survive: a file is kept when its own name matches; a
+// folder is kept when its name matches OR it has a kept descendant. A
+// matching folder does NOT pull in its non-matching children — it only
+// carries through descendants that match in their own right (e.g. filtering
+// "styl" surfaces a `style-mod` folder and any `*style*` files, but not the
+// unrelated README.md files that happen to live inside it).
 function filterEntries(entries, query) {
   const q = query.toLowerCase();
   const walk = (node) => {
     const selfMatch = node.name.toLowerCase().includes(q);
     if (!node.isDir) return selfMatch ? node : null;
-    if (selfMatch) return node;
     const kept = [];
     for (const child of node.children || []) {
       const r = walk(child);
       if (r) kept.push(r);
     }
-    if (kept.length === 0) return null;
-    return { ...node, children: kept };
+    if (selfMatch || kept.length) return { ...node, children: kept };
+    return null;
   };
   const out = [];
   for (const n of entries) {

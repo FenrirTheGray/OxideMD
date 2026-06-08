@@ -524,6 +524,12 @@ body.resizing-sidebar * {
   background: var(--bg-btn-hover);
   color: var(--accent);
 }
+/* Pressed state for the two mutually-exclusive search toggles (filter
+   by name / search in folder). */
+.sidebar-header-btn.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+}
 .sidebar-header-btn:focus-visible {
   outline: none;
   color: var(--accent);
@@ -550,6 +556,15 @@ body.resizing-sidebar * {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+/* The name filter and the tree are toggled via `.hidden` by the two
+   mutually-exclusive sidebar search modes. Their id-level `display` would
+   otherwise out-specify a bare `.hidden`, so give each an explicit hook:
+   filter off + tree shown by default; filter on shows the bar; the
+   in-folder content search hides both and swaps in #sidebar-search-panel. */
+#sidebar-filter.hidden,
+#sidebar-tree.hidden {
+  display: none;
 }
 
 .sidebar-filter-icon {
@@ -754,6 +769,18 @@ body.resizing-sidebar * {
   font-style: italic;
   border-top: 1px solid var(--border);
   margin-top: 4px;
+}
+
+/* ── Content column (edit toolbar + scroll area) ──────────────────────
+   Stacks the edit toolbar above the scrolling content so the toolbar
+   spans only the editor/preview width — it sits between the file tree
+   and the outline rather than across the whole window. */
+#content-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ── Content scroll area ──────────────────────────────────────────── */
