@@ -26,6 +26,7 @@ export {
 import { isOutlineOpen, refreshOutline, applyOutlineVisibility } from "./outline.ts";
 import { renderShortcutsUI, refreshTabCloseTitles } from "./shortcuts-display.ts";
 import { readDraft, clearDraft } from "../core/draft-store.ts";
+import { showErrorModal } from "./error-modal.ts";
 
 export function syncToolbar() {
   const hasTab = state.activeTabId !== null;
@@ -525,7 +526,7 @@ export async function loadFile(path) {
       .catch(() => {});
     if (!wasAlreadyOpen) await maybeOfferDraftRecovery(realPath, result.raw ?? '');
   } catch (e) {
-    showError(String(e));
+    showErrorModal('Could not open file', 'An error occurred while opening the file.', e);
   } finally {
     clearStatus();
   }
@@ -640,18 +641,12 @@ export async function reloadFile() {
     applyActiveTab();
     renderTabBar();
   } catch (e) {
-    showError(String(e));
+    showErrorModal('Could not open file', 'An error occurred while opening the file.', e);
   } finally {
     clearStatus();
   }
 }
 
-function showError(msg) {
-  const p = document.createElement('p');
-  p.style.cssText = 'color:#e06c75;margin-top:2em;font-family:monospace;';
-  p.textContent = 'Error: ' + msg;
-  contentEl.replaceChildren(p);
-}
 
 // Links are handled via a single delegated listener on contentEl (installed
 // near the other contentEl delegation at the bottom of app.js). That means we

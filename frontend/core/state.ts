@@ -87,6 +87,7 @@ export const state = {
   releaseFocusTrap: null,
   treeFilter: '',
   confirmDialogOpen: false,
+  errorDialogOpen: false,
   // Resolved keybindings map, shape { [actionId]: { primary, aliases[] } }.
   // Set in app.js init() from state.config.keybindings, re-set after the
   // Shortcuts tab saves. Dispatcher reads this on every keydown.
@@ -205,15 +206,20 @@ export const confirmDialogBody  = document.getElementById('confirm-dialog-body')
 export const confirmCancelBtn = document.getElementById('confirm-cancel');
 export const confirmDiscardBtn = document.getElementById('confirm-discard');
 export const confirmSaveBtn   = document.getElementById('confirm-save');
+export const errorOverlay     = document.getElementById('error-overlay');
+export const errorDialogTitle = document.getElementById('error-dialog-title');
+export const errorDialogBody  = document.getElementById('error-dialog-body');
+export const errorOkBtn       = document.getElementById('error-ok');
 
 // Capture the welcome screen HTML from the initial DOM (index.html) before
 // any content is loaded, so showWelcome() can restore the full styled version.
 export const WELCOME_HTML = contentEl.innerHTML;
 
-// Only one overlay (file picker, search, settings, confirm) can be open at a time.
+// Only one overlay (file picker, search, settings, confirm, error) can be open at a time.
 export function hasActiveOverlay() {
   return state.filePickerOpen
     || !searchBar.classList.contains('hidden')
     || !settingsOverlay.classList.contains('hidden')
-    || !confirmOverlay.classList.contains('hidden');
+    || !confirmOverlay.classList.contains('hidden')
+    || !errorOverlay.classList.contains('hidden');
 }

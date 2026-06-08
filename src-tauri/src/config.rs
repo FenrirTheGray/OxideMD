@@ -163,6 +163,12 @@ pub fn themes_dir() -> Option<PathBuf> {
     project_dirs().map(|dirs| dirs.config_dir().join("themes"))
 }
 
+/// Directory for the daily error logs, alongside `config.toml`, `fonts/`,
+/// and `themes/`. The error-log writer creates it on demand.
+pub fn error_log_dir() -> Option<PathBuf> {
+    project_dirs().map(|dirs| dirs.config_dir().join("error-log"))
+}
+
 pub fn load_config() -> Config {
     let path = match config_path() {
         Some(p) => p,
@@ -180,10 +186,12 @@ pub fn load_config() -> Config {
             // whatever the user had. Move the unparseable file aside as a
             // `.corrupt` backup first so it stays recoverable. Best-effort:
             // a failed backup still falls back to defaults.
-            log::warn!(
+            let warning = format!(
                 "config at {} is unparseable ({e}); backing up and using defaults",
                 path.display()
             );
+            log::warn!("{warning}");
+            crate::errorlog::append_error_line(&format!("[config] {warning}"));
             let mut backup = path.clone().into_os_string();
             backup.push(".corrupt");
             let _ = fs::rename(&path, PathBuf::from(backup));

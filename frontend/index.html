@@ -1256,6 +1256,28 @@
     </div>
   </div>
 
+  <!-- ── Error modal (blocking; must be dismissed) ───────────────────── -->
+  <div id="error-overlay" class="hidden"
+       role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" aria-describedby="error-dialog-body">
+    <div id="error-dialog">
+      <div id="error-header">
+        <svg id="error-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="13"></line>
+          <line x1="12" y1="16.5" x2="12" y2="16.5"></line>
+        </svg>
+        <span id="error-dialog-title">Error</span>
+      </div>
+      <div id="error-body">
+        <p id="error-dialog-body"></p>
+      </div>
+      <div id="error-footer">
+        <button id="error-ok" type="button" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Toast notifications ────────────────────────────────────────── -->
   <!-- toast.js appends `.toast` cards here; the container is fixed,
        bottom-right, and stacks toasts in a column. -->

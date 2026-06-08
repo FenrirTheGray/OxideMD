@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod errorlog;
 mod highlight;
 mod markdown;
 mod util;
@@ -245,6 +246,7 @@ pub fn run() {
             commands::list_custom_themes,
             commands::list_builtin_themes,
             commands::delete_custom_theme,
+            errorlog::append_error_log,
         ])
         .setup(|_app| {
             let cfg = config::load_config();
