@@ -5,6 +5,10 @@
 // toolbar clicks momentarily blur the editor.
 
 import { EditorSelection } from '@codemirror/state';
+import {
+  toggleOrderedBlock, buildHrInsert, LIST_PREFIX_RE,
+  codeSpan, unpadCode, codeFence, stripCodeSpan,
+} from './md-transform.ts';
 
 function getSel(view) {
   const r = view.state.selection.main;
@@ -69,6 +73,36 @@ function wrapInline(view, marker, placeholder) {
   edit(view, s, e, marker + inner + marker, s + mLen, s + mLen + inner.length);
 }
 
+// Inline code gets its own wrapper because — unlike bold/italic/strike — the
+// backtick fence isn't a fixed length: it has to be longer than the longest
+// backtick run in the content, with edge backticks padded by a space. Toggle
+// detection therefore works against a backtick fence of any length.
+function wrapCode(view) {
+  const v = getDoc(view);
+  const { s, e } = getSel(view);
+  const sel = v.slice(s, e);
+
+  // Case B: the selection itself is a code span (`x`, ``x``, …) — strip it.
+  const inner = stripCodeSpan(sel);
+  if (inner != null) {
+    edit(view, s, e, inner, s, s + inner.length);
+    return;
+  }
+  // Case A: matching backtick fences sit just outside the selection — strip.
+  const before = sel ? /(`+)$/.exec(v.slice(0, s)) : null;
+  if (before && v.slice(e, e + before[1].length) === before[1]) {
+    const fence = before[1];
+    const stripped = unpadCode(sel);
+    edit(view, s - fence.length, e + fence.length, stripped, s - fence.length, s - fence.length + stripped.length);
+    return;
+  }
+  // Case C: wrap, sizing the fence to the content and padding edge backticks.
+  const content = sel || 'code';
+  const { fence, pad } = codeSpan(content);
+  const start = s + fence.length + pad.length;
+  edit(view, s, e, fence + pad + content + pad + fence, start, start + content.length);
+}
+
 // ── Underline (asymmetric <u>…</u> wrap) ──────────────────────────────
 // Markdown has no native underline, so this wraps the selection in the
 // HTML <u> tag (the renderer allowlists the bare tag). Unlike wrapInline
@@ -116,15 +150,8 @@ function togglePrefix(view, prefix, exactRe, familyRe = exactRe) {
 }
 
 function toggleOrdered(view) {
-  const numRe = /^(\d+)\.\s/;
   const { lineStart, lineEnd, block } = expandToLines(view);
-  const lines = block.length === 0 ? [''] : block.split('\n');
-  const allNumbered = lines.every(l => numRe.test(l));
-
-  const next = allNumbered
-    ? lines.map(l => l.replace(numRe, ''))
-    : lines.map((l, i) => `${i + 1}. ${l.replace(LIST_RE, '')}`);
-  const result = next.join('\n');
+  const result = toggleOrderedBlock(block);
   edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
 }
 
@@ -154,9 +181,10 @@ function insertCodeBlock(view) {
   const { s, e } = getSel(view);
   const sel = v.slice(s, e);
   const pre = atLineStart(v, s) ? '' : '\n';
-  const snippet = `${pre}\`\`\`\n${sel}\n\`\`\`\n`;
+  const fence = codeFence(sel);  // ≥3 backticks, longer than any run inside
+  const snippet = `${pre}${fence}\n${sel}\n${fence}\n`;
   if (!sel) {
-    const caret = s + pre.length + 4;  // pre + '```\n'
+    const caret = s + pre.length + fence.length + 1;  // pre + fence + '\n'
     edit(view, s, e, snippet, caret, caret);
   } else {
     edit(view, s, e, snippet);
@@ -166,19 +194,20 @@ function insertCodeBlock(view) {
 function insertHr(view) {
   const v = getDoc(view);
   const { s } = getSel(view);
-  const pre = atLineStart(v, s) ? '' : '\n';
-  edit(view, s, s, `${pre}---\n`);
+  edit(view, s, s, buildHrInsert(v.slice(0, s)));
 }
 
 // ── Indent / outdent (Tab / Shift+Tab) ────────────────────────────────
 function indent(view) {
-  const v = getDoc(view);
   const { s, e } = getSel(view);
-  const sel = v.slice(s, e);
-  if (!sel.includes('\n')) {
+  // No selection: insert an indent at the caret (acts like Tab).
+  if (s === e) {
     edit(view, s, e, '  ', s + 2, s + 2);
     return;
   }
+  // A selection (single- or multi-line): indent every line it spans rather
+  // than replacing the selected text with spaces, and keep the lines selected
+  // so the action can be repeated or reversed with outdent.
   const { lineStart, lineEnd, block } = expandToLines(view);
   const result = block.split('\n').map(l => '  ' + l).join('\n');
   edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
@@ -199,7 +228,6 @@ const H3_EXACT   = /^###\s/;
 const HEADING_RE = /^#{1,6}\s/;
 const BULLET_EXACT = /^-\s(?!\[)/;
 const TASK_EXACT   = /^-\s\[[ xX]\]\s/;
-const LIST_RE      = /^(?:-\s\[[ xX]\]\s|-\s|\d+\.\s)/;
 const QUOTE_RE   = /^>\s/;
 
 export function applyFormat(view, action) {
@@ -209,12 +237,12 @@ export function applyFormat(view, action) {
     case 'italic':    return wrapInline(view, '*',  'italic text');
     case 'strike':    return wrapInline(view, '~~', 'strikethrough');
     case 'underline': return toggleUnderline(view);
-    case 'code':      return wrapInline(view, '`',  'code');
+    case 'code':      return wrapCode(view);
     case 'h1':        return togglePrefix(view, '# ',     H1_EXACT, HEADING_RE);
     case 'h2':        return togglePrefix(view, '## ',    H2_EXACT, HEADING_RE);
     case 'h3':        return togglePrefix(view, '### ',   H3_EXACT, HEADING_RE);
-    case 'ul':        return togglePrefix(view, '- ',     BULLET_EXACT, LIST_RE);
-    case 'task':      return togglePrefix(view, '- [ ] ', TASK_EXACT,   LIST_RE);
+    case 'ul':        return togglePrefix(view, '- ',     BULLET_EXACT, LIST_PREFIX_RE);
+    case 'task':      return togglePrefix(view, '- [ ] ', TASK_EXACT,   LIST_PREFIX_RE);
     case 'quote':     return togglePrefix(view, '> ',     QUOTE_RE);
     case 'ol':        return toggleOrdered(view);
     case 'link':      return insertLink(view);
