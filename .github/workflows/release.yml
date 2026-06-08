@@ -78,6 +78,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      # Presence of this secret gates the PKGBUILD-sync flow below.
+      APP_ID: ${{ secrets.PKGBUILD_SYNC_APP_ID }}
     container:
       image: archlinux:latest
     steps:
@@ -122,19 +125,27 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" arch-dist/*.pkg.tar.zst --clobber
 
       # Keep the in-repo PKGBUILDs (used by repo/AUR builders) in sync with the
-      # released version, with real checksums. Pushes straight to main using a
-      # PAT (secrets.PKGBUILD_SYNC_TOKEN) that can bypass the branch's
-      # pull-request rule; runs last so a failure here never strips the release
-      # of its artifacts. If the token is absent the step is a no-op.
+      # released version, with real checksums. The default GITHUB_TOKEN can't
+      # push to main (GitHub bars the Actions bot from bypassing the branch's
+      # pull-request rule), so mint a short-lived token from a GitHub App that
+      # IS listed in main's "allow specified actors to bypass required pull
+      # requests". Runs last so a failure here never strips the release of its
+      # artifacts. If the App isn't configured (no PKGBUILD_SYNC_APP_ID) both
+      # steps skip and the release still succeeds.
+      - name: Generate PKGBUILD-sync token
+        id: sync-token
+        if: env.APP_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.PKGBUILD_SYNC_APP_ID }}
+          private-key: ${{ secrets.PKGBUILD_SYNC_APP_PRIVATE_KEY }}
+
       - name: Sync committed PKGBUILDs to main
+        if: env.APP_ID != ''
         env:
-          SYNC_TOKEN: ${{ secrets.PKGBUILD_SYNC_TOKEN }}
+          SYNC_TOKEN: ${{ steps.sync-token.outputs.token }}
         run: |
           set -euo pipefail
-          if [ -z "${SYNC_TOKEN:-}" ]; then
-            echo "::warning::PKGBUILD_SYNC_TOKEN is not set; skipping the PKGBUILD sync."
-            exit 0
-          fi
           VERSION="${GITHUB_REF_NAME#v}"
           DEB="$(ls deb-artifact/*.deb | head -1)"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -152,6 +163,6 @@ jobs:
           git add packaging/aur/oxidemd/PKGBUILD packaging/aur/oxidemd/.SRCINFO \
                   packaging/aur/oxidemd-bin/PKGBUILD packaging/aur/oxidemd-bin/.SRCINFO
           git commit -m "chore: sync Arch PKGBUILDs to ${VERSION}"
-          # The token (acting as a maintainer with bypass) pushes directly; Actions
-          # masks it in logs. HEAD:main fast-forwards main by this one commit.
+          # The App token (a bypass actor) pushes directly; Actions masks it in
+          # logs. HEAD:main fast-forwards main by this one commit.
           git push "https://x-access-token:${SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
