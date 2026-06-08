@@ -176,21 +176,95 @@
 }
 
 
-/* ── Search bar ───────────────────────────────────────────────────── */
+/* ── Search bar ───────────────────────────────────────────────────────
+   Lives at the top of #content-column (a sibling of #content-scroll, like
+   #edit-toolbar) so it spans the editor/preview area — the same width as
+   #edit-toolbar — and never reaches across the sidebar. */
 #search-bar {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  gap: 6px;
   background: var(--bg-search);
   padding: 7px 14px;
   flex-shrink: 0;
   overflow: hidden;
-  max-height: 44px;
+  max-height: 96px;
   border-bottom: 1px solid var(--border);
   transition:
     max-height var(--dur) var(--ease-out),
     padding var(--dur) var(--ease-out),
     opacity var(--dur) var(--ease-out);
+}
+
+/* Both rows share one grid template so the find/replace inputs are the same
+   width and the button clusters line up in a single ~10%-wide column. The
+   third track reserves room for the find row's count + close, so the replace
+   row (which leaves it empty) keeps its input aligned with the find input. */
+.search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10% 6.5rem;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The replace row only exists while editing — read mode is find-only. */
+.search-replace-row { display: none; }
+body.editing #search-bar .search-replace-row { display: grid; }
+
+/* Button clusters fill their 10% track; the buttons inside share it equally. */
+.search-btn-group { margin-left: 0; }
+.search-btn-group button { flex: 1; }
+.search-replace-actions {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.search-replace-actions .search-replace-btn {
+  flex: 1;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+/* Count + close live in the reserved trailing column, right-aligned. */
+.search-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.search-meta #search-count,
+.search-meta #search-close { margin-left: 0; }
+
+.search-replace-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background var(--dur-sm) var(--ease),
+    color var(--dur-sm) var(--ease),
+    border-color var(--dur-sm) var(--ease);
+}
+.search-replace-btn:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+.search-replace-btn:focus-visible {
+  outline: none;
+  color: var(--accent);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 #search-bar.hidden {
@@ -202,7 +276,8 @@
   pointer-events: none;
 }
 
-#search-input {
+#search-input,
+#search-replace-input {
   flex: 1;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -217,10 +292,12 @@
     border-color var(--dur-sm) var(--ease),
     box-shadow var(--dur-sm) var(--ease);
 }
-#search-input::placeholder {
+#search-input::placeholder,
+#search-replace-input::placeholder {
   color: var(--fg-dim);
 }
-#search-input:focus {
+#search-input:focus,
+#search-replace-input:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }

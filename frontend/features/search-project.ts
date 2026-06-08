@@ -16,7 +16,7 @@ import {
 } from "../core/state.ts";
 import { loadFile } from "../ui/tabs.ts";
 import { closeFilterMode } from "../ui/folder.ts";
-import { enterEditMode, revealEditorLine } from "../editor/editor.ts";
+import { revealSearchHit } from "../editor/editor.ts";
 
 const SVG_FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
@@ -129,16 +129,17 @@ function renderResults(data, query) {
   }
 }
 
-// Open the file behind a clicked result and jump to the hit: drop into
-// edit mode (where source line numbers line up with the backend's match
-// lines) and select the matched text on that row. The double rAF lets the
-// editor finish mounting (and its own scroll-restore run) before we
-// scroll the match into view, so our reveal isn't immediately overridden.
+// Open the file behind a clicked result and jump to the hit. We do NOT
+// force edit mode: a freshly opened file lands in read mode and the hit is
+// highlighted in the rendered view; a file already open in edit mode keeps
+// that mode and the hit is shown in the editor and mirrored into the
+// preview. revealSearchHit picks the right surface from the active tab's
+// mode. The double rAF lets the view finish mounting (and any scroll-
+// restore run) before we scroll the match into view.
 async function openResult(path, line, query) {
   await loadFile(path);
-  await enterEditMode();
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    revealEditorLine(line, query);
+    revealSearchHit(line, query);
   }));
 }
 

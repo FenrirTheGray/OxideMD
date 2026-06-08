@@ -89,7 +89,7 @@
         <span class="btn-label">Edit</span>
       </button>
 
-      <button id="btn-search" title="Search (Ctrl+F)" aria-label="Search in document" disabled>
+      <button id="btn-search" type="button" title="Search (Ctrl+F)" aria-label="Search in document" aria-pressed="false" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <circle cx="11" cy="11" r="8"/>
           <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -177,27 +177,6 @@
        so their handlers and toggle state are preserved. -->
   <div id="more-menu" class="hidden" role="menu" aria-label="More actions" aria-hidden="true"></div>
 
-  <!-- ── Search bar ─────────────────────────────────────────────────── -->
-  <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
-    <input type="text" id="search-input"
-           placeholder="Search…"
-           autocomplete="off"
-           spellcheck="false"
-           aria-label="Search query"
-           aria-autocomplete="none">
-    <div class="search-btn-group">
-      <button id="search-case" title="Match case" aria-label="Toggle case sensitivity" aria-pressed="false">Aa</button>
-      <button id="search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
-      </button>
-      <button id="search-next" title="Next match (Enter)" aria-label="Next match">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-    </div>
-    <span id="search-count" aria-live="polite" aria-atomic="true"></span>
-    <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
-  </div>
-
   <!-- ── Main area: sidebar + content ───────────────────────────────── -->
   <div id="main-container">
 
@@ -253,6 +232,45 @@
     <!-- Editor toolbar + content stacked in one column so the toolbar
          spans only the editor/preview width — never the tree or outline. -->
     <div id="content-column">
+  <!-- ── Search bar (read mode; lives in the content column so it's only
+       as wide as the reading pane and never spans the sidebar) ───────── -->
+  <div id="search-bar" class="hidden" role="search" aria-label="Search in document">
+    <div class="search-row">
+      <input type="text" id="search-input"
+             placeholder="Search…"
+             autocomplete="off"
+             spellcheck="false"
+             aria-label="Search query"
+             aria-autocomplete="none">
+      <div class="search-btn-group">
+        <button id="search-case" title="Match case" aria-label="Toggle case sensitivity" aria-pressed="false">Aa</button>
+        <button id="search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button id="search-next" title="Next match (Enter)" aria-label="Next match">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+      <div class="search-meta">
+        <span id="search-count" aria-live="polite" aria-atomic="true"></span>
+        <button id="search-close" title="Close search (Esc)" aria-label="Close search">&#x2715;</button>
+      </div>
+    </div>
+    <!-- Replace row — only shown in edit mode (CSS: body.editing). Drives
+         CodeMirror's replace via the same bar so search is one consistent UI. -->
+    <div class="search-row search-replace-row">
+      <input type="text" id="search-replace-input"
+             placeholder="Replace…"
+             autocomplete="off"
+             spellcheck="false"
+             aria-label="Replace with">
+      <div class="search-replace-actions">
+        <button id="search-replace" class="search-replace-btn" title="Replace next match (Enter)" aria-label="Replace next match">Replace</button>
+        <button id="search-replace-all" class="search-replace-btn" title="Replace all matches" aria-label="Replace all matches">All</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Edit formatting toolbar (shown only in edit mode) ──────────── -->
   <div id="edit-toolbar" role="toolbar" aria-label="Formatting" hidden>
     <div class="fmt-content">

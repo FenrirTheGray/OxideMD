@@ -19,7 +19,7 @@ import {
   tabs, state,
   ZOOM_MIN, ZOOM_MAX,
   supportsHighlights, matchHighlight, currentHighlight,
-  contentEl, previewPane,
+  contentEl, previewPane, editorPane,
   statusText, statusIndicator,
   zoomLabel, btnZoomIn, btnZoomOut,
 } from "./state.ts";
@@ -114,8 +114,11 @@ export function applyZoom(zoom) {
   const tab = activeTab();
   const fontSize = `calc(var(--font-size) * ${zoom.toFixed(2)})`;
   contentEl.style.fontSize = fontSize;
-  // Mirror the zoom on the live preview so Ctrl+/− affect it too.
+  // Mirror the zoom on the live preview *and* the editor pane so Ctrl+/−
+  // affect both and the editor's text size matches the preview's. The CM6
+  // theme sets `font-size: inherit`, so the pane's size cascades into it.
   if (previewPane) previewPane.style.fontSize = fontSize;
+  if (editorPane) editorPane.style.fontSize = fontSize;
   // The editor takes the full viewport width; reading-width constraints
   // are a rendered-markdown concern only.
   if (tab?.editing) {

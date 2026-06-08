@@ -16,6 +16,7 @@ import {
   filePathEl,
   btnZoomOut, btnZoomIn, zoomLabel,
   searchBar, searchInput, searchCase, searchPrev, searchNext, searchClose,
+  searchReplaceInput, searchReplace, searchReplaceAll,
   settingsOverlay, btnLogo, shortcutsPopover,
   sidebarCloseBtn, sidebarExpandAllBtn, sidebarCollapseAllBtn,
   sidebarFilterToggle, sidebarFilterInput, sidebarFilterClearBtn, sidebarTreeEl,
@@ -26,6 +27,7 @@ import { debounce } from "./lib/timing.ts";
 import { renderShortcutsUI } from "./ui/shortcuts-display.ts";
 import {
   toggleSearch, closeSearch, runSearch, nextMatch, prevMatch,
+  replaceCurrent, replaceAllMatches,
 } from "./features/search.ts";
 import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, toggleFilterMode, closeFilterMode, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from "./ui/folder.ts";
 import { openProjectSearch } from "./features/search-project.ts";
@@ -38,7 +40,7 @@ import {
 } from "./ui/tabs.ts";
 import { loadCustomFont, applyConfig, openSettings, closeSettings } from "./settings/index.ts";
 import {
-  enterEditMode, exitEditMode, saveActiveFile, tryOpenEditorSearch,
+  enterEditMode, exitEditMode, saveActiveFile,
   updateEditorDropHint, clearEditorDropHint, dropImagesIntoEditor,
 } from "./editor/editor.ts";
 import { activeTab } from "./ui/tabs.ts";
@@ -425,6 +427,14 @@ searchPrev.addEventListener('click', prevMatch);
 searchNext.addEventListener('click', nextMatch);
 searchClose.addEventListener('click', closeSearch);
 
+// Replace row (edit mode only — hidden in read mode).
+searchReplace.addEventListener('click', replaceCurrent);
+searchReplaceAll.addEventListener('click', replaceAllMatches);
+searchReplaceInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { replaceCurrent(); e.preventDefault(); }
+  if (e.key === 'Escape') { closeSearch(); e.preventDefault(); }
+});
+
 // ── Action handlers ───────────────────────────────────────────────────────
 // Each handler wraps an action body with its preventDefault + any guards
 // that determine whether the event is consumed. Dispatcher matches the
@@ -495,7 +505,6 @@ registerHandler('toggleEdit', (e) => {
 });
 registerHandler('toggleSearch', (e) => {
   e?.preventDefault();
-  if (tryOpenEditorSearch()) return;
   toggleSearch();
 });
 registerHandler('zoomIn',    (e) => { e?.preventDefault(); zoomIn(); });
