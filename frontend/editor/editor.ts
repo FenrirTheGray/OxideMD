@@ -164,13 +164,51 @@ function smartEnter(view) {
       });
       return true;
     }
+    const isOrdered = /^\d+\.$/.test(marker);
     let newMarker = marker;
-    if (/^\d+\.$/.test(marker)) {
+    if (isOrdered) {
       newMarker = `${parseInt(marker, 10) + 1}.`;
     }
     const insert = '\n' + indent + newMarker + (taskBox != null ? ' [ ]' : '') + sep;
+    const changes: any[] = [{ from: sel.from, to: sel.from, insert }];
+
+    // Auto-renumber the rest of an ordered list so inserting a row in the
+    // middle keeps the numbering sequential (e.g. Enter between `2.` and
+    // `3.` makes the new row `3.` and pushes the old `3.` to `4.`, and so
+    // on). Walk forward from the line after the current one: same-indent
+    // ordered items get the next number; more-indented lines (nested lists
+    // or wrapped continuation text) are stepped over untouched; a blank or
+    // less-indented line ends the run.
+    if (isOrdered) {
+      const doc = view.state.doc;
+      let counter = parseInt(newMarker, 10); // the inserted item's number
+      for (let ln = line.number + 1; ln <= doc.lines; ln++) {
+        const l = doc.line(ln);
+        const mm = /^(\s*)(\d+)\.(\s)/.exec(l.text);
+        if (mm) {
+          if (mm[1] === indent) {
+            counter += 1;
+            const want = String(counter);
+            if (mm[2] !== want) {
+              changes.push({
+                from: l.from + indent.length,
+                to: l.from + indent.length + mm[2].length,
+                insert: want,
+              });
+            }
+            continue;
+          }
+          if (mm[1].length > indent.length) continue; // deeper nested list
+          break; // shallower → past the end of this list
+        }
+        if (/^\s*$/.test(l.text)) break;                       // blank line ends the list
+        if (l.text.length > indent.length && /^\s/.test(l.text)) continue; // indented continuation
+        break;
+      }
+    }
+
     view.dispatch({
-      changes: { from: sel.from, to: sel.from, insert },
+      changes,
       selection: EditorSelection.cursor(sel.from + insert.length),
     });
     return true;
