@@ -804,7 +804,7 @@ function formatActiveEditor(action) {
 // keys 1:1, so the action id can be passed straight through. New format
 // actions only need a row in the ACTIONS registry to gain a shortcut.
 const EDITOR_FORMAT_ACTIONS = [
-  'bold', 'italic', 'strike', 'code',
+  'bold', 'italic', 'underline', 'strike', 'code',
   'h1', 'h2', 'h3',
   'ul', 'ol', 'task',
   'link', 'image',

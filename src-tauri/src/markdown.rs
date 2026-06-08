@@ -402,6 +402,8 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             Event::Html(raw) | Event::InlineHtml(raw) => {
                 if in_image.is_some() {
                     image_alt_buf.push_str(&raw);
+                } else if let Some(safe) = sanitize_inline_html(&raw) {
+                    html.push_str(safe);
                 } else {
                     html.push_str(&html_escape(&raw));
                 }
@@ -454,6 +456,19 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
 /// so that `convertFileSrc` in the frontend produces a well-formed asset URL.
 /// Missing files fall back to passthrough so the browser renders a
 /// broken-image icon rather than a blank area.
+/// Allowlist a tiny set of formatting-only inline HTML tags so the
+/// editor's Underline action (`<u>…</u>`) actually renders. Only the
+/// bare opening/closing tags are permitted — no attributes, no other
+/// elements — so the broader XSS-safety guarantee on the raw-HTML path
+/// (every other `Event::Html`/`InlineHtml` token stays escaped) holds.
+fn sanitize_inline_html(raw: &str) -> Option<&'static str> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "<u>" => Some("<u>"),
+        "</u>" => Some("</u>"),
+        _ => None,
+    }
+}
+
 fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
     // The gate is a security boundary, so scheme detection can't be naive:
     // URL schemes are case-insensitive (`HTTP://` loads just like `http://`),
@@ -558,6 +573,24 @@ mod tests {
         assert!(out.contains("&lt;"));
         assert!(out.contains("&amp;"));
         assert!(!out.contains("<b "));
+    }
+
+    #[test]
+    fn render_allows_underline_tag() {
+        // The editor's Underline action emits bare <u>…</u>; the renderer
+        // allowlists just those tags so the formatting actually shows.
+        let out = render("a <u>b</u> c", None);
+        assert!(out.contains("<u>b</u>"), "got: {out}");
+    }
+
+    #[test]
+    fn render_still_escapes_other_inline_html() {
+        // The underline allowlist must not widen the raw-HTML hole: other
+        // tags (and <u> with attributes) stay escaped.
+        let out = render("<u onclick=\"x\">b</u> <b>c</b>", None);
+        assert!(out.contains("&lt;u onclick"), "got: {out}");
+        assert!(out.contains("&lt;b&gt;"), "got: {out}");
+        assert!(!out.contains("<b>"), "got: {out}");
     }
 
     #[test]

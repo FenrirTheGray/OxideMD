@@ -289,6 +289,7 @@ function buildEditorMenu() {
     { separator: true },
     { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: `${modKey}+B` },
     { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: `${modKey}+I` },
+    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: `${modKey}+U` },
     { label: 'Code',   action: () => applyFormat(view, 'code') },
     { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: `${modKey}+K` },
   ];

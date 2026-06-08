@@ -148,6 +148,7 @@ export const ACTIONS = [
 
   { id: 'bold',   category: 'Format', label: 'Bold',          defaultAccel: 'Mod+B',       context: 'editor' },
   { id: 'italic', category: 'Format', label: 'Italic',        defaultAccel: 'Mod+I',       context: 'editor' },
+  { id: 'underline', category: 'Format', label: 'Underline',  defaultAccel: 'Mod+U',       context: 'editor' },
   { id: 'strike', category: 'Format', label: 'Strikethrough', defaultAccel: 'Mod+Shift+X', context: 'editor' },
   { id: 'code',   category: 'Format', label: 'Inline code',   defaultAccel: 'Mod+`',       context: 'editor' },
   { id: 'h1',     category: 'Format', label: 'Heading 1',     defaultAccel: 'Mod+1',       context: 'editor' },
