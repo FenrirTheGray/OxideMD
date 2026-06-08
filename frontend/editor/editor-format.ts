@@ -69,6 +69,39 @@ function wrapInline(view, marker, placeholder) {
   edit(view, s, e, marker + inner + marker, s + mLen, s + mLen + inner.length);
 }
 
+// ── Underline (asymmetric <u>…</u> wrap) ──────────────────────────────
+// Markdown has no native underline, so this wraps the selection in the
+// HTML <u> tag (the renderer allowlists the bare tag). Unlike wrapInline
+// the open/close markers differ, so toggle-off has to check for `<u>`
+// before and `</u>` after the selection.
+const U_OPEN = '<u>';
+const U_CLOSE = '</u>';
+function toggleUnderline(view) {
+  const v = getDoc(view);
+  const { s, e } = getSel(view);
+  const sel = v.slice(s, e);
+
+  // Case A: tags sit just outside the selection — strip them.
+  if (
+    sel &&
+    s >= U_OPEN.length &&
+    v.slice(s - U_OPEN.length, s) === U_OPEN &&
+    v.slice(e, e + U_CLOSE.length) === U_CLOSE
+  ) {
+    edit(view, s - U_OPEN.length, e + U_CLOSE.length, sel, s - U_OPEN.length, s - U_OPEN.length + sel.length);
+    return;
+  }
+  // Case B: selection includes the tags — strip them.
+  if (sel.startsWith(U_OPEN) && sel.endsWith(U_CLOSE) && sel.length >= U_OPEN.length + U_CLOSE.length) {
+    const inner = sel.slice(U_OPEN.length, -U_CLOSE.length);
+    edit(view, s, e, inner, s, s + inner.length);
+    return;
+  }
+  // Case C: wrap. With no selection, drop a placeholder and select it.
+  const inner = sel || 'underline';
+  edit(view, s, e, U_OPEN + inner + U_CLOSE, s + U_OPEN.length, s + U_OPEN.length + inner.length);
+}
+
 // ── Line prefix toggles (headings / list / quote / task) ──────────────
 function togglePrefix(view, prefix, exactRe, familyRe = exactRe) {
   const { lineStart, lineEnd, block } = expandToLines(view);
@@ -175,6 +208,7 @@ export function applyFormat(view, action) {
     case 'bold':      return wrapInline(view, '**', 'bold text');
     case 'italic':    return wrapInline(view, '*',  'italic text');
     case 'strike':    return wrapInline(view, '~~', 'strikethrough');
+    case 'underline': return toggleUnderline(view);
     case 'code':      return wrapInline(view, '`',  'code');
     case 'h1':        return togglePrefix(view, '# ',     H1_EXACT, HEADING_RE);
     case 'h2':        return togglePrefix(view, '## ',    H2_EXACT, HEADING_RE);
