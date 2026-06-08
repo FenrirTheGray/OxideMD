@@ -2,23 +2,39 @@ import {
   state, hasActiveOverlay,
   contentEl, contentScroll,
   searchBar, searchInput, searchCase, searchCount, btnSearch,
+  searchReplaceInput,
   supportsHighlights, matchHighlight, currentHighlight,
 } from "../core/state.ts";
+import {
+  editorSetSearch, editorNextMatch, editorPrevMatch,
+  editorReplaceMatch, editorReplaceAllMatches, editorClearSearch,
+} from "../editor/editor.ts";
+
+// The one bar drives two backends: the rendered-content highlight search in
+// read mode, and CodeMirror's search (via editor.ts) in edit mode. Every
+// public op branches on this. Edit-mode match counts come back from the
+// editor helpers and are cached here for the "n / m" readout.
+function isEditing() { return document.body.classList.contains('editing'); }
+let editCount = 0;
+let editCurrent = 0;
 
 export function toggleSearch() {
   if (!searchBar.classList.contains('hidden')) { closeSearch(); return; }
   if (hasActiveOverlay()) return;
   searchBar.classList.remove('hidden');
-  btnSearch.classList.add('active');
+  // aria-pressed (not .active) so the button picks up the same pressed-toggle
+  // fill as the Preview/Outline toggles beside it.
+  btnSearch.setAttribute('aria-pressed', 'true');
   (searchInput as HTMLInputElement).focus();
   (searchInput as HTMLInputElement).select();
 }
 
 export function closeSearch() {
   searchBar.classList.add('hidden');
-  btnSearch.classList.remove('active');
+  btnSearch.setAttribute('aria-pressed', 'false');
   clearSearch();
   (searchInput as HTMLInputElement).value = '';
+  if (searchReplaceInput) (searchReplaceInput as HTMLInputElement).value = '';
   state.searchCaseSensitive = false;
   searchCase.classList.remove('active');
   searchCase.setAttribute('aria-pressed', 'false');
@@ -31,10 +47,19 @@ export function clearSearch() {
     matchHighlight.clear();
     currentHighlight.clear();
   }
+  editCount = 0;
+  editCurrent = 0;
+  if (isEditing()) editorClearSearch();
   searchCount.textContent = '';
 }
 
 export function runSearch(query) {
+  if (isEditing()) {
+    editCount = editorSetSearch(query, state.searchCaseSensitive);
+    editCurrent = 0;
+    updateSearchCount();
+    return;
+  }
   clearSearch();
   if (!query) return;
 
@@ -85,6 +110,11 @@ function highlightCurrent() {
 }
 
 export function nextMatch() {
+  if (isEditing()) {
+    ({ count: editCount, current: editCurrent } = editorNextMatch());
+    updateSearchCount();
+    return;
+  }
   if (!state.searchRanges.length) return;
   state.searchCurrent = (state.searchCurrent + 1) % state.searchRanges.length;
   highlightCurrent();
@@ -92,13 +122,46 @@ export function nextMatch() {
 }
 
 export function prevMatch() {
+  if (isEditing()) {
+    ({ count: editCount, current: editCurrent } = editorPrevMatch());
+    updateSearchCount();
+    return;
+  }
   if (!state.searchRanges.length) return;
   state.searchCurrent = (state.searchCurrent - 1 + state.searchRanges.length) % state.searchRanges.length;
   highlightCurrent();
   updateSearchCount();
 }
 
+// Replace handlers — edit mode only (read mode is find-only; the replace row
+// is hidden there). Driven by app.ts from the replace row's controls.
+export function replaceCurrent() {
+  if (!isEditing()) return;
+  ({ count: editCount, current: editCurrent } = editorReplaceMatch(
+    (searchInput as HTMLInputElement).value,
+    (searchReplaceInput as HTMLInputElement).value,
+    state.searchCaseSensitive,
+  ));
+  updateSearchCount();
+}
+
+export function replaceAllMatches() {
+  if (!isEditing()) return;
+  ({ count: editCount, current: editCurrent } = editorReplaceAllMatches(
+    (searchInput as HTMLInputElement).value,
+    (searchReplaceInput as HTMLInputElement).value,
+    state.searchCaseSensitive,
+  ));
+  updateSearchCount();
+}
+
 function updateSearchCount() {
+  if (isEditing()) {
+    searchCount.textContent = editCount
+      ? (editCurrent ? `${editCurrent} / ${editCount}` : `${editCount} match${editCount === 1 ? '' : 'es'}`)
+      : ((searchInput as HTMLInputElement).value ? 'No matches' : '');
+    return;
+  }
   searchCount.textContent = state.searchRanges.length
     ? `${state.searchCurrent + 1} / ${state.searchRanges.length}`
     : ((searchInput as HTMLInputElement).value ? 'No matches' : '');

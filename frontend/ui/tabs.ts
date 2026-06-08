@@ -10,7 +10,7 @@ import {
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
 } from "../core/state.ts";
-import { clearSearch } from "../features/search.ts";
+import { clearSearch, closeSearch } from "../features/search.ts";
 import { syncWatcher, highlightActiveTreeItem } from "./folder.ts";
 import { saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, updateCounts, clearCounts } from "../editor/editor.ts";
 import {
@@ -33,7 +33,9 @@ export function syncToolbar() {
   const tab = activeTab();
   const editing = !!tab?.editing;
   (btnReload as HTMLButtonElement).disabled = !hasTab || editing;
-  (btnSearch as HTMLButtonElement).disabled = !hasTab || editing;
+  // Search works in both modes now (the unified #search-bar drives CodeMirror
+  // in edit mode), so it's enabled whenever a tab is open.
+  (btnSearch as HTMLButtonElement).disabled = !hasTab;
   // Preview + Outline are independent toggles now (no mode swap on the
   // outline button). Preview is edit-mode only; Outline is always usable
   // while a tab is loaded. aria-pressed drives the active-state styling.
@@ -689,6 +691,7 @@ export async function handleAnchorClick(anchor) {
 }
 
 export async function openFilePicker() {
+  closeSearch(); // dismiss the inline search bar so it doesn't block the picker
   if (hasActiveOverlay()) return;
   state.filePickerOpen = true;
   pickerBackdrop.classList.remove('hidden');
@@ -711,6 +714,7 @@ export async function openFilePicker() {
 // (discard) prompt. `dir` is remembered so the eventual save dialog opens
 // in the right place.
 export function createNewFile(dir = null) {
+  closeSearch(); // dismiss the inline search bar so it doesn't block new-file
   if (hasActiveOverlay()) return;
   const id = state.nextTabId++;
   tabs.push({

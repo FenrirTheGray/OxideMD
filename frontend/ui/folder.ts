@@ -9,6 +9,7 @@ import {
 } from "../core/state.ts";
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
 import { saveRecentlyFor } from "../editor/editor.ts";
+import { closeSearch } from "../features/search.ts";
 import { updateProjectSearchAvailability, closeProjectSearch } from "../features/search-project.ts";
 
 const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
@@ -80,6 +81,11 @@ async function flushFsChanges() {
 }
 
 export async function openFolder() {
+  // The in-document search bar is an inline (non-modal) affordance, but it
+  // counts as an "active overlay". Dismiss it so a primary file action isn't
+  // silently blocked by it — real modals (settings/confirm/error/picker)
+  // still gate below.
+  closeSearch();
   if (hasActiveOverlay()) return;
   state.filePickerOpen = true;
   pickerBackdrop.classList.remove('hidden');

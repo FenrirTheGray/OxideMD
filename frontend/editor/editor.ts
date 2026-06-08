@@ -31,13 +31,16 @@ import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
 
-import { EditorView, keymap, lineNumbers, Decoration } from '@codemirror/view';
-import { EditorState, EditorSelection, Prec, StateField, StateEffect } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemirror/view';
+import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags, Tag, styleTags } from '@lezer/highlight';
-import { search, searchKeymap, openSearchPanel, closeSearchPanel } from '@codemirror/search';
+import {
+  search, SearchQuery, setSearchQuery, getSearchQuery,
+  findNext, findPrevious, replaceNext, replaceAll,
+} from '@codemirror/search';
 
 // Suppress fs-changed handling for a short window after save — our own
 // write triggers the watcher, which would otherwise round-trip and wipe
@@ -167,51 +170,19 @@ function smartEnter(view) {
       });
       return true;
     }
-    const isOrdered = /^\d+\.$/.test(marker);
+    // Continue the marker on the next line. For an ordered item we bump the
+    // number purely as a typing convenience — Markdown ordered lists render
+    // like an HTML <ol> (only the first item's number matters; the rest are
+    // ignored and auto-incremented by the renderer, CommonMark §5.3), so we
+    // never rewrite the numbers of the lines below: that fought the user's
+    // edits and mangled documents like CHANGELOG.md.
     let newMarker = marker;
-    if (isOrdered) {
+    if (/^\d+\.$/.test(marker)) {
       newMarker = `${parseInt(marker, 10) + 1}.`;
     }
     const insert = '\n' + indent + newMarker + (taskBox != null ? ' [ ]' : '') + sep;
-    const changes: any[] = [{ from: sel.from, to: sel.from, insert }];
-
-    // Auto-renumber the rest of an ordered list so inserting a row in the
-    // middle keeps the numbering sequential (e.g. Enter between `2.` and
-    // `3.` makes the new row `3.` and pushes the old `3.` to `4.`, and so
-    // on). Walk forward from the line after the current one: same-indent
-    // ordered items get the next number; more-indented lines (nested lists
-    // or wrapped continuation text) are stepped over untouched; a blank or
-    // less-indented line ends the run.
-    if (isOrdered) {
-      const doc = view.state.doc;
-      let counter = parseInt(newMarker, 10); // the inserted item's number
-      for (let ln = line.number + 1; ln <= doc.lines; ln++) {
-        const l = doc.line(ln);
-        const mm = /^(\s*)(\d+)\.(\s)/.exec(l.text);
-        if (mm) {
-          if (mm[1] === indent) {
-            counter += 1;
-            const want = String(counter);
-            if (mm[2] !== want) {
-              changes.push({
-                from: l.from + indent.length,
-                to: l.from + indent.length + mm[2].length,
-                insert: want,
-              });
-            }
-            continue;
-          }
-          if (mm[1].length > indent.length) continue; // deeper nested list
-          break; // shallower → past the end of this list
-        }
-        if (/^\s*$/.test(l.text)) break;                       // blank line ends the list
-        if (l.text.length > indent.length && /^\s/.test(l.text)) continue; // indented continuation
-        break;
-      }
-    }
-
     view.dispatch({
-      changes,
+      changes: { from: sel.from, to: sel.from, insert },
       selection: EditorSelection.cursor(sel.from + insert.length),
     });
     return true;
@@ -284,7 +255,10 @@ const oxideCmTheme = EditorView.theme({
     background: 'var(--bg)',
     color: 'var(--fg)',
     fontFamily: '"Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace',
-    fontSize: '14px',
+    // Inherit the size from #editor-pane, which applyZoom() drives with the
+    // same `calc(var(--font-size) * zoom)` it gives the preview — so the
+    // editor scales with Ctrl+/− and matches the preview's text size.
+    fontSize: 'inherit',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
@@ -370,6 +344,45 @@ const oxideHighlightStyle = HighlightStyle.define([
   { tag: tags.comment, color: 'var(--fg-muted)', fontStyle: 'italic' },
 ]);
 
+// Search-match highlighter. CM6's own match highlighting is gated on its
+// built-in search panel being open (searchHighlighter returns no decorations
+// when `panel` is null), but we drive search from the external #search-bar
+// without ever opening that panel. So we paint the active query's matches
+// ourselves, keyed off the same SearchQuery state: every match gets
+// .cm-searchMatch, and the one under the selection (the "current" hit that
+// findNext/findPrevious moved to) gets .cm-searchMatch-selected.
+const searchMatchDeco = Decoration.mark({ class: 'cm-searchMatch' });
+const searchMatchSelectedDeco = Decoration.mark({ class: 'cm-searchMatch cm-searchMatch-selected' });
+const oxideSearchHighlighter = ViewPlugin.fromClass(class {
+  decorations: any;
+  constructor(view: any) { this.decorations = this.build(view); }
+  update(update: any) {
+    if (
+      update.docChanged || update.selectionSet || update.viewportChanged ||
+      update.transactions.some((tr: any) => tr.effects.some((e: any) => e.is(setSearchQuery)))
+    ) {
+      this.decorations = this.build(update.view);
+    }
+  }
+  build(view: any) {
+    const builder = new RangeSetBuilder<any>();
+    const q = getSearchQuery(view.state);
+    if (!q.search || !q.valid) return builder.finish();
+    const sel = view.state.selection.main;
+    // Iterate only the visible ranges (matches CM6's own approach) so this
+    // stays cheap on large documents.
+    for (const { from, to } of view.visibleRanges) {
+      const cursor = q.getCursor(view.state, from, to);
+      for (let it = cursor.next(); !it.done; it = cursor.next()) {
+        const m = it.value;
+        const selected = m.from === sel.from && m.to === sel.to;
+        builder.add(m.from, m.to, selected ? searchMatchSelectedDeco : searchMatchDeco);
+      }
+    }
+    return builder.finish();
+  }
+}, { decorations: (v: any) => v.decorations });
+
 // Build the EditorView for the given tab. The updateListener is the only
 // channel from CM6 → app state — a transaction with `docChanged` mirrors
 // the new doc into tab.raw, kicks the dirty/draft/preview pipeline, and
@@ -384,6 +397,10 @@ function buildView(tab) {
     if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
     const tabEl = document.querySelector(`.tab[data-tab-id="${cur.id}"]`);
     if (tabEl) tabEl.classList.toggle('dirty', dirty);
+    // An edit dismisses any lingering search-hit reveal so the sticky
+    // highlight doesn't re-apply on every keystroke's preview re-render.
+    pendingPreviewReveal = null;
+    clearPreviewReveal();
     scheduleDraftWrite(cur);
     schedulePreviewRender(undefined);
     // Headings may have been added/removed/edited — keep the outline
@@ -413,8 +430,14 @@ function buildView(tab) {
   const baseExtensions = [
     history(),
     smartListKeymap,
+    // The search extension supplies the SearchQuery state + match
+    // highlighting, which we drive programmatically from the unified
+    // #search-bar (see editorSetSearch et al). We deliberately omit
+    // searchKeymap so Mod+F doesn't open CM6's built-in panel — it falls
+    // through to the global toggleSearch action that opens our bar instead.
     search({ top: true }),
-    keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+    oxideSearchHighlighter,
+    keymap.of([...defaultKeymap, ...historyKeymap]),
     markdown({ extensions: [oxideMarkdownExt] }),
     syntaxHighlighting(oxideHighlightStyle),
     revealHighlightField,
@@ -753,6 +776,9 @@ export async function enterEditMode() {
 export function exitEditMode({ keepHtml = true } = {}) {
   const tab = activeTab();
   if (!tab || !tab.editing) return;
+  // Switching modes resets the unified search bar (its backend differs per
+  // mode); enterEditMode does the same on the way in.
+  closeSearch();
   // Capture pane scroll positions so re-entering edit mode lands where
   // we left off.
   tab.editorScrollTop = editorView ? editorView.scrollDOM.scrollTop : 0;
@@ -955,12 +981,15 @@ function clearPreviewReveal() {
   if (revealBlockEl) { revealBlockEl.classList.remove('oxide-reveal-block'); revealBlockEl = null; }
 }
 
-function highlightPreviewMatch(query, ordinal) {
+// Paint the `ordinal`-th occurrence of `query` inside `container` (the live
+// preview pane or the read-mode #content) and wash its containing block.
+// Returns the picked Range so the caller can scroll it into view, or null.
+function highlightMatchIn(container, query, ordinal): Range | null {
   clearPreviewReveal();
-  if (!query) return;
+  if (!query) return null;
   const needle = String(query).toLowerCase();
   const ranges: Range[] = [];
-  const walker = document.createTreeWalker(previewPane, NodeFilter.SHOW_TEXT);
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
   let tn: any;
   while ((tn = walker.nextNode())) {
     const text = tn.nodeValue || '';
@@ -974,24 +1003,28 @@ function highlightPreviewMatch(query, ordinal) {
       idx += needle.length;
     }
   }
-  if (!ranges.length) return;
+  if (!ranges.length) return null;
   // Clamp to the occurrence count in case the renderer dropped some (e.g.
   // a match that lived inside markdown syntax that isn't rendered).
   const pick = ranges[Math.min(ordinal, ranges.length - 1)];
   if (supportsHighlights && revealHighlight) revealHighlight.add(pick);
-  const block = (pick.startContainer.parentElement || previewPane).closest(REVEAL_BLOCK_SELECTOR);
+  const block = (pick.startContainer.parentElement || container).closest(REVEAL_BLOCK_SELECTOR);
   if (block) { block.classList.add('oxide-reveal-block'); revealBlockEl = block; }
+  return pick;
 }
 
-// Apply a queued preview reveal once the preview actually has content.
-// Called from setPreviewHtml (after a render) and from revealEditorLine
-// (in case the preview was already rendered). One-shot: consumed on apply.
+// Apply the queued preview reveal once the preview actually has content.
+// Called from setPreviewHtml (after every render) and from revealEditorLine.
+// Sticky, NOT one-shot: opening a search hit kicks off an async preview
+// re-render (mountEditor's schedulePreviewRender) that lands *after* the
+// reveal and would otherwise wipe it. By leaving `pendingPreviewReveal` set,
+// that re-render re-applies it. It's cleared by a new reveal, a doc edit
+// (onDocChanged), or unmount — so it can't persist onto the wrong content.
 function applyPreviewReveal() {
   if (!pendingPreviewReveal) return;
   if (!previewPane.childNodes.length) return; // not rendered yet — wait
   const { query, ordinal } = pendingPreviewReveal;
-  pendingPreviewReveal = null;
-  highlightPreviewMatch(query, ordinal);
+  highlightMatchIn(previewPane, query, ordinal);
 }
 
 // Reveal a project-search hit in the mounted editor *and* the preview:
@@ -1037,17 +1070,122 @@ export function revealEditorLine(line, query) {
   applyPreviewReveal();
 }
 
-// Lets the global toggleSearch handler route Mod+F to CM6's built-in
-// find/replace panel when the editor has focus. Returns true if it
-// handled the event so the caller can skip opening the read-mode bar.
-// "Has focus" includes CM6's own panels (search input is inside view.dom)
-// so a second Mod+F while the panel is already open just refocuses it.
-export function tryOpenEditorSearch() {
-  if (!editorView) return false;
-  const ae = document.activeElement;
-  if (!ae || !editorView.dom.contains(ae)) return false;
-  openSearchPanel(editorView);
-  return true;
+// The 0-based index of the hit on 1-based source `line` among all
+// occurrences of `query` in `src` — so the rendered view highlights the
+// *same* occurrence the backend matched, not just the first. Mirrors the
+// ordinal math in revealEditorLine but works off a raw source string (read
+// mode has no editor). Newlines are normalized so a CRLF file doesn't drift
+// the offset and pick the wrong occurrence.
+function matchOrdinal(src, line, query) {
+  if (!query) return 0;
+  const text = String(src).replace(/\r\n/g, '\n');
+  const lines = text.split('\n');
+  if (!Number.isFinite(line) || line < 1 || line > lines.length) return 0;
+  const needle = String(query).toLowerCase();
+  const col = lines[line - 1].toLowerCase().indexOf(needle);
+  if (col === -1) return 0;
+  let offset = col;
+  for (let i = 0; i < line - 1; i++) offset += lines[i].length + 1; // + '\n'
+  const before = text.slice(0, offset).toLowerCase();
+  let ordinal = 0;
+  let i = 0;
+  while ((i = before.indexOf(needle, i)) !== -1) { ordinal++; i += needle.length; }
+  return ordinal;
+}
+
+// Reveal a project-search hit in read mode: highlight the matched substring
+// in the rendered #content and scroll its block to center. The occurrence is
+// chosen from the tab's raw source so it lines up with the backend's match.
+export function revealReadLine(line, query) {
+  if (!query) { clearPreviewReveal(); return; }
+  const tab = activeTab();
+  const ordinal = matchOrdinal(tab?.raw ?? '', line, query);
+  const pick = highlightMatchIn(contentEl, query, ordinal);
+  if (!pick) return;
+  // Center the hit in the scroll viewport (mirrors features/search.ts).
+  const rect = pick.getBoundingClientRect();
+  const scrollRect = contentScroll.getBoundingClientRect();
+  const target = contentScroll.scrollTop + rect.top - scrollRect.top
+    - scrollRect.height / 2 + rect.height / 2;
+  contentScroll.scrollTo({ top: target, behavior: 'smooth' });
+}
+
+// Mode-aware entry point used by the project-search panel. In edit mode the
+// hit is shown in the editor (and mirrored into the preview); in read mode
+// it's shown in the rendered content. The caller decides nothing about mode.
+export function revealSearchHit(line, query) {
+  const tab = activeTab();
+  if (tab?.editing) revealEditorLine(line, query);
+  else revealReadLine(line, query);
+}
+
+// ── Edit-mode search backend ─────────────────────────────────────────
+// The unified #search-bar (features/search.ts) drives CodeMirror's search
+// through these instead of CM6's built-in panel, so edit and read mode share
+// one UI. Each returns the live { count, current } so the bar can show "n/m".
+
+// Count all matches of the active query and, if the current selection is one
+// of them, its 1-based index — used for the "n / m" readout.
+function editorMatchInfo(): { count: number; current: number } {
+  if (!editorView) return { count: 0, current: 0 };
+  const q = getSearchQuery(editorView.state);
+  if (!q.search) return { count: 0, current: 0 };
+  const sel = editorView.state.selection.main;
+  let count = 0;
+  let current = 0;
+  const cursor = q.getCursor(editorView.state);
+  for (let it = cursor.next(); !it.done; it = cursor.next()) {
+    count++;
+    if (it.value.from === sel.from && it.value.to === sel.to) current = count;
+  }
+  return { count, current };
+}
+
+// Set the active query and highlight all matches. Does NOT move the cursor —
+// navigation is explicit (Enter / next / prev) so typing in the box doesn't
+// yank the editor selection around on every keystroke.
+export function editorSetSearch(query, caseSensitive): number {
+  if (!editorView) return 0;
+  editorView.dispatch({ effects: setSearchQuery.of(
+    new SearchQuery({ search: query ?? '', caseSensitive: !!caseSensitive }),
+  ) });
+  return query ? editorMatchInfo().count : 0;
+}
+
+export function editorNextMatch() {
+  if (editorView) findNext(editorView);
+  return editorMatchInfo();
+}
+
+export function editorPrevMatch() {
+  if (editorView) findPrevious(editorView);
+  return editorMatchInfo();
+}
+
+export function editorReplaceMatch(query, replace, caseSensitive) {
+  if (editorView && query) {
+    editorView.dispatch({ effects: setSearchQuery.of(
+      new SearchQuery({ search: query, replace: replace ?? '', caseSensitive: !!caseSensitive }),
+    ) });
+    replaceNext(editorView);
+  }
+  return editorMatchInfo();
+}
+
+export function editorReplaceAllMatches(query, replace, caseSensitive) {
+  if (editorView && query) {
+    editorView.dispatch({ effects: setSearchQuery.of(
+      new SearchQuery({ search: query, replace: replace ?? '', caseSensitive: !!caseSensitive }),
+    ) });
+    replaceAll(editorView);
+  }
+  return editorMatchInfo();
+}
+
+export function editorClearSearch() {
+  if (editorView) {
+    editorView.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: '' })) });
+  }
 }
 
 // Capture-phase dispatch for the CM6 editor. Runs before the bubble-
@@ -1139,6 +1277,23 @@ export function promptResetSettings(tabLabel) {
     cancelHidden: false,
     saveHidden: true,
     primary: 'cancel',
+  });
+  return openConfirmDialog();
+}
+
+// Confirm before closing Settings with unsaved changes. Reuses the shared
+// confirm overlay: Save commits the pending settings then closes, Discard
+// closes without saving, Cancel keeps the dialog open. Both the header ✕ and
+// the footer Close route through closeSettings, so both get this prompt.
+// Resolves 'save' | 'discard' | 'cancel'.
+export function promptDiscardSettings() {
+  setConfirmContents({
+    title: 'Unsaved settings',
+    bodyHtml: `You have unsaved changes in <span class="confirm-file-name">Settings</span>. Save them, or discard and close?`,
+    saveLabel: 'Save',
+    discardLabel: 'Discard',
+    cancelHidden: false,
+    primary: 'save',
   });
   return openConfirmDialog();
 }
