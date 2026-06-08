@@ -4,6 +4,27 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.7.0] - 2026-06-08
+
+### Added
+
+- A unified search bar shared by reading and editing modes: the same bar drives both the rendered preview and the editor, the up/down arrows highlight and reveal the current match in whichever view is active, and in edit mode a second row adds Replace and Replace All
+- A scoped editing toolbar in edit mode with one-click formatting actions (bold, italic, underline, inline code and fenced code blocks, ordered and unordered lists, headings, quotes, and a horizontal rule). Underline is also bound to `Mod+U`
+- File management from the folder tree: create new untitled files, and a right-click menu to create or delete files
+- A blocking error modal for unrecoverable errors, backed by a daily rotating error-log file so problems can be diagnosed after the fact
+- Closing Settings with unsaved changes now prompts to save, discard, or cancel instead of silently dropping the edits
+
+### Changed
+
+- The Markdown formatting actions were reworked for CommonMark correctness and extracted into pure, dependency-free functions covered by unit tests. Horizontal rules now insert a blank separator line so a preceding paragraph isn't turned into a setext heading, and inline/fenced code grows its backtick fence past any run inside the selection (padding the edges) so content can't be broken
+- The active file is highlighted in the folder sidebar and the active tab is framed with a border, so the current document is obvious at a glance
+- The editor toolbar buttons were aligned with the rest of the UI: the Save button matches the other top-bar buttons (surface, border, and hover), the editing-toolbar and outline buttons gained consistent borders, and Discard and both Settings close buttons use the shared danger styling
+
+### Fixed
+
+- Opening a file from the folder tree no longer scrolls the tree away from the clicked entry
+- The editor font size now follows the zoom level instead of staying fixed
+
 ## [4.6.0] - 2026-06-07
 
 ### Added
