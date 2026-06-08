@@ -60,8 +60,10 @@ export function syncToolbar() {
   const zoomControls = document.getElementById('zoom-controls');
   if (zoomControls) zoomControls.classList.toggle('hidden', !hasTab);
 
-  // Mode toggle enabled only for file-backed tabs (welcome screen has
-  // no file to edit). aria-pressed drives the pressed visual via CSS.
+  // Mode toggle enabled only for file-backed tabs. Untitled (new) tabs
+  // stay locked in edit mode until their first save — their read view
+  // would be an empty, never-rendered document — so the toggle is disabled
+  // for them (no path). aria-pressed drives the pressed visual.
   const canToggle = hasTab && !!tab?.path;
   (btnModeToggle as HTMLButtonElement).disabled = !canToggle;
   btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
@@ -184,6 +186,52 @@ export async function closeTab(id) {
     showWelcome();
   } else if (id === state.activeTabId) {
     state.activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
+    clearSearch();
+    renderTabBar();
+    applyActiveTab();
+    syncToolbar();
+  } else {
+    renderTabBar();
+  }
+}
+
+// Forget every tab backing a path that was just deleted from disk (a
+// single file, or any file inside a deleted folder). Unlike closeTab this
+// never prompts to save — the file is gone, so "save" would only recreate
+// it — and it drops any persisted draft too. Called after a successful
+// delete from the tree context menu.
+export function dropTabsForDeletedPath(deletedPath) {
+  if (!deletedPath) return;
+  const isAffected = (p) =>
+    !!p && (p === deletedPath
+      || p.startsWith(deletedPath + '/')
+      || p.startsWith(deletedPath + '\\'));
+  const affected = tabs.filter(t => isAffected(t.path));
+  if (!affected.length) return;
+  const activeAffected = affected.some(t => t.id === state.activeTabId);
+
+  // Tear down the live editor first if the active tab is among the dropped.
+  const cur = activeTab();
+  if (cur && cur.editing && isAffected(cur.path)) {
+    cancelPendingDraftWrite();
+    exitEditMode({ keepHtml: false });
+  }
+
+  for (const t of affected) {
+    if (t.path) clearDraft(t.path);
+    const idx = tabs.findIndex(x => x.id === t.id);
+    if (idx !== -1) tabs.splice(idx, 1);
+  }
+  syncWatcher();
+
+  if (tabs.length === 0) {
+    state.activeTabId = null;
+    clearSearch();
+    syncToolbar();
+    renderTabBar();
+    showWelcome();
+  } else if (activeAffected) {
+    state.activeTabId = tabs[tabs.length - 1].id;
     clearSearch();
     renderTabBar();
     applyActiveTab();
@@ -658,27 +706,29 @@ export async function openFilePicker() {
   }
 }
 
-// Create a brand-new Markdown file: the Rust `create_file` command shows
-// a native save dialog (optionally rooted at `dir` — used by the folder
-// tree's "New File…" item so it lands inside the right-clicked folder),
-// writes an empty file, and returns it in the same shape as open_file.
-// On success we open it in a fresh tab and drop straight into edit mode
-// so the user can start typing immediately — a freshly-created file has
-// nothing to read. The picker backdrop mirrors openFilePicker so the
-// app dims while the native dialog is up.
-export async function createNewFile(dir = null) {
+// Create a brand-new Markdown file. Rather than prompting for a location
+// up front, this opens a blank, path-less ("untitled") tab straight into
+// edit mode so the user can start typing immediately. Nothing is written
+// to disk until they trigger a save — at which point saveActiveFile()
+// shows the save dialog (rooted at `newFileDir` when one was passed, e.g.
+// the folder tree's "New File…") and adopts the chosen path. Closing the
+// tab with unsaved content routes through the normal unsaved-changes
+// (discard) prompt. `dir` is remembered so the eventual save dialog opens
+// in the right place.
+export function createNewFile(dir = null) {
   if (hasActiveOverlay()) return;
-  state.filePickerOpen = true;
-  pickerBackdrop.classList.remove('hidden');
-  try {
-    const result = await invoke('create_file', { dir });
-    if (result) {
-      openInNewTab(result.path, result.title, result.html, result.raw ?? '');
-      // openInNewTab made the new tab active, so enterEditMode() acts on it.
-      await enterEditMode();
-    }
-  } catch {} finally {
-    pickerBackdrop.classList.add('hidden');
-    state.filePickerOpen = false;
-  }
+  const id = state.nextTabId++;
+  tabs.push({
+    id, path: null, title: 'Untitled',
+    html: '', raw: '', savedRaw: '',
+    editing: true, isNew: true, newFileDir: dir || null,
+    scrollTop: 0, zoom: ZOOM_DEFAULT,
+  });
+  state.activeTabId = id;
+  // applyActiveTab mounts the editor (tab.editing === true) and flips the
+  // body `editing` class; rerender refreshes the toolbar, tab bar, and
+  // outline for the new active tab.
+  applyActiveTab();
+  rerender();
+  syncWatcher();
 }

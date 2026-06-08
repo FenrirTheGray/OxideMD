@@ -28,8 +28,8 @@ import { logError } from "../core/logger.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
 
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
-import { EditorState, EditorSelection, Prec } from '@codemirror/state';
+import { EditorView, keymap, lineNumbers, Decoration } from '@codemirror/view';
+import { EditorState, EditorSelection, Prec, StateField, StateEffect } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
@@ -669,7 +669,9 @@ async function renderPreviewNow() {
 
 export async function enterEditMode() {
   const tab = activeTab();
-  if (!tab || tab.editing || !tab.path) return;
+  // Untitled (new) tabs have no path yet but are editable; everything else
+  // needs a file backing it.
+  if (!tab || tab.editing || (!tab.path && !tab.isNew)) return;
 
   // Search works on rendered markdown; close it before swapping to the editor.
   closeSearch();
@@ -728,14 +730,56 @@ export function exitEditMode({ keepHtml = true } = {}) {
 // in the dependency-free, unit-tested frontend/lib/md-table.js. Opt-in via
 // editor_format_on_save.
 
+// Save-as for an untitled tab: prompt for a destination, write the live
+// buffer, then adopt the returned path so subsequent saves go in-place.
+// A cancelled dialog leaves the tab untitled and unsaved (returns false so
+// a close-triggered save aborts the close instead of dropping the buffer).
+async function saveUntitledTab(tab) {
+  setLoading();
+  let result;
+  try {
+    result = await invoke('save_new_file', { dir: tab.newFileDir || null, content: tab.raw ?? '' });
+  } catch (e) {
+    if (statusText && statusIndicator) {
+      statusText.textContent = `Save failed: ${String(e)}`;
+      statusIndicator.classList.remove('hidden');
+    }
+    clearStatus();
+    return false;
+  }
+  clearStatus();
+  if (!result) return false; // user cancelled the save dialog
+  tab.path = result.path;
+  tab.title = result.title;
+  tab.html = result.html;
+  tab.raw = result.raw ?? tab.raw ?? '';
+  tab.savedRaw = tab.raw;
+  tab.isNew = false;
+  tab.newFileDir = null;
+  state.lastSaveAt = Date.now();
+  state.lastSavedPath = tab.path;
+  invoke('file_sha256', { path: tab.path })
+    .then((hash) => { tab.diskHash = hash; })
+    .catch(() => {});
+  // Re-render the chrome for the now-file-backed tab: window/document
+  // title, status-bar path, tree highlight, and the editor rebound to the
+  // new path (so the live preview and image paste resolve correctly).
+  applyActiveTab();
+  rerender();
+  syncWatcher();
+  return true;
+}
+
 export async function saveActiveFile() {
   const tab = activeTab();
-  if (!tab || !tab.editing || !tab.path) return false;
-  if (!isDirty(tab)) return true;
+  if (!tab || !tab.editing) return false;
+  // An in-place save is a no-op when clean; an untitled tab always needs
+  // the save-as dialog so it can choose a destination.
+  if (tab.path && !isDirty(tab)) return true;
 
   // Format on save (opt-in). Swap the editor's buffer if the formatter
   // changed anything so the user sees the saved form and the dirty
-  // tracking stays consistent.
+  // tracking stays consistent. Applied before either save path writes.
   if (state.config?.editor_format_on_save) {
     const formatted = formatMarkdownBuffer(tab.raw ?? '');
     if (formatted !== (tab.raw ?? '')) {
@@ -747,6 +791,9 @@ export async function saveActiveFile() {
       }
     }
   }
+
+  // Untitled tabs have no path yet — route to the save-as flow.
+  if (!tab.path) return saveUntitledTab(tab);
 
   setLoading();
   try {

@@ -10,6 +10,7 @@
 // menu" — but the default is still suppressed.
 
 import {
+  invoke,
   modKey,
   tabs,
   sidebarTreeEl, tabBarEl,
@@ -17,7 +18,7 @@ import {
 } from "../core/state.ts";
 import {
   loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
-  createNewFile,
+  createNewFile, dropTabsForDeletedPath,
 } from "./tabs.ts";
 import { applyFormat } from "../editor/editor-format.ts";
 import { getEditorView } from "../editor/editor.ts";
@@ -221,6 +222,31 @@ function selectAllIn(root) {
 
 // ── Per-context builders ─────────────────────────────────────────────────
 
+function parentDirOf(p) {
+  const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+  return idx === -1 ? '' : p.slice(0, idx);
+}
+
+// Permanently delete a tree entry after an explicit confirmation. The
+// folder root is never offered here (it has no tree node), so this only
+// ever targets a file or a subfolder. On success any open tabs backing
+// the removed path(s) are dropped; the filesystem watcher refreshes the
+// tree on its own.
+async function deleteTreeEntry(path, isDir) {
+  const name = path.split(/[\\/]/).pop() || path;
+  const message = isDir
+    ? `Delete the folder "${name}" and everything inside it?\n\nThis is permanent and cannot be undone.`
+    : `Delete the file "${name}"?\n\nThis is permanent and cannot be undone.`;
+  if (!confirm(message)) return;
+  try {
+    await invoke('delete_path', { path });
+    dropTabsForDeletedPath(path);
+  } catch (e) {
+    logError('contextmenu', 'delete_path failed', e);
+    alert('Failed to delete: ' + String(e));
+  }
+}
+
 function buildTreeMenu(nodeEl) {
   const path = nodeEl.dataset.path;
   if (!path) return [];
@@ -229,12 +255,16 @@ function buildTreeMenu(nodeEl) {
   if (!isDir) {
     items.push({ label: 'Open in New Tab', action: () => loadFile(path) });
     items.push({ separator: true });
+    // "New File…" for a file is rooted at its parent directory.
+    items.push({ label: 'New File…', action: () => createNewFile(parentDirOf(path)) });
+    items.push({ label: 'Delete File…', action: () => deleteTreeEntry(path, false) });
   } else {
     // Right-clicking a folder offers "New File…" rooted at that folder,
     // so the save dialog opens inside the directory the user clicked.
     items.push({ label: 'New File…', action: () => createNewFile(path) });
-    items.push({ separator: true });
+    items.push({ label: 'Delete Folder…', action: () => deleteTreeEntry(path, true) });
   }
+  items.push({ separator: true });
   items.push({ label: 'Copy Path', action: () => copyText(path) });
   return items;
 }

@@ -213,6 +213,8 @@ pub fn run() {
             commands::get_cli_files,
             commands::pick_file,
             commands::create_file,
+            commands::save_new_file,
+            commands::delete_path,
             commands::pick_folder,
             commands::read_folder_tree,
             commands::search_project,

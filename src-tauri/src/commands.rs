@@ -156,6 +156,77 @@ pub async fn create_file(
     .map_err(|e| e.to_string())?
 }
 
+/// Save-as for an untitled (never-written) buffer: show the native save
+/// dialog (optionally rooted at `dir`), write the current `content` to the
+/// chosen path, and return it in the same shape as `open_file` so the
+/// frontend can adopt the path. Returns `Ok(None)` if the user cancels the
+/// dialog. Mirrors `create_file` but writes the live buffer instead of an
+/// empty file — the new-file flow defers the on-disk write until the user
+/// explicitly saves.
+#[tauri::command]
+pub async fn save_new_file(
+    app: tauri::AppHandle,
+    dir: Option<String>,
+    content: String,
+) -> Result<Option<OpenResult>, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("main window unavailable")?;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        let exts = md_extensions(&load_config());
+        let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
+        let mut builder = app
+            .dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Markdown", &ext_refs)
+            .set_file_name("untitled.md");
+        if let Some(d) = dir.as_deref() {
+            if !d.is_empty() {
+                builder = builder.set_directory(d);
+            }
+        }
+        builder.blocking_save_file().map(|p| p.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let chosen = match picked {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let exts = md_extensions(&load_config());
+        let path = ensure_md_extension(PathBuf::from(&chosen), &exts);
+        fs::write(&path, &content).map_err(|e| e.to_string())?;
+        let canonical = fs::canonicalize(&path).unwrap_or(path);
+        Ok(Some(build_open_result(canonical, content)))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Permanently delete a file or directory (recursively for directories).
+/// Cross-platform via `std::fs`. The frontend gates this behind an
+/// explicit confirmation, so by the time we're called the user has agreed
+/// to a destructive, non-undoable removal. Returns an error string for the
+/// frontend to surface if the path is missing or the OS refuses.
+#[tauri::command]
+pub async fn delete_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        let meta = fs::symlink_metadata(&p).map_err(|e| format!("{path}: {e}"))?;
+        if meta.is_dir() {
+            fs::remove_dir_all(&p).map_err(|e| format!("{path}: {e}"))
+        } else {
+            fs::remove_file(&p).map_err(|e| format!("{path}: {e}"))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 pub struct FolderTree {
     pub root: String,
