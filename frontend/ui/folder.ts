@@ -291,6 +291,9 @@ function buildTreeNode(node: any, opts: any = {}) {
     });
   } else {
     row.addEventListener('click', () => {
+      // The clicked row is by definition already visible, so don't let the
+      // subsequent highlightActiveTreeItem() jump the tree to "reveal" it.
+      suppressTreeScroll = true;
       loadFile(node.path);
       // In narrow (drawer) mode, picking a file slides the tree away so
       // the document gets the full width. Keyboard activation routes
@@ -405,6 +408,11 @@ sidebarTreeEl.addEventListener('keydown', (e) => {
   }
 });
 
+// Set right before a sidebar file-row click triggers loadFile(): the row
+// is already on screen, so the highlight pass that follows should not
+// scroll the tree to "reveal" it. Consumed (and reset) on the next call.
+let suppressTreeScroll = false;
+
 export function highlightActiveTreeItem() {
   if (!state.currentFolder) return;
   const tab = activeTab();
@@ -426,7 +434,11 @@ export function highlightActiveTreeItem() {
     }
     parent = parent.parentElement;
   }
-  node.querySelector('.tree-row')?.scrollIntoView({ block: 'nearest' });
+  if (suppressTreeScroll) {
+    suppressTreeScroll = false;
+  } else {
+    node.querySelector('.tree-row')?.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 // ── Sidebar divider ────────────────────────────────────────────────────
