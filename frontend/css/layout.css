@@ -23,6 +23,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Height (incl. the 1px bottom border, box-sizing: border-box) matches
+     #edit-toolbar and #sidebar-header so all three title bars and their
+     bottom borders line up across the top of the window. */
+  min-height: 38px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
@@ -42,7 +46,7 @@
 
 #outline-sidebar-close {
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   color: var(--fg-dim);
   cursor: pointer;
   width: 20px;
@@ -470,6 +474,9 @@ body.resizing-sidebar * {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Matches #edit-toolbar / #outline-sidebar-header height so the title
+     bars and their bottom borders align across the top of the window. */
+  min-height: 38px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
@@ -496,7 +503,7 @@ body.resizing-sidebar * {
 
 .sidebar-header-actions button {
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   color: var(--fg-dim);
   cursor: pointer;
   width: 20px;

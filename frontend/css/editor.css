@@ -100,10 +100,28 @@ body.editing #editor-split {
   color: var(--accent) !important;
   border-radius: 2px;
 }
-#preview-pane .oxide-reveal-block {
+/* Applies to both rendered surfaces (.md-rendered = #preview-pane in edit
+   mode and #content in read mode) so a search hit washes its block in
+   either view. */
+.md-rendered .oxide-reveal-block {
   background: rgba(86, 182, 194, 0.16);
   background: color-mix(in srgb, var(--accent-2) 16%, transparent);
   border-radius: 3px;
+}
+
+/* Unified search: once setSearchQuery runs, CM6 paints all matches with
+   .cm-searchMatch and the active one with .cm-searchMatch-selected. Use the
+   read-mode search palette (--mark / --mark-current) so edit-mode search
+   looks identical to read mode. */
+/* Specificity bumped (.cm-editor.md-editor …) so these beat CM6's baseTheme
+   default match colors (&dark .cm-searchMatch) regardless of inject order. */
+.cm-editor.md-editor .cm-searchMatch {
+  background: var(--mark);
+  border-radius: 2px;
+}
+.cm-editor.md-editor .cm-searchMatch-selected {
+  background: var(--mark-current);
+  color: var(--mark-current-fg);
 }
 
 /* Split-mode classes set on #editor-split by editor.js. The default (no
@@ -433,7 +451,7 @@ body.resizing-split * {
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--fg-toolbar);
   cursor: pointer;
@@ -467,8 +485,8 @@ body.resizing-split * {
 /* Save is the sole primary CTA while editing. Solid accent fill (the
    prior gradient + drop-shadow read as a marketing CTA against the flat
    formatting icons); position alone provides the weight. Discard sits
-   beside it as a quieter secondary — same height, transparent fill,
-   border that activates only on hover so it doesn't compete visually. */
+   beside it as a quieter secondary — same height and a resting border to
+   match the other UI buttons, transparent fill, hover fills it in. */
 #edit-toolbar .edit-actions {
   grid-column: 3;
   justify-self: end;
@@ -486,8 +504,8 @@ body.resizing-split * {
   border-radius: 6px;
   font-family: var(--font-family);
   font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-weight: 500;
+  letter-spacing: 0.03em;
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -503,53 +521,59 @@ body.resizing-split * {
   flex-shrink: 0;
 }
 
-/* Match the Settings panel's primary Save button (#settings-footer
-   #settings-save): same accent fill, radius, type scale, and the same
-   grey "disabled" treatment rather than a simple opacity dim. Height is
-   kept at the shared 28px so it stays aligned with Discard beside it. */
+/* Save matches the standard top-bar buttons (#toolbar-buttons button):
+   surface fill + border at rest, accent on hover — no special accent CTA
+   fill. Height stays 28px so it aligns with Discard beside it. */
 #edit-toolbar #btn-save {
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg-toolbar);
   border-radius: 7px;
   padding: 0 24px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
 }
+/* Hover/active match the other (non-save) buttons — the standard
+   bg-btn-hover + accent treatment — instead of a brightness filter on the
+   accent fill. */
 #edit-toolbar #btn-save:hover:not(:disabled) {
-  filter: brightness(1.08);
-  color: #fff;
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
 }
 #edit-toolbar #btn-save:active:not(:disabled) {
-  filter: brightness(0.95);
+  background: var(--accent-glow);
+  color: var(--accent);
 }
 #edit-toolbar #btn-save:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
 #edit-toolbar #btn-save:disabled {
-  background: var(--bg);
-  color: var(--fg-muted);
-  border-color: var(--border);
+  opacity: 0.45;
   cursor: default;
-  filter: none;
 }
 
 #edit-toolbar #btn-discard {
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   background: transparent;
   color: var(--fg-toolbar);
 }
+/* Danger treatment on hover/active/focus — matches the close buttons
+   (#search-close / #sidebar-close): destructive action, destructive color. */
 #edit-toolbar #btn-discard:hover:not(:disabled) {
-  background: var(--bg-btn-hover);
-  border-color: var(--border);
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 #edit-toolbar #btn-discard:active:not(:disabled) {
-  background: var(--accent-glow);
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 #edit-toolbar #btn-discard:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 #edit-toolbar #btn-discard:disabled {
   opacity: 0.45;
