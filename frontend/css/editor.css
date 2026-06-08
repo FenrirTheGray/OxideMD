@@ -480,13 +480,22 @@ body.resizing-split * {
   flex-shrink: 0;
 }
 
+/* Match the Settings panel's primary Save button (#settings-footer
+   #settings-save): same accent fill, radius, type scale, and the same
+   grey "disabled" treatment rather than a simple opacity dim. Height is
+   kept at the shared 28px so it stays aligned with Discard beside it. */
 #edit-toolbar #btn-save {
   border: 1px solid var(--accent);
   background: var(--accent);
   color: #fff;
+  border-radius: 7px;
+  padding: 0 24px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
 }
 #edit-toolbar #btn-save:hover:not(:disabled) {
   filter: brightness(1.08);
+  color: #fff;
 }
 #edit-toolbar #btn-save:active:not(:disabled) {
   filter: brightness(0.95);
@@ -496,8 +505,11 @@ body.resizing-split * {
   outline-offset: 2px;
 }
 #edit-toolbar #btn-save:disabled {
-  opacity: 0.5;
+  background: var(--bg);
+  color: var(--fg-muted);
+  border-color: var(--border);
   cursor: default;
+  filter: none;
 }
 
 #edit-toolbar #btn-discard {
