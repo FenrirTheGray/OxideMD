@@ -54,12 +54,12 @@ OxideMD reads, renders, and edits Markdown without bundling a browser. It draws 
 
 Prebuilt installers are attached to every [release](https://github.com/FenrirTheGray/OxideMD/releases).
 
-| Platform | Formats                                                  |
-| -------- | ------------------------------------------------------- |
-| Windows  | `.msi`, `.exe` (NSIS)                                   |
-| macOS    | `.dmg` (Apple Silicon and Intel)                        |
+| Platform | Formats                                                           |
+| -------- | ----------------------------------------------------------------- |
+| Windows  | `.msi`, `.exe` (NSIS)                                             |
+| macOS    | `.dmg` (Apple Silicon and Intel)                                  |
 | Linux    | apt / dnf repository (auto-updating), `.AppImage`, `.deb`, `.rpm` |
-| Arch     | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro) |
+| Arch     | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro)           |
 
 ### Linux (apt / dnf) — recommended
 
