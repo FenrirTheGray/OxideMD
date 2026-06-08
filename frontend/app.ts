@@ -3,6 +3,7 @@
 // errors thrown during the rest of the init sequence are captured.
 import "./core/logger.js";
 import { logError } from "./core/logger.ts";
+import { showErrorModal } from "./ui/error-modal.ts";
 
 import {
   invoke, listen, appWindow,
@@ -43,6 +44,7 @@ import {
 import { activeTab } from "./ui/tabs.ts";
 import { printActiveTab } from "./features/print.ts";
 import { showToast } from "./ui/toast.ts";
+import "./ui/error-modal.ts";
 import "./ui/contextmenu.js";
 import "./ui/window-size.js";
 import { applyOutlineVisibility, closeOutline } from "./ui/outline.ts";
@@ -481,7 +483,7 @@ registerHandler('exportHtml', async (e) => {
       title: baseName,
     });
   } catch (err) {
-    logError('export-html', 'export failed', err);
+    showErrorModal('Export failed', 'Could not export the file as HTML.', err);
   }
 });
 
@@ -518,6 +520,7 @@ document.addEventListener('keydown', (e) => {
   // Escape and swallow everything else. Otherwise Ctrl+S from within the
   // prompt would save, defeating the point of the "cancel" choice.
   if (state.confirmDialogOpen) return;
+  if (state.errorDialogOpen) return;
 
   if (e.key === 'Escape') {
     // Escape closes exactly one thing: the topmost open overlay, in

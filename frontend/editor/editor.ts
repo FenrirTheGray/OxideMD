@@ -27,6 +27,7 @@ import { registerHandler, dispatchKey } from "../core/keybindings.ts";
 import { writeDraft, clearDraft } from "../core/draft-store.ts";
 import { refreshOutline } from "../ui/outline.ts";
 import { logError } from "../core/logger.ts";
+import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
 
@@ -475,7 +476,7 @@ function installPasteHandler(view) {
         selection: { anchor: sel.from + insertion.length },
       });
     } catch (err) {
-      logError('editor', 'image paste failed', err);
+      showErrorModal('Image paste failed', 'Could not save the pasted image to disk.', err);
     }
   });
 }
@@ -554,7 +555,7 @@ export async function dropImagesIntoEditor(paths, x, y) {
       });
       refs.push(`![](${result.relative_href})`);
     } catch (err) {
-      logError('editor', 'image drop import failed', err);
+      showErrorModal('Image drop failed', 'Could not import the dropped image.', err);
     }
   }
   if (!refs.length) return true;
@@ -783,11 +784,8 @@ async function saveUntitledTab(tab) {
   try {
     result = await invoke('save_new_file', { dir: tab.newFileDir || null, content: tab.raw ?? '' });
   } catch (e) {
-    if (statusText && statusIndicator) {
-      statusText.textContent = `Save failed: ${String(e)}`;
-      statusIndicator.classList.remove('hidden');
-    }
     clearStatus();
+    showErrorModal('Save failed', 'Could not save the file.', e);
     return false;
   }
   clearStatus();
@@ -854,10 +852,7 @@ export async function saveActiveFile() {
     renderTabBar();
     return true;
   } catch (e) {
-    if (statusText && statusIndicator) {
-      statusText.textContent = `Save failed: ${String(e)}`;
-      statusIndicator.classList.remove('hidden');
-    }
+    showErrorModal('Save failed', 'Could not save the file.', e);
     return false;
   } finally {
     clearStatus();

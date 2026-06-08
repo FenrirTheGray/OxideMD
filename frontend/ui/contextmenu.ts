@@ -24,6 +24,7 @@ import { applyFormat } from "../editor/editor-format.ts";
 import { getEditorView } from "../editor/editor.ts";
 import { printActiveTab } from "../features/print.ts";
 import { logError } from "../core/logger.ts";
+import { showErrorModal } from "./error-modal.ts";
 import { EditorSelection } from '@codemirror/state';
 
 // ── Menu renderer ────────────────────────────────────────────────────────
@@ -242,8 +243,7 @@ async function deleteTreeEntry(path, isDir) {
     await invoke('delete_path', { path });
     dropTabsForDeletedPath(path);
   } catch (e) {
-    logError('contextmenu', 'delete_path failed', e);
-    alert('Failed to delete: ' + String(e));
+    showErrorModal('Delete failed', `Could not delete "${name}".`, e);
   }
 }
 

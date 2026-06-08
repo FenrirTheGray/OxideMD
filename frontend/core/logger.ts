@@ -32,12 +32,19 @@ function describe(value) {
 
 function send(level, scope, message, detail) {
   const tail = detail ? ` :: ${describe(detail)}` : '';
+  const line = `[${scope}] ${message}${tail}`;
   // Fire-and-forget — never throw from the logger itself.
   invoke('plugin:log|log', {
     level,
-    message: `[${scope}] ${message}${tail}`,
+    message: line,
     location: scope,
   }).catch(() => {});
+  // Persist warnings and errors to the daily human-readable error log
+  // (`<config-dir>/error-log/yyyy-mm-dd-errors.log`). Lower levels stay in
+  // the plugin log only.
+  if (level >= LEVEL.WARN) {
+    invoke('append_error_log', { message: line }).catch(() => {});
+  }
 }
 
 export function logError(scope, message, err) {
