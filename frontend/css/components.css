@@ -10,6 +10,13 @@
   background-color: var(--mark-current);
   color: var(--mark-current-fg);
 }
+/* The matched substring of an opened project-search result, painted in the
+   preview pane. Match in the primary accent; the surrounding line/block gets
+   the secondary-accent wash via .oxide-reveal-block (editor.css). */
+::highlight(oxide-reveal-match) {
+  background-color: var(--accent-glow);
+  color: var(--accent);
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    SETTINGS MODAL

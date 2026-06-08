@@ -13,8 +13,10 @@ import {
   statusIndicator, statusText, statusCountsEl,
   confirmOverlay, confirmDialogTitle, confirmDialogBody,
   confirmCancelBtn, confirmDiscardBtn, confirmSaveBtn,
+  supportsHighlights, revealHighlight,
 } from "../core/state.ts";
-import { syncToolbar, renderTabBar, rerender } from "../ui/tabs.ts";
+import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
+import { syncWatcher } from "../ui/folder.ts";
 import {
   activeTab, isDirty, renderContent, hydrateImages,
   setLoading, clearStatus, applyZoom,
@@ -242,6 +244,34 @@ const smartListKeymap = Prec.high(keymap.of([
   { key: 'Enter', run: smartEnter },
 ]));
 
+// ── Search-result reveal highlight (editor) ──────────────────────────
+// When a project-search hit is opened, decorate the matched line so it
+// stands out: the whole line gets a secondary-accent wash and the matched
+// substring the primary accent (mirrors the preview's two-tone treatment).
+// Held in a StateField as a DecorationSet; any edit dismisses it.
+const setRevealHighlight = StateEffect.define<{ lineFrom: number; from: number; to: number } | null>();
+const revealLineDeco = Decoration.line({ class: 'cm-reveal-line' });
+const revealMatchDeco = Decoration.mark({ class: 'cm-reveal-match' });
+const revealHighlightField = StateField.define({
+  create() { return Decoration.none; },
+  update(deco, tr) {
+    // A user edit dismisses the transient highlight.
+    if (tr.docChanged) return Decoration.none;
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (e.is(setRevealHighlight)) {
+        if (!e.value) { deco = Decoration.none; continue; }
+        const { lineFrom, from, to } = e.value;
+        const ranges = [revealLineDeco.range(lineFrom)];
+        if (to > from) ranges.push(revealMatchDeco.range(from, to));
+        deco = Decoration.set(ranges, true);
+      }
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 // CM6 theme: line up font/colors with the previous textarea look so the
 // transition is invisible. CSS variables come from style.css so dark/light
 // theme switching keeps working.
@@ -386,6 +416,7 @@ function buildView(tab) {
     keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
     markdown({ extensions: [oxideMarkdownExt] }),
     syntaxHighlighting(oxideHighlightStyle),
+    revealHighlightField,
     EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab.title}`,
       'spellcheck': spellCheck ? 'true' : 'false',
@@ -546,6 +577,11 @@ export function mountEditor(tab) {
   if (editorView) { try { editorView.destroy(); } catch {} editorView = null; }
   editorPane.innerHTML = '';
   previewPane.innerHTML = '';
+  // A fresh mount (tab switch / re-enter) drops any pending or live reveal so
+  // it can't leak onto a different document. revealEditorLine re-queues it
+  // afterwards when opening a search result.
+  pendingPreviewReveal = null;
+  clearPreviewReveal();
 
   const view = buildView(tab);
   editorPane.appendChild(view.dom);
@@ -569,15 +605,22 @@ export function mountEditor(tab) {
 
 function unmountEditor() {
   if (editorView) { try { editorView.destroy(); } catch {} editorView = null; }
+  pendingPreviewReveal = null;
+  clearPreviewReveal();
   editorPane.innerHTML = '';
   previewPane.innerHTML = '';
 }
 
 export function setPreviewHtml(html) {
+  // Drop any prior reveal first: the innerHTML swap detaches its ranges and
+  // the block class, so clear them explicitly to keep the registry tidy.
+  clearPreviewReveal();
   previewPane.innerHTML = html;
   // Resolve local images to asset:// URLs and promote remote images only
   // if the user has enabled them — see hydrateImages.
   hydrateImages(previewPane);
+  // Re-apply a queued search-result reveal now that the preview has content.
+  applyPreviewReveal();
   // After a re-render the preview's scrollHeight usually grows/shrinks
   // while its scrollTop stays pinned, so proportional alignment with the
   // editor drifts as the user types. Re-mirror once here so the preview
@@ -897,6 +940,106 @@ const EDITOR_FORMAT_ACTIONS = [
 ];
 for (const id of EDITOR_FORMAT_ACTIONS) {
   registerHandler(id, (e) => { e?.preventDefault(); formatActiveEditor(id); });
+}
+
+// ── Preview-side reveal highlight ────────────────────────────────────
+// The editor reveal above is precise (source line numbers map 1:1). The
+// preview is rendered HTML with no line info, so we mirror the hit there
+// by finding the matching occurrence of the query in the preview text:
+// the substring is painted via the CSS Highlight API (oxide-reveal-match)
+// and its containing block gets `.oxide-reveal-block` for the line wash.
+// `ordinal` is the 0-based index of the hit among all occurrences in the
+// source, so the preview highlights the *same* occurrence, not just the
+// first — the rendered text preserves source order for plain queries.
+let pendingPreviewReveal: any = null; // { query, ordinal } — one-shot
+let revealBlockEl: any = null;
+const REVEAL_BLOCK_SELECTOR = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,pre,dt,dd,figcaption';
+
+function clearPreviewReveal() {
+  if (supportsHighlights && revealHighlight) revealHighlight.clear();
+  if (revealBlockEl) { revealBlockEl.classList.remove('oxide-reveal-block'); revealBlockEl = null; }
+}
+
+function highlightPreviewMatch(query, ordinal) {
+  clearPreviewReveal();
+  if (!query) return;
+  const needle = String(query).toLowerCase();
+  const ranges: Range[] = [];
+  const walker = document.createTreeWalker(previewPane, NodeFilter.SHOW_TEXT);
+  let tn: any;
+  while ((tn = walker.nextNode())) {
+    const text = tn.nodeValue || '';
+    const hay = text.toLowerCase();
+    let idx = 0;
+    while ((idx = hay.indexOf(needle, idx)) !== -1) {
+      const r = document.createRange();
+      r.setStart(tn, idx);
+      r.setEnd(tn, idx + needle.length);
+      ranges.push(r);
+      idx += needle.length;
+    }
+  }
+  if (!ranges.length) return;
+  // Clamp to the occurrence count in case the renderer dropped some (e.g.
+  // a match that lived inside markdown syntax that isn't rendered).
+  const pick = ranges[Math.min(ordinal, ranges.length - 1)];
+  if (supportsHighlights && revealHighlight) revealHighlight.add(pick);
+  const block = (pick.startContainer.parentElement || previewPane).closest(REVEAL_BLOCK_SELECTOR);
+  if (block) { block.classList.add('oxide-reveal-block'); revealBlockEl = block; }
+}
+
+// Apply a queued preview reveal once the preview actually has content.
+// Called from setPreviewHtml (after a render) and from revealEditorLine
+// (in case the preview was already rendered). One-shot: consumed on apply.
+function applyPreviewReveal() {
+  if (!pendingPreviewReveal) return;
+  if (!previewPane.childNodes.length) return; // not rendered yet — wait
+  const { query, ordinal } = pendingPreviewReveal;
+  pendingPreviewReveal = null;
+  highlightPreviewMatch(query, ordinal);
+}
+
+// Reveal a project-search hit in the mounted editor *and* the preview:
+// scroll the 1-based source line to center, decorate the line (secondary
+// accent) and the matched substring (primary accent) via a CM6 decoration,
+// and queue the matching preview highlight. Line numbers come straight from
+// the `search_project` backend, which greps the same source the editor
+// shows, so they map 1:1.
+export function revealEditorLine(line, query) {
+  if (!editorView) return;
+  const doc = editorView.state.doc;
+  if (!Number.isFinite(line) || line < 1 || line > doc.lines) return;
+  const l = doc.line(line);
+  let from = l.from;
+  let to = l.from;
+  if (query) {
+    const idx = l.text.toLowerCase().indexOf(String(query).toLowerCase());
+    if (idx !== -1) { from = l.from + idx; to = from + String(query).length; }
+  }
+  editorView.dispatch({
+    selection: EditorSelection.cursor(from),
+    effects: [
+      setRevealHighlight.of({ lineFrom: l.from, from, to }),
+      EditorView.scrollIntoView(from, { y: 'center' }),
+    ],
+  });
+  editorView.focus();
+
+  // Queue the same hit for the preview. The 0-based occurrence index of
+  // `from` among all matches in the source picks the matching occurrence.
+  if (query && to > from) {
+    const src = doc.toString();
+    const needle = String(query).toLowerCase();
+    const before = src.slice(0, from).toLowerCase();
+    let ordinal = 0;
+    let i = 0;
+    while ((i = before.indexOf(needle, i)) !== -1) { ordinal++; i += needle.length; }
+    pendingPreviewReveal = { query, ordinal };
+  } else {
+    pendingPreviewReveal = null;
+    clearPreviewReveal();
+  }
+  applyPreviewReveal();
 }
 
 // Lets the global toggleSearch handler route Mod+F to CM6's built-in

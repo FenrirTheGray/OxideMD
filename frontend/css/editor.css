@@ -83,6 +83,29 @@ body.editing #editor-split {
   background: var(--bg);
 }
 
+/* ── Search-result reveal highlight ──────────────────────────────────
+   When a project-search hit is opened, the matched line is washed in the
+   secondary accent (--accent-2) and the matched substring in the primary
+   --accent. The editor uses .cm-reveal-line / .cm-reveal-match (CM6
+   decorations); the preview mirrors it with .oxide-reveal-block and the
+   ::highlight(oxide-reveal-match) painter in components.css. color-mix ties
+   the wash to the live token (custom themes follow); the rgba line is a
+   fallback for engines without color-mix. */
+.cm-reveal-line {
+  background: rgba(86, 182, 194, 0.16);
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+}
+.cm-reveal-match {
+  background: var(--accent-glow);
+  color: var(--accent) !important;
+  border-radius: 2px;
+}
+#preview-pane .oxide-reveal-block {
+  background: rgba(86, 182, 194, 0.16);
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+  border-radius: 3px;
+}
+
 /* Split-mode classes set on #editor-split by editor.js. The default (no
    class) is the resizable split layout above. These hide one pane and
    the divider so the remaining pane fills the row. */

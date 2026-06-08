@@ -10,11 +10,13 @@
 
 import {
   invoke, state,
-  sidebarTreeEl, sidebarFilterEl,
+  sidebarTreeEl,
   sidebarSearchToggle, sidebarSearchPanel,
   sidebarSearchInput, sidebarSearchClearBtn, sidebarSearchResultsEl,
 } from "../core/state.ts";
 import { loadFile } from "../ui/tabs.ts";
+import { closeFilterMode } from "../ui/folder.ts";
+import { enterEditMode, revealEditorLine } from "../editor/editor.ts";
 
 const SVG_FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
@@ -112,7 +114,7 @@ function renderResults(data, query) {
       text.className = 'search-result-text';
       renderMatchLine(text, m.line_text, query);
       row.appendChild(text);
-      row.addEventListener('click', () => { loadFile(file.path); });
+      row.addEventListener('click', () => { openResult(file.path, m.line_number, query); });
       group.appendChild(row);
     }
 
@@ -125,6 +127,19 @@ function renderResults(data, query) {
     hint.textContent = 'Too many matches — results truncated.';
     sidebarSearchResultsEl.appendChild(hint);
   }
+}
+
+// Open the file behind a clicked result and jump to the hit: drop into
+// edit mode (where source line numbers line up with the backend's match
+// lines) and select the matched text on that row. The double rAF lets the
+// editor finish mounting (and its own scroll-restore run) before we
+// scroll the match into view, so our reveal isn't immediately overridden.
+async function openResult(path, line, query) {
+  await loadFile(path);
+  await enterEditMode();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    revealEditorLine(line, query);
+  }));
 }
 
 async function runProjectSearch(query) {
@@ -153,8 +168,8 @@ function scheduleSearch(query) {
 export function openProjectSearch() {
   if (!state.currentFolder) return;
   panelOpen = true;
+  closeFilterMode(); // mutual exclusion with the name filter
   sidebarTreeEl.classList.add('hidden');
-  if (sidebarFilterEl) sidebarFilterEl.classList.add('hidden');
   sidebarSearchPanel.classList.remove('hidden');
   if (sidebarSearchToggle) {
     sidebarSearchToggle.classList.add('active');
@@ -168,7 +183,6 @@ export function closeProjectSearch() {
   panelOpen = false;
   sidebarSearchPanel.classList.add('hidden');
   sidebarTreeEl.classList.remove('hidden');
-  if (sidebarFilterEl) sidebarFilterEl.classList.remove('hidden');
   if (sidebarSearchToggle) {
     sidebarSearchToggle.classList.remove('active');
     sidebarSearchToggle.setAttribute('aria-pressed', 'false');

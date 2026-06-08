@@ -119,11 +119,16 @@ export const supportsHighlights =
   && CSS.highlights;
 export const matchHighlight = supportsHighlights ? new Highlight() : null;
 export const currentHighlight = supportsHighlights ? new Highlight() : null;
+// Highlights the matched substring in the preview pane when a project-search
+// result is opened (the editor uses a CM6 decoration for the same job).
+export const revealHighlight = supportsHighlights ? new Highlight() : null;
 if (supportsHighlights) {
   matchHighlight.priority = 0;
   currentHighlight.priority = 1;
+  revealHighlight.priority = 2;
   CSS.highlights.set('oxide-match', matchHighlight);
   CSS.highlights.set('oxide-current', currentHighlight);
+  CSS.highlights.set('oxide-reveal-match', revealHighlight);
 }
 
 // ── System dark/light preference ──────────────────────────────────────────
