@@ -923,6 +923,21 @@
   outline-offset: 2px;
 }
 
+/* Close abandons unsaved changes, so it gets the danger treatment on
+   hover/focus — matching the header ✕ (#settings-header button) and the
+   app's other close buttons. */
+#settings-footer #settings-cancel:hover {
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+#settings-footer #settings-cancel:focus-visible {
+  outline: none;
+  color: var(--danger);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
 #settings-footer #settings-reset {
   margin-right: auto;
   color: var(--fg-muted);

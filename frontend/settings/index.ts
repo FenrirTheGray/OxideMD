@@ -20,7 +20,7 @@ import {
   renderContent,
   applyRecentFiles,
 } from "../ui/tabs.ts";
-import { setPreviewHtml, promptResetSettings } from "../editor/editor.ts";
+import { setPreviewHtml, promptResetSettings, promptDiscardSettings } from "../editor/editor.ts";
 import { closeSearch } from "../features/search.ts";
 import {
   ACTIONS,
@@ -1036,17 +1036,25 @@ function applyThemeToControls(colors) {
   updatePaletteHexLabels();
 }
 
-export function closeSettings() {
+export async function closeSettings() {
   endShortcutCapture();
-  if (state.releaseFocusTrap) {
-    state.releaseFocusTrap();
-    state.releaseFocusTrap = null;
-  }
   if (
     settingsOverlay.classList.contains("hidden") ||
     settingsOverlay.classList.contains("closing")
   )
     return;
+  // Unsaved changes → confirm before discarding them. Save commits and then
+  // closes; Discard closes losing the tweaks; Cancel keeps the dialog open.
+  if (settingsAreDirty()) {
+    const decision = await promptDiscardSettings();
+    if (decision === "cancel") return;
+    if (decision === "save") await saveSettings();
+    // "discard" falls through to the revert-and-close path below.
+  }
+  if (state.releaseFocusTrap) {
+    state.releaseFocusTrap();
+    state.releaseFocusTrap = null;
+  }
   // Revert any live preview changes — the theme-class swap and the
   // interface-palette swatches both apply live to <body> while the
   // dialog is open. Re-running applyConfig from the saved config undoes
