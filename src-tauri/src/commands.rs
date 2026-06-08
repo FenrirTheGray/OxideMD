@@ -360,7 +360,15 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
 #[tauri::command]
 pub async fn read_folder_tree(path: String) -> Result<FolderTree, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let p = PathBuf::from(&path);
+        // Canonicalize the root before walking so the tree's node paths line
+        // up byte-for-byte with the canonical paths `open_file` hands back.
+        // Without this, opening a folder reached through a symlink (or any
+        // non-canonical form) would leave the active file un-highlighted in
+        // the sidebar, because the tab's canonical path wouldn't match the
+        // tree node's raw path. Falls back to the given path if the OS can't
+        // resolve it (e.g. a permission quirk), which is no worse than before.
+        let p = fs::canonicalize(&path).unwrap_or_else(|_| PathBuf::from(&path));
+        let p = strip_windows_verbatim(p);
         if !p.is_dir() {
             return Err(format!("Not a directory: {path}"));
         }
