@@ -36,7 +36,9 @@ Release tags are the version prefixed with `v`:
 5. Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds the
    cross-platform artifacts (`.msi`/`.exe`, `.dmg`, `.AppImage`/`.deb`/`.rpm`,
    and the Arch `.pkg.tar.zst` packages) and creates a **draft** GitHub release
-   with them attached.
+   with them attached. The release notes are composed automatically from the
+   version's `CHANGELOG.md` section (with a tagline and install footer), so the
+   changelog entry from step 1 is what ships on the release page.
 6. Review the draft release, then publish it.
 
 ## Arch packaging follow-up
