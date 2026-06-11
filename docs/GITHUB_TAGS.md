@@ -41,10 +41,11 @@ Release tags are the version prefixed with `v`:
 
 ## Arch packaging follow-up
 
-The same workflow builds the two Arch packages and, after uploading them, opens
-a pull request that syncs the committed PKGBUILDs (version and checksums) to the
-new release. Merge that PR so the in-repo PKGBUILDs match the release. The full
-mechanism is documented in [`packaging/aur/README.md`](../packaging/aur/README.md).
+The same workflow builds the two Arch packages and, after uploading them,
+pushes a commit straight to `main` that syncs the committed PKGBUILDs (version
+and checksums) to the new release — no follow-up to merge, just `git pull`
+afterwards to pick up the sync commit locally. The full mechanism is documented
+in [`packaging/aur/README.md`](../packaging/aur/README.md).
 
 For how changes should be shaped before a release, see the
 [Code Style](CODE_STYLE.md) guide.
