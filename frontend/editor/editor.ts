@@ -1393,24 +1393,38 @@ document.addEventListener('keydown', (e) => {
 // events don't bubble out of cm-editor); preview → editor is wired once
 // here against the module's editorView handle.
 const suppressNextScroll = new WeakSet();
+// Coalesce a burst of scroll events into a single rAF. Doing the
+// measure-and-write inline on every scroll event forces a synchronous
+// reflow of the other pane (we read its scrollHeight right after writing
+// its scrollTop on the previous event) — classic layout thrash. On
+// WebKitGTK that reflow lands on the scroll-event path and stalls the
+// compositor, so the editor scroll crawls. Deferring to rAF touches
+// layout at most once per frame and keeps it off the scroll event.
+let scrollSyncFrame = 0;
 function mirrorScroll(from, to) {
   if (suppressNextScroll.has(from)) {
     suppressNextScroll.delete(from);
     return;
   }
-  const fromMax = from.scrollHeight - from.clientHeight;
-  const toMax = to.scrollHeight - to.clientHeight;
-  if (fromMax <= 0 || toMax <= 0) return;
-  const frac = from.scrollTop / fromMax;
-  const target = toMax * frac;
-  if (Math.abs(to.scrollTop - target) < 0.5) return;
-  suppressNextScroll.add(to);
-  to.scrollTop = target;
-  // Fallback: if the write didn't end up firing a scroll event (e.g.
-  // it clamped to the same integer we were already at), clear the
-  // mark after two frames so a real user scroll on `to` isn't eaten.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => { suppressNextScroll.delete(to); });
+  if (scrollSyncFrame) return;
+  scrollSyncFrame = requestAnimationFrame(() => {
+    scrollSyncFrame = 0;
+    // Read the live positions inside the frame so a coalesced burst maps
+    // from the gesture's final scrollTop, not the first event's.
+    const fromMax = from.scrollHeight - from.clientHeight;
+    const toMax = to.scrollHeight - to.clientHeight;
+    if (fromMax <= 0 || toMax <= 0) return;
+    const frac = from.scrollTop / fromMax;
+    const target = toMax * frac;
+    if (Math.abs(to.scrollTop - target) < 0.5) return;
+    suppressNextScroll.add(to);
+    to.scrollTop = target;
+    // Fallback: if the write didn't end up firing a scroll event (e.g.
+    // it clamped to the same integer we were already at), clear the
+    // mark after two frames so a real user scroll on `to` isn't eaten.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { suppressNextScroll.delete(to); });
+    });
   });
 }
 if (previewPane) {
