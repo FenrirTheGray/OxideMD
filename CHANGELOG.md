@@ -4,6 +4,16 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.7.1] - 2026-06-11
+
+### Fixed
+
+- Synchronized scrolling between the editor and the preview no longer stalls the editor pane: the mirror write is coalesced into a single animation frame instead of forcing a reflow on every scroll event, which made scrolling crawl on WebKitGTK
+
+### Changed
+
+- Updated the CodeMirror dependencies to their latest patch releases (`@codemirror/lint` 6.9.7, `@codemirror/view` 6.43.1)
+
 ## [4.7.0] - 2026-06-08
 
 ### Added
