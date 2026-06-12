@@ -26,9 +26,7 @@ pub fn append_error_line(message: &str) {
     }
     let now = Local::now();
     let file = dir.join(format!("{}-errors.log", now.format("%Y-%m-%d")));
-    let flat = message
-        .replace("\r\n", " | ")
-        .replace(['\n', '\r'], " | ");
+    let flat = message.replace("\r\n", " | ").replace(['\n', '\r'], " | ");
     let line = format!("{} - {}\n", now.format("%H:%M:%S"), flat);
     if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&file) {
         let _ = f.write_all(line.as_bytes());
