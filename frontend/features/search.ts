@@ -5,10 +5,10 @@ import {
   searchReplaceInput,
   supportsHighlights, matchHighlight, currentHighlight,
 } from "../core/state.ts";
-import {
-  editorSetSearch, editorNextMatch, editorPrevMatch,
-  editorReplaceMatch, editorReplaceAllMatches, editorClearSearch,
-} from "../editor/editor.ts";
+// Edit-mode search runs through the lazily-loaded editor module; these
+// helpers are only reached when isEditing(), which implies it's loaded.
+// The ?? fallbacks keep a hypothetical miss harmless (zero matches).
+import { editorModule } from "../editor/lazy.ts";
 
 // The one bar drives two backends: the rendered-content highlight search in
 // read mode, and CodeMirror's search (via editor.ts) in edit mode. Every
@@ -49,13 +49,13 @@ export function clearSearch() {
   }
   editCount = 0;
   editCurrent = 0;
-  if (isEditing()) editorClearSearch();
+  if (isEditing()) editorModule()?.editorClearSearch();
   searchCount.textContent = '';
 }
 
 export function runSearch(query) {
   if (isEditing()) {
-    editCount = editorSetSearch(query, state.searchCaseSensitive);
+    editCount = editorModule()?.editorSetSearch(query, state.searchCaseSensitive) ?? 0;
     editCurrent = 0;
     updateSearchCount();
     return;
@@ -111,7 +111,7 @@ function highlightCurrent() {
 
 export function nextMatch() {
   if (isEditing()) {
-    ({ count: editCount, current: editCurrent } = editorNextMatch());
+    ({ count: editCount, current: editCurrent } = editorModule()?.editorNextMatch() ?? { count: 0, current: 0 });
     updateSearchCount();
     return;
   }
@@ -123,7 +123,7 @@ export function nextMatch() {
 
 export function prevMatch() {
   if (isEditing()) {
-    ({ count: editCount, current: editCurrent } = editorPrevMatch());
+    ({ count: editCount, current: editCurrent } = editorModule()?.editorPrevMatch() ?? { count: 0, current: 0 });
     updateSearchCount();
     return;
   }
@@ -137,21 +137,21 @@ export function prevMatch() {
 // is hidden there). Driven by app.ts from the replace row's controls.
 export function replaceCurrent() {
   if (!isEditing()) return;
-  ({ count: editCount, current: editCurrent } = editorReplaceMatch(
+  ({ count: editCount, current: editCurrent } = editorModule()?.editorReplaceMatch(
     (searchInput as HTMLInputElement).value,
     (searchReplaceInput as HTMLInputElement).value,
     state.searchCaseSensitive,
-  ));
+  ) ?? { count: 0, current: 0 });
   updateSearchCount();
 }
 
 export function replaceAllMatches() {
   if (!isEditing()) return;
-  ({ count: editCount, current: editCurrent } = editorReplaceAllMatches(
+  ({ count: editCount, current: editCurrent } = editorModule()?.editorReplaceAllMatches(
     (searchInput as HTMLInputElement).value,
     (searchReplaceInput as HTMLInputElement).value,
     state.searchCaseSensitive,
-  ));
+  ) ?? { count: 0, current: 0 });
   updateSearchCount();
 }
 

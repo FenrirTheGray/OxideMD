@@ -20,12 +20,10 @@ import {
   loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
   createNewFile, dropTabsForDeletedPath,
 } from "./tabs.ts";
-import { applyFormat } from "../editor/editor-format.ts";
-import { getEditorView } from "../editor/editor.ts";
+import { editorModule } from "../editor/lazy.ts";
 import { printActiveTab } from "../features/print.ts";
 import { logError } from "../core/logger.ts";
 import { showErrorModal } from "./error-modal.ts";
-import { EditorSelection } from '@codemirror/state';
 
 // ── Menu renderer ────────────────────────────────────────────────────────
 // One menu element exists at a time, lazily attached to <body>. Click-out,
@@ -174,42 +172,6 @@ async function inputPaste(ta, sel) {
   } catch {}
 }
 
-// Editor (CM6) cut/copy/paste/select-all. Each goes through a single
-// transaction so undo/redo gets one history entry per action; cut and
-// copy use the async clipboard API since CM6 owns the contenteditable
-// and execCommand('cut'/'copy') from outside doesn't fire its handlers.
-async function cmCopy(view, sel) {
-  const text = view.state.sliceDoc(sel.start, sel.end);
-  if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch {}
-}
-async function cmCut(view, sel) {
-  const text = view.state.sliceDoc(sel.start, sel.end);
-  if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch {}
-  view.dispatch({
-    changes: { from: sel.start, to: sel.end, insert: '' },
-    selection: EditorSelection.cursor(sel.start),
-  });
-  view.focus();
-}
-async function cmPaste(view, sel) {
-  let text = '';
-  try { text = await navigator.clipboard.readText(); } catch {}
-  if (!text) return;
-  view.dispatch({
-    changes: { from: sel.start, to: sel.end, insert: text },
-    selection: EditorSelection.cursor(sel.start + text.length),
-  });
-  view.focus();
-}
-function cmSelectAll(view) {
-  view.dispatch({
-    selection: EditorSelection.range(0, view.state.doc.length),
-  });
-  view.focus();
-}
-
 // Markdown/preview "Select All" selects the visible rendered content
 // rather than the whole document — matches what the user would expect
 // from a right-click on the article.
@@ -303,28 +265,6 @@ function buildInputMenu(input) {
   ];
 }
 
-function buildEditorMenu() {
-  const view = getEditorView();
-  if (!view) return [];
-  // Snapshot selection; the menu click momentarily blurs the editor and
-  // we want Cut/Copy/Paste to act on what the user was looking at.
-  const r = view.state.selection.main;
-  const sel = { start: r.from, end: r.to };
-  const hasSelection = sel.start !== sel.end;
-  return [
-    { label: 'Cut',    action: () => cmCut(view, sel),   disabled: !hasSelection, shortcut: `${modKey}+X` },
-    { label: 'Copy',   action: () => cmCopy(view, sel),  disabled: !hasSelection, shortcut: `${modKey}+C` },
-    { label: 'Paste',  action: () => cmPaste(view, sel), shortcut: `${modKey}+V` },
-    { label: 'Select All', action: () => cmSelectAll(view), shortcut: `${modKey}+A` },
-    { separator: true },
-    { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: `${modKey}+B` },
-    { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: `${modKey}+I` },
-    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: `${modKey}+U` },
-    { label: 'Code',   action: () => applyFormat(view, 'code') },
-    { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: `${modKey}+K` },
-  ];
-}
-
 function buildMarkdownMenu(root, target) {
   const link = target.closest('a[href]');
   const img  = !link ? target.closest('img') : null;
@@ -390,7 +330,9 @@ document.addEventListener('contextmenu', (e) => {
   } else if (tabEl) {
     items = buildTabMenu(tabEl);
   } else if (mdEditor) {
-    items = buildEditorMenu();
+    // Built by the (lazily-loaded) editor module — a visible .cm-editor
+    // means it's loaded. No items means no menu, same as before.
+    items = editorModule()?.buildEditorContextMenu() ?? [];
   } else if (otherInput) {
     items = buildInputMenu(otherInput);
   } else if (inPreview) {

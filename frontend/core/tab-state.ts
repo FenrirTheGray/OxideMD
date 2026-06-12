@@ -38,6 +38,19 @@ export function isDirty(tab) {
   return (tab.raw ?? '') !== (tab.savedRaw ?? '');
 }
 
+// Suppress fs-changed handling for a short window after save — our own
+// write triggers the watcher, which would otherwise round-trip and wipe
+// the tab's raw buffer back to disk content. (Lives here, not in the
+// lazily-loaded editor.ts, because the folder watcher consults it in
+// read mode too.)
+const SAVE_SUPPRESS_MS = 1500;
+export function saveRecentlyFor(path) {
+  return !!path
+    && state.lastSaveAt
+    && (Date.now() - state.lastSaveAt) < SAVE_SUPPRESS_MS
+    && state.lastSavedPath === path;
+}
+
 // Whether the live preview pane is currently visible — drives the outline
 // button's edit-mode aria-pressed / tooltip in syncToolbar().
 export function isPreviewVisible() {

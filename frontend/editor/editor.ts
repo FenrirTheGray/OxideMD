@@ -10,10 +10,8 @@ import {
   contentEl, contentScroll,
   editorSplit, editorPane, previewPane, splitDivider,
   btnSave, btnDiscard, btnPreview,
-  statusIndicator, statusText, statusCountsEl,
-  confirmOverlay, confirmDialogTitle, confirmDialogBody,
-  confirmCancelBtn, confirmDiscardBtn, confirmSaveBtn,
-  supportsHighlights, revealHighlight,
+  statusIndicator, statusText,
+  modKey,
 } from "../core/state.ts";
 import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
 import { syncWatcher } from "../ui/folder.ts";
@@ -22,6 +20,9 @@ import {
   setLoading, clearStatus, applyZoom,
 } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
+import { updateCounts } from "../ui/counts.ts";
+import { promptDiscardChanges } from "../ui/confirm.ts";
+import { clearReveal, highlightMatchIn } from "../ui/reveal.ts";
 import { applyFormat } from "./editor-format.ts";
 import { registerHandler, dispatchKey } from "../core/keybindings.ts";
 import { writeDraft, clearDraft } from "../core/draft-store.ts";
@@ -30,6 +31,7 @@ import { logError } from "../core/logger.ts";
 import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
+import { debounce } from "../lib/timing.ts";
 
 import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
@@ -41,17 +43,6 @@ import {
   search, SearchQuery, setSearchQuery, getSearchQuery,
   findNext, findPrevious, replaceNext, replaceAll,
 } from '@codemirror/search';
-
-// Suppress fs-changed handling for a short window after save — our own
-// write triggers the watcher, which would otherwise round-trip and wipe
-// the tab's raw buffer back to disk content.
-const SAVE_SUPPRESS_MS = 1500;
-export function saveRecentlyFor(path) {
-  return !!path
-    && state.lastSaveAt
-    && (Date.now() - state.lastSaveAt) < SAVE_SUPPRESS_MS
-    && state.lastSavedPath === path;
-}
 
 // Module-level handle to the current EditorView. The CM6 scroller
 // (view.scrollDOM) is the actual scrolling element, not editor-pane.
@@ -100,43 +91,23 @@ function applySplitToTab(tab) {
   applySplitMode(tab.splitMode || 'split', false);
 }
 
-// ── Line / word / char counts (status bar) ─────────────────────────────
-// Cheap synchronous pass over the document text: one regex for words plus
-// a newline split for lines — fast enough to run inline on every doc
-// change and selection change without debouncing (the preview render is
-// the heavy step and is debounced separately). Counts source markdown
-// verbatim (including syntax characters) to avoid tying this to the
-// render pipeline.
-//
-// Used in both modes: edit mode passes the live buffer (and, when a
-// selection is non-empty, the selected text for the trailing "selected"
-// segment); read mode passes the tab's raw source. `showWelcome` clears
-// the element so it blanks out when there's no active document.
-function countsLabel(text) {
-  const chars = text.length;
-  const words = (text.match(/\S+/g) || []).length;
-  const lines = text === '' ? 0 : text.split('\n').length;
-  return `${lines} line${lines === 1 ? '' : 's'} · `
-       + `${words} word${words === 1 ? '' : 's'} · `
-       + `${chars} char${chars === 1 ? '' : 's'}`;
-}
+// Edit-mode counts refresh, debounced: materializing the document string
+// and scanning it for words is O(doc) — too heavy to run on every
+// keystroke and cursor movement of a large file. CM6 states are immutable
+// snapshots, so a trailing-edge fire against an already-replaced state is
+// merely stale, never wrong-document: mount/unmount cancel any pending
+// fire before the active tab can change underneath it.
+const debouncedEditorCounts = debounce((cmState) => {
+  const sel = cmState.selection.main;
+  const selectionText = sel.empty ? '' : cmState.sliceDoc(sel.from, sel.to);
+  updateCounts(cmState.doc.toString(), selectionText);
+}, 100);
 
-export function updateCounts(value: any, selectionText?: any) {
-  if (!statusCountsEl) return;
-  const text = value ?? '';
-  let label = countsLabel(text);
-  const sel = selectionText ?? '';
-  if (sel) {
-    const selWords = (sel.match(/\S+/g) || []).length;
-    label += `  (${selWords} word${selWords === 1 ? '' : 's'}, `
-           + `${sel.length} char${sel.length === 1 ? '' : 's'} selected)`;
-  }
-  statusCountsEl.textContent = label;
-}
-
-export function clearCounts() {
-  if (statusCountsEl) statusCountsEl.textContent = '';
-}
+// Outline refresh re-parses the whole buffer and rebuilds the sidebar
+// DOM via innerHTML; debounce it off the keystroke path. Mode switches
+// and tab switches still call refreshOutline() directly for an instant
+// repaint.
+const debouncedOutlineRefresh = debounce(refreshOutline, 200);
 
 // ── Smart list / quote continuation on Enter ─────────────────────────
 // When the cursor is at the end of a list-item or blockquote line,
@@ -400,27 +371,19 @@ function buildView(tab) {
     // An edit dismisses any lingering search-hit reveal so the sticky
     // highlight doesn't re-apply on every keystroke's preview re-render.
     pendingPreviewReveal = null;
-    clearPreviewReveal();
+    clearReveal();
     scheduleDraftWrite(cur);
     schedulePreviewRender(undefined);
     // Headings may have been added/removed/edited — keep the outline
-    // sidebar fresh. Cheap parse, and a no-op while it's hidden.
-    refreshOutline();
-  };
-
-  // Refresh the status-bar counts from a CM6 state. Called on both doc
-  // changes and selection changes so the trailing "… selected" segment
-  // tracks the cursor live; the selection text is empty for a plain
-  // caret, which collapses the label back to the document totals.
-  const refreshCountsFromState = (cmState) => {
-    const sel = cmState.selection.main;
-    const selectionText = sel.empty ? '' : cmState.sliceDoc(sel.from, sel.to);
-    updateCounts(cmState.doc.toString(), selectionText);
+    // sidebar fresh. Debounced: it re-parses the whole buffer and
+    // rebuilds the sidebar DOM, so it shouldn't run per keystroke.
+    // (Still a no-op while the sidebar is hidden.)
+    debouncedOutlineRefresh();
   };
 
   const updateListener = EditorView.updateListener.of((u) => {
     if (u.docChanged) onDocChanged(u.state.doc.toString());
-    if (u.docChanged || u.selectionSet) refreshCountsFromState(u.state);
+    if (u.docChanged || u.selectionSet) debouncedEditorCounts(u.state);
   });
 
   const wordWrap = state.config?.editor_word_wrap !== false;
@@ -599,13 +562,17 @@ export async function dropImagesIntoEditor(paths, x, y) {
 // is driven by `body.editing` in CSS, so we only fill it here.
 export function mountEditor(tab) {
   if (editorView) { try { editorView.destroy(); } catch {} editorView = null; }
+  // Drop pending debounced repaints from the previous view so they can't
+  // fire 100–200ms into the new tab with the old document's data.
+  debouncedEditorCounts.cancel();
+  debouncedOutlineRefresh.cancel();
   editorPane.innerHTML = '';
   previewPane.innerHTML = '';
   // A fresh mount (tab switch / re-enter) drops any pending or live reveal so
   // it can't leak onto a different document. revealEditorLine re-queues it
   // afterwards when opening a search result.
   pendingPreviewReveal = null;
-  clearPreviewReveal();
+  clearReveal();
 
   const view = buildView(tab);
   editorPane.appendChild(view.dom);
@@ -629,20 +596,19 @@ export function mountEditor(tab) {
 
 function unmountEditor() {
   if (editorView) { try { editorView.destroy(); } catch {} editorView = null; }
+  debouncedEditorCounts.cancel();
+  debouncedOutlineRefresh.cancel();
   pendingPreviewReveal = null;
-  clearPreviewReveal();
+  clearReveal();
   editorPane.innerHTML = '';
   previewPane.innerHTML = '';
 }
 
 export function setPreviewHtml(html) {
-  // Drop any prior reveal first: the innerHTML swap detaches its ranges and
+  // Drop any prior reveal first: the patch may detach its ranges and
   // the block class, so clear them explicitly to keep the registry tidy.
-  clearPreviewReveal();
-  previewPane.innerHTML = html;
-  // Resolve local images to asset:// URLs and promote remote images only
-  // if the user has enabled them — see hydrateImages.
-  hydrateImages(previewPane);
+  clearReveal();
+  patchPreviewDom(previewPane, html);
   // Re-apply a queued search-result reveal now that the preview has content.
   applyPreviewReveal();
   // After a re-render the preview's scrollHeight usually grows/shrinks
@@ -652,6 +618,51 @@ export function setPreviewHtml(html) {
   requestAnimationFrame(() => {
     if (editorView) mirrorScroll(editorView.scrollDOM, previewPane);
   });
+}
+
+// Patch the preview's top-level nodes in place instead of innerHTML-
+// swapping the whole pane. A full swap re-parses and re-lays-out the
+// entire document and — worst on weak machines — re-creates every <img>,
+// re-fetching and re-decoding it through the asset protocol on every
+// debounced render while the user types. Successive renders are
+// block-stable outside the edited region, so trim the matching prefix
+// and suffix (isEqualNode is a native deep compare) and replace only the
+// middle: typing in one paragraph costs one block, not the document.
+function patchPreviewDom(container: HTMLElement, html: string) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  // Hydrate before diffing so old (already-hydrated) and new nodes are
+  // compared in the same form. convertFileSrc is deterministic, so an
+  // unchanged image block compares equal and its element — decoded
+  // bitmap included — survives the patch untouched.
+  hydrateImages(tpl.content);
+
+  const oldNodes = Array.from(container.childNodes);
+  const newNodes = Array.from(tpl.content.childNodes);
+
+  let start = 0;
+  const maxStart = Math.min(oldNodes.length, newNodes.length);
+  while (start < maxStart && oldNodes[start].isEqualNode(newNodes[start])) start++;
+
+  let endOld = oldNodes.length - 1;
+  let endNew = newNodes.length - 1;
+  while (endOld >= start && endNew >= start
+         && oldNodes[endOld].isEqualNode(newNodes[endNew])) {
+    endOld--;
+    endNew--;
+  }
+
+  // Identical render — keep the live DOM (scroll, selection, images) as is.
+  if (start > endOld && start > endNew) return;
+
+  // First node of the matched suffix, or null to append at the end.
+  const anchor = endOld + 1 < oldNodes.length ? oldNodes[endOld + 1] : null;
+  for (let i = start; i <= endOld; i++) container.removeChild(oldNodes[i]);
+  if (start <= endNew) {
+    const frag = document.createDocumentFragment();
+    for (let i = start; i <= endNew; i++) frag.appendChild(newNodes[i]);
+    container.insertBefore(frag, anchor);
+  }
 }
 
 // ── Draft autosave (per-file localStorage) ───────────────────────────
@@ -966,52 +977,12 @@ for (const id of EDITOR_FORMAT_ACTIONS) {
 // ── Preview-side reveal highlight ────────────────────────────────────
 // The editor reveal above is precise (source line numbers map 1:1). The
 // preview is rendered HTML with no line info, so we mirror the hit there
-// by finding the matching occurrence of the query in the preview text:
-// the substring is painted via the CSS Highlight API (oxide-reveal-match)
-// and its containing block gets `.oxide-reveal-block` for the line wash.
+// by finding the matching occurrence of the query in the preview text
+// (highlightMatchIn — shared with read mode via ui/reveal.ts).
 // `ordinal` is the 0-based index of the hit among all occurrences in the
 // source, so the preview highlights the *same* occurrence, not just the
 // first — the rendered text preserves source order for plain queries.
 let pendingPreviewReveal: any = null; // { query, ordinal } — one-shot
-let revealBlockEl: any = null;
-const REVEAL_BLOCK_SELECTOR = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,pre,dt,dd,figcaption';
-
-function clearPreviewReveal() {
-  if (supportsHighlights && revealHighlight) revealHighlight.clear();
-  if (revealBlockEl) { revealBlockEl.classList.remove('oxide-reveal-block'); revealBlockEl = null; }
-}
-
-// Paint the `ordinal`-th occurrence of `query` inside `container` (the live
-// preview pane or the read-mode #content) and wash its containing block.
-// Returns the picked Range so the caller can scroll it into view, or null.
-function highlightMatchIn(container, query, ordinal): Range | null {
-  clearPreviewReveal();
-  if (!query) return null;
-  const needle = String(query).toLowerCase();
-  const ranges: Range[] = [];
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
-  let tn: any;
-  while ((tn = walker.nextNode())) {
-    const text = tn.nodeValue || '';
-    const hay = text.toLowerCase();
-    let idx = 0;
-    while ((idx = hay.indexOf(needle, idx)) !== -1) {
-      const r = document.createRange();
-      r.setStart(tn, idx);
-      r.setEnd(tn, idx + needle.length);
-      ranges.push(r);
-      idx += needle.length;
-    }
-  }
-  if (!ranges.length) return null;
-  // Clamp to the occurrence count in case the renderer dropped some (e.g.
-  // a match that lived inside markdown syntax that isn't rendered).
-  const pick = ranges[Math.min(ordinal, ranges.length - 1)];
-  if (supportsHighlights && revealHighlight) revealHighlight.add(pick);
-  const block = (pick.startContainer.parentElement || container).closest(REVEAL_BLOCK_SELECTOR);
-  if (block) { block.classList.add('oxide-reveal-block'); revealBlockEl = block; }
-  return pick;
-}
 
 // Apply the queued preview reveal once the preview actually has content.
 // Called from setPreviewHtml (after every render) and from revealEditorLine.
@@ -1065,58 +1036,9 @@ export function revealEditorLine(line, query) {
     pendingPreviewReveal = { query, ordinal };
   } else {
     pendingPreviewReveal = null;
-    clearPreviewReveal();
+    clearReveal();
   }
   applyPreviewReveal();
-}
-
-// The 0-based index of the hit on 1-based source `line` among all
-// occurrences of `query` in `src` — so the rendered view highlights the
-// *same* occurrence the backend matched, not just the first. Mirrors the
-// ordinal math in revealEditorLine but works off a raw source string (read
-// mode has no editor). Newlines are normalized so a CRLF file doesn't drift
-// the offset and pick the wrong occurrence.
-function matchOrdinal(src, line, query) {
-  if (!query) return 0;
-  const text = String(src).replace(/\r\n/g, '\n');
-  const lines = text.split('\n');
-  if (!Number.isFinite(line) || line < 1 || line > lines.length) return 0;
-  const needle = String(query).toLowerCase();
-  const col = lines[line - 1].toLowerCase().indexOf(needle);
-  if (col === -1) return 0;
-  let offset = col;
-  for (let i = 0; i < line - 1; i++) offset += lines[i].length + 1; // + '\n'
-  const before = text.slice(0, offset).toLowerCase();
-  let ordinal = 0;
-  let i = 0;
-  while ((i = before.indexOf(needle, i)) !== -1) { ordinal++; i += needle.length; }
-  return ordinal;
-}
-
-// Reveal a project-search hit in read mode: highlight the matched substring
-// in the rendered #content and scroll its block to center. The occurrence is
-// chosen from the tab's raw source so it lines up with the backend's match.
-export function revealReadLine(line, query) {
-  if (!query) { clearPreviewReveal(); return; }
-  const tab = activeTab();
-  const ordinal = matchOrdinal(tab?.raw ?? '', line, query);
-  const pick = highlightMatchIn(contentEl, query, ordinal);
-  if (!pick) return;
-  // Center the hit in the scroll viewport (mirrors features/search.ts).
-  const rect = pick.getBoundingClientRect();
-  const scrollRect = contentScroll.getBoundingClientRect();
-  const target = contentScroll.scrollTop + rect.top - scrollRect.top
-    - scrollRect.height / 2 + rect.height / 2;
-  contentScroll.scrollTo({ top: target, behavior: 'smooth' });
-}
-
-// Mode-aware entry point used by the project-search panel. In edit mode the
-// hit is shown in the editor (and mirrored into the preview); in read mode
-// it's shown in the rendered content. The caller decides nothing about mode.
-export function revealSearchHit(line, query) {
-  const tab = activeTab();
-  if (tab?.editing) revealEditorLine(line, query);
-  else revealReadLine(line, query);
 }
 
 // ── Edit-mode search backend ─────────────────────────────────────────
@@ -1205,180 +1127,88 @@ document.addEventListener('keydown', (e) => {
   if (dispatchKey(e, state.bindings, 'editor')) e.stopPropagation();
 }, true);
 
-// ── Confirm dialog (unsaved-changes + draft-recovery) ────────────────
-// One overlay, three buttons (cancel / discard / save) wired to a
-// resolve-on-click promise. The `setConfirmContents` helper rewrites the
-// title and body each open so we can reuse the same DOM for both the
-// "save before closing?" prompt and the "restore unsaved draft?" prompt.
-// Cancel is hidden for the recovery flow; Escape still resolves to
-// 'cancel' there, which means "leave the draft in place for next time".
-let confirmResolve = null;
-let lastFocus = null;
-// Which button is the "primary" action for the current dialog open —
-// drives both initial focus and what Enter resolves to.
-let confirmPrimary = 'save';
+// The shared confirm dialog (unsaved-changes / draft-recovery / settings
+// prompts) lives in ui/confirm.ts so read mode can use it without
+// loading this (lazy, CodeMirror-heavy) module.
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
-
-// `saveHidden` lets the toolbar's Discard flow reuse this dialog as a
-// pure confirm (the user already chose to discard — Save would be
-// nonsensical). `primary` selects which button gets the initial focus
-// and the Enter accelerator: 'save' for the unsaved-changes prompt,
-// 'discard' for the explicit Discard click, 'cancel' otherwise.
-function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, primary }: any) {
-  confirmDialogTitle.textContent = title;
-  confirmDialogBody.innerHTML = bodyHtml;
-  confirmSaveBtn.textContent = saveLabel ?? 'Save';
-  confirmDiscardBtn.textContent = discardLabel ?? 'Discard';
-  confirmCancelBtn.hidden = !!cancelHidden;
-  confirmSaveBtn.hidden = !!saveHidden;
-  confirmPrimary = primary || 'save';
-}
-
-export function promptUnsavedChanges(tab) {
-  setConfirmContents({
-    title: 'Unsaved changes',
-    bodyHtml: `You have unsaved changes in <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span>. What would you like to do?`,
-    saveLabel: 'Save',
-    discardLabel: 'Discard',
-    cancelHidden: false,
-    primary: 'save',
+// Jump the mounted editor's cursor to a 1-based source line and center
+// it. Used by the outline sidebar, which is a read-mode module and so
+// can't touch CodeMirror types itself; a missing editor is a no-op.
+export function jumpEditorToLine(line) {
+  if (!editorView) return;
+  const totalLines = editorView.state.doc.lines;
+  const lineNo = Math.max(1, Math.min(line, totalLines));
+  const lineObj = editorView.state.doc.line(lineNo);
+  editorView.dispatch({
+    selection: EditorSelection.cursor(lineObj.from),
+    scrollIntoView: true,
   });
-  return openConfirmDialog();
+  editorView.focus();
 }
 
-export function promptDiscardChanges(tab) {
-  setConfirmContents({
-    title: 'Discard changes',
-    bodyHtml: `Discard unsaved changes to <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span>? This can't be undone.`,
-    discardLabel: 'Discard',
-    cancelHidden: false,
-    saveHidden: true,
-    primary: 'cancel',
+// ── Edit-mode context menu ───────────────────────────────────────────
+// Cut/copy/paste/select-all + formatting for the CM6 editor, built here
+// (rather than in ui/contextmenu.ts) because they need EditorSelection
+// and the live view. Each edit goes through a single transaction so
+// undo/redo gets one history entry per action; cut and copy use the
+// async clipboard API since CM6 owns the contenteditable and
+// execCommand('cut'/'copy') from outside doesn't fire its handlers.
+async function cmCopy(view, sel) {
+  const text = view.state.sliceDoc(sel.start, sel.end);
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); } catch {}
+}
+async function cmCut(view, sel) {
+  const text = view.state.sliceDoc(sel.start, sel.end);
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); } catch {}
+  view.dispatch({
+    changes: { from: sel.start, to: sel.end, insert: '' },
+    selection: EditorSelection.cursor(sel.start),
   });
-  return openConfirmDialog();
+  view.focus();
 }
-
-// Confirm before the Settings "Reset defaults" button clobbers config.
-// Reuses the shared confirm overlay as a pure two-button confirm (Save
-// is hidden — there's nothing to save). The "Discard" button is
-// relabelled "Reset" and is the destructive action; Cancel is primary
-// so a stray Enter/Escape leaves the user's settings untouched.
-// Resolves 'discard' to proceed with the reset, 'cancel' otherwise.
-export function promptResetSettings(tabLabel) {
-  setConfirmContents({
-    title: 'Reset to defaults',
-    bodyHtml: `Reset the <span class="confirm-file-name">${escapeHtml(tabLabel || 'current')}</span> settings to their defaults? Your other settings tabs are left untouched. This is applied when you Save.`,
-    discardLabel: 'Reset',
-    cancelHidden: false,
-    saveHidden: true,
-    primary: 'cancel',
+async function cmPaste(view, sel) {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch {}
+  if (!text) return;
+  view.dispatch({
+    changes: { from: sel.start, to: sel.end, insert: text },
+    selection: EditorSelection.cursor(sel.start + text.length),
   });
-  return openConfirmDialog();
+  view.focus();
 }
-
-// Confirm before closing Settings with unsaved changes. Reuses the shared
-// confirm overlay: Save commits the pending settings then closes, Discard
-// closes without saving, Cancel keeps the dialog open. Both the header ✕ and
-// the footer Close route through closeSettings, so both get this prompt.
-// Resolves 'save' | 'discard' | 'cancel'.
-export function promptDiscardSettings() {
-  setConfirmContents({
-    title: 'Unsaved settings',
-    bodyHtml: `You have unsaved changes in <span class="confirm-file-name">Settings</span>. Save them, or discard and close?`,
-    saveLabel: 'Save',
-    discardLabel: 'Discard',
-    cancelHidden: false,
-    primary: 'save',
+function cmSelectAll(view) {
+  view.dispatch({
+    selection: EditorSelection.range(0, view.state.doc.length),
   });
-  return openConfirmDialog();
+  view.focus();
 }
 
-// Returns 'save' (restore), 'discard', or 'cancel' (leave draft alone).
-// When `conflict` is true, the on-disk content has changed since the
-// draft was last written — surface that so the user knows restoring the
-// draft will overwrite a newer disk edit.
-export function promptRecoverDraft(tab, draft, { conflict = false } = {}) {
-  const when = formatDraftTimestamp(draft.savedAt);
-  const baseHtml = `An unsaved draft of <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span> was found from ${escapeHtml(when)}.`;
-  const conflictHtml = conflict
-    ? ` <strong class="confirm-conflict">The file on disk has changed since this draft was written.</strong> Restoring will overwrite that newer disk content.`
-    : ' Restore it, or open the saved version?';
-  setConfirmContents({
-    title: conflict ? 'Recover draft (file changed on disk)' : 'Recover unsaved draft',
-    bodyHtml: baseHtml + conflictHtml,
-    saveLabel: 'Restore',
-    discardLabel: 'Discard draft',
-    cancelHidden: !conflict,
-    primary: conflict ? 'cancel' : 'save',
-  });
-  return openConfirmDialog();
+// Item list for a right-click on the editor surface, consumed by
+// ui/contextmenu.ts through the lazy facade (editorModule()); an
+// unmounted editor yields no items.
+export function buildEditorContextMenu() {
+  const view = editorView;
+  if (!view) return [];
+  // Snapshot selection; the menu click momentarily blurs the editor and
+  // we want Cut/Copy/Paste to act on what the user was looking at.
+  const r = view.state.selection.main;
+  const sel = { start: r.from, end: r.to };
+  const hasSelection = sel.start !== sel.end;
+  return [
+    { label: 'Cut',    action: () => cmCut(view, sel),   disabled: !hasSelection, shortcut: `${modKey}+X` },
+    { label: 'Copy',   action: () => cmCopy(view, sel),  disabled: !hasSelection, shortcut: `${modKey}+C` },
+    { label: 'Paste',  action: () => cmPaste(view, sel), shortcut: `${modKey}+V` },
+    { label: 'Select All', action: () => cmSelectAll(view), shortcut: `${modKey}+A` },
+    { separator: true },
+    { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: `${modKey}+B` },
+    { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: `${modKey}+I` },
+    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: `${modKey}+U` },
+    { label: 'Code',   action: () => applyFormat(view, 'code') },
+    { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: `${modKey}+K` },
+  ];
 }
-
-function formatDraftTimestamp(ts) {
-  if (typeof ts !== 'number') return 'an earlier session';
-  const ageMs = Date.now() - ts;
-  if (ageMs < 60_000) return 'less than a minute ago';
-  if (ageMs < 3_600_000) {
-    const m = Math.round(ageMs / 60_000);
-    return `${m} minute${m === 1 ? '' : 's'} ago`;
-  }
-  if (ageMs < 86_400_000) {
-    const h = Math.round(ageMs / 3_600_000);
-    return `${h} hour${h === 1 ? '' : 's'} ago`;
-  }
-  try { return new Date(ts).toLocaleString(); } catch { return 'an earlier session'; }
-}
-
-function openConfirmDialog() {
-  confirmOverlay.classList.remove('hidden');
-  state.confirmDialogOpen = true;
-  lastFocus = document.activeElement;
-  requestAnimationFrame(() => {
-    const target = confirmPrimary === 'discard' ? confirmDiscardBtn
-                 : confirmPrimary === 'cancel'  ? confirmCancelBtn
-                 : confirmSaveBtn;
-    if (target && !target.hidden) target.focus();
-    else confirmCancelBtn.focus();
-  });
-  return new Promise((resolve) => { confirmResolve = resolve; });
-}
-
-function closeConfirmDialog(decision) {
-  if (!confirmResolve) return;
-  const r = confirmResolve;
-  confirmResolve = null;
-  confirmOverlay.classList.add('closing');
-  setTimeout(() => {
-    confirmOverlay.classList.remove('closing');
-    confirmOverlay.classList.add('hidden');
-    state.confirmDialogOpen = false;
-    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
-    lastFocus = null;
-    r(decision);
-  }, 200);
-}
-
-confirmSaveBtn.addEventListener('click', () => closeConfirmDialog('save'));
-confirmDiscardBtn.addEventListener('click', () => closeConfirmDialog('discard'));
-confirmCancelBtn.addEventListener('click', () => closeConfirmDialog('cancel'));
-confirmOverlay.addEventListener('click', (e) => {
-  if (e.target === confirmOverlay) closeConfirmDialog('cancel');
-});
-document.addEventListener('keydown', (e) => {
-  if (!state.confirmDialogOpen) return;
-  if (e.key === 'Escape') { e.preventDefault(); closeConfirmDialog('cancel'); }
-  else if (e.key === 'Enter') {
-    e.preventDefault();
-    closeConfirmDialog(confirmPrimary === 'cancel' ? 'cancel'
-                     : confirmPrimary === 'discard' ? 'discard'
-                     : 'save');
-  }
-});
 
 // ── Scroll sync between editor and preview panes ─────────────────────
 // The two scrollers have different heights (CM6 line-wrapped editor vs

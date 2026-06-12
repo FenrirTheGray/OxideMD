@@ -1,8 +1,8 @@
 {
 	"type": "module",
 	"scripts": {
-		"build:frontend": "esbuild frontend/app.ts --bundle --format=iife --target=es2025 --minify --outfile=frontend/dist/bundle.js",
-		"watch:frontend": "esbuild frontend/app.ts --bundle --format=iife --target=es2025 --outfile=frontend/dist/bundle.js --watch --sourcemap",
+		"build:frontend": "esbuild frontend/app.ts --bundle --format=esm --splitting --target=es2025 --minify --outdir=frontend/dist --entry-names=bundle --chunk-names=chunks/[name]-[hash]",
+		"watch:frontend": "esbuild frontend/app.ts --bundle --format=esm --splitting --target=es2025 --outdir=frontend/dist --entry-names=bundle --chunk-names=chunks/[name]-[hash] --watch --sourcemap",
 		"typecheck": "tsc --noEmit",
 		"test": "node --import tsx --test \"frontend/**/*.test.ts\""
 	},

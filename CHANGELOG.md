@@ -4,6 +4,20 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The window title updates again when opening or switching documents: the `set_title` call has been failing silently because the capability was never granted
+
+### Changed
+
+- Large-file editing is much lighter on weak machines: the status-bar counts and the outline refresh are debounced off the keystroke path and no longer materialize/scan the whole document on every keypress and cursor move
+- The live preview patches only the blocks that actually changed instead of rebuilding the whole pane on every render, so images no longer re-decode (or flicker) while typing and large documents stop paying a full relayout per render
+- The editor (CodeMirror) is loaded on first use instead of at startup, cutting the JavaScript parsed at launch by roughly 80% — opening a file just to read it never loads the editor at all
+- Startup issues its three config/font/CLI reads concurrently, and the syntax-highlighter definitions are pre-warmed on a background thread so the first code block renders without a stall
+- Overlay backdrops use a plain dim instead of a backdrop blur, which WebKitGTK composites in software on weak GPUs and made dialogs stutter
+
 ## [4.7.1] - 2026-06-11
 
 ### Fixed

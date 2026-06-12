@@ -12,7 +12,9 @@ import {
 } from "../core/state.ts";
 import { clearSearch, closeSearch } from "../features/search.ts";
 import { syncWatcher, highlightActiveTreeItem } from "./folder.ts";
-import { saveActiveFile, exitEditMode, promptUnsavedChanges, promptRecoverDraft, enterEditMode, mountEditor, cancelPendingDraftWrite, getEditorValue, getEditorScrollTop, updateCounts, clearCounts } from "../editor/editor.ts";
+import { editorModule, loadEditorModule } from "../editor/lazy.ts";
+import { promptUnsavedChanges, promptRecoverDraft } from "./confirm.ts";
+import { updateCounts, clearCounts } from "./counts.ts";
 import {
   activeTab, isDirty, isPreviewVisible,
   renderContent, setLoading, clearStatus, applyZoom,
@@ -121,10 +123,10 @@ export function switchToTab(id) {
   const cur = activeTab();
   if (cur) {
     if (cur.editing) {
-      const liveValue = getEditorValue();
+      const liveValue = editorModule()?.getEditorValue() ?? null;
       if (liveValue != null) {
         cur.raw = liveValue;
-        cur.editorScrollTop = getEditorScrollTop();
+        cur.editorScrollTop = editorModule()?.getEditorScrollTop() ?? 0;
       }
       cur.previewScrollTop = previewPane.scrollTop;
     } else {
@@ -147,7 +149,7 @@ export async function closeTab(id) {
   // Capture pending edits from the live editor into the tab buffer so
   // isDirty() sees the user's latest keystrokes, not a stale snapshot.
   if (tab.editing && id === state.activeTabId) {
-    const liveValue = getEditorValue();
+    const liveValue = editorModule()?.getEditorValue() ?? null;
     if (liveValue != null) tab.raw = liveValue;
   }
 
@@ -158,20 +160,20 @@ export async function closeTab(id) {
     const decision = await promptUnsavedChanges(tab);
     if (decision === 'cancel') return;
     if (decision === 'save') {
-      const ok = await saveActiveFile();
+      const ok = (await editorModule()?.saveActiveFile()) ?? false;
       if (!ok) return;
     } else if (decision === 'discard') {
       // User explicitly threw away the in-memory edits — cancel any
       // pending debounced draft write first (otherwise it could re-write
       // the draft after we clear it), then drop the localStorage entry.
-      cancelPendingDraftWrite();
+      editorModule()?.cancelPendingDraftWrite();
       if (tab.path) clearDraft(tab.path);
     }
   }
 
   // If we're closing the active, editing tab, tear the editor down first.
   if (tab.editing && id === state.activeTabId) {
-    exitEditMode({ keepHtml: false });
+    editorModule()?.exitEditMode({ keepHtml: false });
   }
 
   if (id === state.activeTabId) {
@@ -216,8 +218,8 @@ export function dropTabsForDeletedPath(deletedPath) {
   // Tear down the live editor first if the active tab is among the dropped.
   const cur = activeTab();
   if (cur && cur.editing && isAffected(cur.path)) {
-    cancelPendingDraftWrite();
-    exitEditMode({ keepHtml: false });
+    editorModule()?.cancelPendingDraftWrite();
+    editorModule()?.exitEditMode({ keepHtml: false });
   }
 
   for (const t of affected) {
@@ -275,8 +277,19 @@ export function applyActiveTab() {
   if (tab.editing) {
     // Rebuild the split so it reflects this tab's raw buffer and
     // preview state (another tab may have been editing its own buffer).
-    // mountEditor() refreshes the status-bar counts itself.
-    mountEditor(tab);
+    // mountEditor() refreshes the status-bar counts itself. The editor
+    // module is loaded by everything that flips a tab to editing, except
+    // createNewFile from a cold start — load it on demand then; the pane
+    // stays blank for the import beat and mounts as soon as it lands.
+    const em = editorModule();
+    if (em) {
+      em.mountEditor(tab);
+    } else {
+      loadEditorModule().then((m) => {
+        const cur = activeTab();
+        if (cur && cur.id === tab.id && cur.editing) m.mountEditor(cur);
+      });
+    }
   } else {
     renderContent(tab.html);
     state.originalContent = tab.html;
@@ -561,7 +574,7 @@ async function maybeOfferDraftRecovery(path, diskRaw) {
   const decision = await promptRecoverDraft(tab, draft, { conflict });
   if (decision === 'save') {
     tab.raw = draft.content;
-    await enterEditMode();
+    await (await loadEditorModule()).enterEditMode();
   } else if (decision === 'discard') {
     clearDraft(path);
   }
