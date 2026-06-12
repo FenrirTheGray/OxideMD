@@ -43,9 +43,16 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      # Tag runs can only read caches from their own ref or the default
+      # branch, so a cache saved here is never restorable by a later release:
+      # skip the (large) save and only restore the cache CI saves on main
+      # under the same shared-key. macOS/Windows miss (key includes the OS)
+      # and the restore is a fast no-op there.
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: oxidemd
+          save-if: false
 
       - name: Install Node dependencies
         run: npm ci
@@ -102,6 +109,7 @@ jobs:
           name: oxidemd-deb
           path: src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
+          retention-days: 1  # only consumed by the arch-package job below
 
   arch-package:
     needs: build
