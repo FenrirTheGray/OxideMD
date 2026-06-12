@@ -28,6 +28,16 @@ pub enum ResolvedImage {
 
 static HIGHLIGHTER: OnceLock<Highlighter> = OnceLock::new();
 
+/// Force the lazy highlighter into existence. Called from a background
+/// thread at app startup so the first document with a code block doesn't
+/// pay the syntect definition-loading cost (easily 100ms+ on weak
+/// hardware) at render time. `get_or_init` makes a render that arrives
+/// mid-warm simply block until the same init finishes — never a double
+/// load.
+pub fn warm_highlighter() {
+    HIGHLIGHTER.get_or_init(Highlighter::new);
+}
+
 /// Whether a single newline inside a paragraph (a CommonMark "soft
 /// break") is rendered as a `<br>` rather than a space. Mirrors the
 /// `preserve_line_breaks` config field; seeded at startup by `lib.rs`

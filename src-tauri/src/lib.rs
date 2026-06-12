@@ -249,6 +249,9 @@ pub fn run() {
             errorlog::append_error_log,
         ])
         .setup(|_app| {
+            // Load the syntect syntax/theme definitions off the critical
+            // path so the first code-block render doesn't stall on them.
+            std::thread::spawn(crate::markdown::warm_highlighter);
             let cfg = config::load_config();
             // Seed the renderer's soft-break mode from saved config so
             // files opened on launch render with the right setting.
