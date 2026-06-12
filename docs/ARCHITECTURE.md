@@ -18,9 +18,12 @@ halves:
 There is no server and no bundled browser — the frontend runs inside the
 platform's native webview (WebView2 on Windows, WebKitGTK on Linux, WKWebView
 on macOS). The frontend is plain ES modules with no UI framework;
-`npm run build:frontend` runs esbuild to bundle `frontend/app.ts` and its
-imports — including the CodeMirror 6 packages from `node_modules` — into a
-single file the webview loads. `cargo tauri dev` and `cargo tauri build` drive
+`npm run build:frontend` runs esbuild (ESM output with code splitting) to
+bundle `frontend/app.ts` into `dist/bundle.js` plus chunk files under
+`dist/chunks/`. The editor module — and with it the CodeMirror 6 packages,
+the bulk of the JavaScript — is a dynamically imported chunk loaded on the
+first action that needs an editor (see `editor/lazy.ts`), so a read-only
+session never parses it. `cargo tauri dev` and `cargo tauri build` drive
 the whole build.
 
 The two halves talk over Tauri's **IPC bridge**:
@@ -167,8 +170,9 @@ error handlers are live before anything else runs.
   values live on an object because an ES-module `let` can't be reassigned by
   importers).
 - **`tab-state.ts`** — a neutral seam below both `ui/tabs.ts` and
-  `editor/editor.ts`: the active-tab accessor, the pure dirty/preview
-  predicates, content mounting, status helpers, and zoom. Hoisting these here
+  `editor/editor.ts`: the active-tab accessor, the pure dirty/preview/
+  save-suppression predicates, content mounting, status helpers, and zoom.
+  Hoisting these here
   removed the mutual dependency the two modules used to have; it imports only
   from `state.ts`, so it has no load-time side effects.
 - **`keybindings.ts`** — the keybinding layer: the `ACTIONS` registry,
@@ -195,10 +199,17 @@ co-located `*.test.ts`).
 - **`timing.ts`** — `debounce` / `throttle`, the shared trailing-edge timing
   helpers used across the UI modules.
 
-**`editor/`** — the editing surface.
+**`editor/`** — the editing surface. Everything here (and only here) may
+import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 
+- **`lazy.ts`** — the lazy boundary: the only module allowed to import
+  `editor.ts`. Exposes `editorModule()` (synchronous, null until loaded — a
+  null module means no editor exists, so `editorModule()?.fn()` no-ops are
+  correct by construction) and `loadEditorModule()` (awaited by the entry
+  points that create an editor: enter-edit-mode, new file, draft recovery).
 - **`editor.ts`** — the CodeMirror 6 editor, the edit/save lifecycle, split-view
-  layout, scroll sync, dirty tracking, and draft-recovery prompts.
+  layout, scroll sync, dirty tracking, the live-preview render (debounced,
+  block-level DOM patching), and the editor-side context-menu items.
 - **`editor-format.ts`** — the Markdown formatting commands (bold, italic,
   lists, headings, link, …), each a single CM6 transaction, shared by the
   toolbar and the shortcuts.
@@ -234,7 +245,18 @@ co-located `*.test.ts`).
 - **`outline.ts`** — the document outline sidebar (heading list, jump-to). In
   edit mode the same toolbar button is repurposed as the preview toggle.
 - **`contextmenu.ts`** — context-aware right-click menus for the tree and tab
-  bar (the default webview menu is suppressed).
+  bar (the default webview menu is suppressed). The editor-surface menu comes
+  from the lazy editor module via `editorModule()?.buildEditorContextMenu()`.
+- **`counts.ts`** — the status-bar line/word/char counts. Allocation-free
+  counting; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
+- **`confirm.ts`** — the shared confirm dialog (unsaved changes, draft
+  recovery, settings reset/close prompts), one overlay wired to a
+  resolve-on-click promise.
+- **`reveal.ts`** — search-hit reveal painting (CSS Highlight API + block
+  wash) shared by read mode and the edit-mode preview.
+
+`counts`, `confirm`, and `reveal` live in `ui/` rather than `editor/` so read
+mode can use them without pulling in the lazy CodeMirror chunk.
 - **`shortcuts-display.ts`** — renders the shortcut chips in the popover,
   welcome screen, and tooltips from `state.bindings`.
 - **`toast.ts`** — bottom-right toast notifications with an optional per-call
