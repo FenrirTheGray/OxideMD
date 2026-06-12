@@ -1,14 +1,28 @@
 name: CI
 
+# Docs/media/packaging changes don't affect anything CI builds or tests.
+# (No required status checks on main, so path-skipped runs block nothing.)
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "media/**"
+      - "packaging/**"
+      - "**.md"
+      - "LICENSE"
   push:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "media/**"
+      - "packaging/**"
+      - "**.md"
+      - "LICENSE"
 
 # Cancel superseded runs on the same ref (e.g. rapid PR pushes).
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,3 +47,37 @@ jobs:
 
       - name: Build frontend bundle
         run: npm run build:frontend
+
+  # tauri-build only needs the frontendDist directory to exist (frontend/ is
+  # committed), not the esbuild bundle, so this job skips Node entirely.
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      # shared-key matches the Release workflow's, so tag builds (which can
+      # only read caches from their own ref or the default branch) restore
+      # the registry/deps cache this job saves on main.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: oxidemd
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Format check
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
