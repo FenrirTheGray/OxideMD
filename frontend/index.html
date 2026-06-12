@@ -1301,6 +1301,9 @@
        bottom-right, and stacks toasts in a column. -->
   <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
 
-  <script src="dist/bundle.js"></script>
+  <!-- type="module" so the bundle can dynamic-import the editor chunk
+       (CodeMirror loads on first edit, not at startup). Module scripts
+       are deferred, which matches the old end-of-body placement. -->
+  <script type="module" src="dist/bundle.js"></script>
 </body>
 </html>

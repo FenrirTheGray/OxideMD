@@ -20,7 +20,8 @@ import {
   renderContent,
   applyRecentFiles,
 } from "../ui/tabs.ts";
-import { setPreviewHtml, promptResetSettings, promptDiscardSettings } from "../editor/editor.ts";
+import { editorModule } from "../editor/lazy.ts";
+import { promptResetSettings, promptDiscardSettings } from "../ui/confirm.ts";
 import { closeSearch } from "../features/search.ts";
 import {
   ACTIONS,
@@ -1208,7 +1209,7 @@ async function saveSettings() {
         }
       }
       if (tab) {
-        if (tab.editing) setPreviewHtml(tab.html);
+        if (tab.editing) editorModule()?.setPreviewHtml(tab.html);
         else renderContent(tab.html);
       }
     }
@@ -1222,7 +1223,7 @@ async function saveSettings() {
       prevPreserveLineBreaks === newConfig.preserve_line_breaks &&
       tab
     ) {
-      if (tab.editing) setPreviewHtml(tab.html);
+      if (tab.editing) editorModule()?.setPreviewHtml(tab.html);
       else renderContent(tab.html);
     }
     // Save persists without closing the modal; the Close button is the

@@ -16,7 +16,9 @@ import {
 } from "../core/state.ts";
 import { loadFile } from "../ui/tabs.ts";
 import { closeFilterMode } from "../ui/folder.ts";
-import { revealSearchHit } from "../editor/editor.ts";
+import { activeTab } from "../core/tab-state.ts";
+import { editorModule } from "../editor/lazy.ts";
+import { revealReadLine } from "../ui/reveal.ts";
 
 const SVG_FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
@@ -139,7 +141,12 @@ function renderResults(data, query) {
 async function openResult(path, line, query) {
   await loadFile(path);
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    revealSearchHit(line, query);
+    // Edit mode shows the hit in the editor (and mirrors it into the
+    // preview); read mode highlights it in the rendered content. An
+    // editing tab implies the lazy editor module is loaded.
+    const tab = activeTab();
+    if (tab?.editing) editorModule()?.revealEditorLine(line, query);
+    else revealReadLine(line, query);
   }));
 }
 

@@ -21,8 +21,7 @@ import {
   btnOutline, outlineSidebar, outlineSidebarBody, outlineSidebarCloseBtn,
 } from "../core/state.ts";
 import { activeTab, syncToolbar } from "./tabs.ts";
-import { getEditorView } from "../editor/editor.ts";
-import { EditorSelection } from '@codemirror/state';
+import { editorModule } from "../editor/lazy.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const FENCE_RE   = /^\s*(```|~~~)/;
@@ -62,16 +61,9 @@ export function parseOutline(text) {
 }
 
 function jumpToHeadingInEditor(line) {
-  const view = getEditorView();
-  if (!view) return;
-  const totalLines = view.state.doc.lines;
-  const lineNo = Math.max(1, Math.min(line, totalLines));
-  const lineObj = view.state.doc.line(lineNo);
-  view.dispatch({
-    selection: EditorSelection.cursor(lineObj.from),
-    scrollIntoView: true,
-  });
-  view.focus();
+  // Routed through the lazy editor module — the outline only offers
+  // editor-line jumps while a tab is editing, which implies it's loaded.
+  editorModule()?.jumpEditorToLine(line);
 }
 
 // View-mode jump: the rendered preview's heading order matches the

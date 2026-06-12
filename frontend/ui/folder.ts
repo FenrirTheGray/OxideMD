@@ -8,7 +8,7 @@ import {
   hasActiveOverlay,
 } from "../core/state.ts";
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
-import { saveRecentlyFor } from "../editor/editor.ts";
+import { saveRecentlyFor } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
 import { updateProjectSearchAvailability, closeProjectSearch } from "../features/search-project.ts";
 

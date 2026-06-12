@@ -39,10 +39,11 @@ import {
   applyRecentFiles,
 } from "./ui/tabs.ts";
 import { loadCustomFont, applyConfig, openSettings, closeSettings } from "./settings/index.ts";
-import {
-  enterEditMode, exitEditMode, saveActiveFile,
-  updateEditorDropHint, clearEditorDropHint, dropImagesIntoEditor,
-} from "./editor/editor.ts";
+// The editor module (and with it all of CodeMirror) loads lazily on the
+// first action that needs it; see editor/lazy.ts. Sync call sites use
+// editorModule()?. — a null module means no editor exists, so the no-op
+// is the correct behavior.
+import { editorModule, loadEditorModule } from "./editor/lazy.ts";
 import { activeTab } from "./ui/tabs.ts";
 import { printActiveTab } from "./features/print.ts";
 import { showToast } from "./ui/toast.ts";
@@ -53,10 +54,17 @@ import { applyOutlineVisibility, closeOutline } from "./ui/outline.ts";
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
-  state.config = await invoke('get_config');
+  // The three startup reads are independent — issue them concurrently so
+  // first paint waits on one IPC round-trip, not three in sequence.
+  const [config, customFonts, cliFiles] = await Promise.all([
+    invoke('get_config'),
+    invoke('list_custom_fonts'),
+    invoke('get_cli_files'),
+  ]);
+  state.config = config;
   state.bindings = effectiveBindings(state.config.keybindings);
   renderShortcutsUI();
-  state.customFonts = await invoke('list_custom_fonts');
+  state.customFonts = customFonts;
   if (state.config.font_family.startsWith('custom:')) {
     await loadCustomFont(state.config.font_family.slice(7));
   }
@@ -68,7 +76,6 @@ async function init() {
 
   // Open every file passed on the command line (Explorer "Open with…" can
   // pass multiple paths in a single launch).
-  const cliFiles = await invoke('get_cli_files');
   for (const path of cliFiles) {
     if (isMarkdownPath(path)) await loadFile(path);
   }
@@ -106,21 +113,21 @@ async function init() {
   await appWindow.onDragDropEvent(async (e) => {
     const p = e.payload;
     if (p.type === 'leave') {
-      clearEditorDropHint();
+      editorModule()?.clearEditorDropHint();
       return;
     }
     if (p.type === 'enter' || p.type === 'over') {
       const { x, y } = dropClientPoint(p.position);
-      updateEditorDropHint(x, y);
+      editorModule()?.updateEditorDropHint(x, y);
       return;
     }
     if (p.type === 'drop') {
-      clearEditorDropHint();
+      editorModule()?.clearEditorDropHint();
       const { x, y } = dropClientPoint(p.position);
       // An image dropped onto the editor inserts a markdown reference;
       // anything else (or a drop elsewhere) keeps the existing behavior of
       // opening dropped .md files.
-      if (await dropImagesIntoEditor(p.paths, x, y)) return;
+      if (await editorModule()?.dropImagesIntoEditor(p.paths, x, y)) return;
       for (const path of p.paths) {
         if (isMarkdownPath(path)) loadFile(path);
       }
@@ -404,9 +411,10 @@ btnSettings.addEventListener('click', () => openSettings(undefined as any));
 btnModeToggle.addEventListener('click', () => {
   const tab = activeTab();
   if (!tab || !tab.path) return;
-  if (tab.editing) exitEditMode(); else enterEditMode();
+  if (tab.editing) editorModule()?.exitEditMode();
+  else loadEditorModule().then((m) => m.enterEditMode());
 });
-btnSave.addEventListener('click', saveActiveFile);
+btnSave.addEventListener('click', () => editorModule()?.saveActiveFile());
 btnZoomOut.addEventListener('click', zoomOut);
 btnZoomIn.addEventListener('click', zoomIn);
 zoomLabel.addEventListener('click', resetZoom);
@@ -471,7 +479,7 @@ registerHandler('searchInFolder', (e) => {
 registerHandler('save', (e) => {
   e?.preventDefault();
   const tab = activeTab();
-  if (tab?.editing) saveActiveFile();
+  if (tab?.editing) editorModule()?.saveActiveFile();
 });
 registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
 registerHandler('print',  (e) => { e?.preventDefault(); printActiveTab(); });
@@ -501,7 +509,8 @@ registerHandler('toggleEdit', (e) => {
   e?.preventDefault();
   const tab = activeTab();
   if (!tab?.path) return;
-  if (tab.editing) exitEditMode(); else enterEditMode();
+  if (tab.editing) editorModule()?.exitEditMode();
+  else loadEditorModule().then((m) => m.enterEditMode());
 });
 registerHandler('toggleSearch', (e) => {
   e?.preventDefault();
