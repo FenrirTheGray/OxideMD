@@ -1,31 +1,74 @@
 # OxideMD
 
-A fast, native Markdown viewer and editor for Windows, Linux, and macOS — written in Rust on [Tauri v2](https://tauri.app/).
+A fast, native Markdown viewer and editor for Windows, Linux, and macOS.
+Written in Rust for Backend and [Tauri](https://tauri.app/) for Frontend.
 
 ![OxideMD](media/oxidemd.png)
 
-OxideMD reads, renders, and edits Markdown without bundling a browser. It draws into your platform's own webview — WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS — so it launches in well under a second and stays light on disk and memory. Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
+OxideMD reads, renders, and edits Markdown without bundling a browser.
+It draws into your platform's own webview:
+
+  - WebView2 on Windows
+  - WebKitGTK on Linux
+  - WKWebView on macOS
+
+It launches in well under a second and stays light on disk and memory.
+Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
 
 ## Features
 
-**Reading**
+### Appearance
 
-- CommonMark rendering: headings, tables, task lists, blockquotes, footnotes, fenced code, and local images
-- Syntax highlighting for hundreds of languages via [syntect](https://github.com/trishume/syntect)
-- Adjustable reading width (480–1400 px) and line height, plus an optional "preserve line breaks" mode
+- Fully Customizable Application Themes (*All colors*)
+- Built-in themes (10):
+  - Atom One Dark
+  - Atom One Light
+  - Catppuccin Mocha
+  - Dracula
+  - Gruvbox Dark
+  - Nord
+  - Rosé Pine
+  - Solarized Light
+  - Tokyo Night
+  - Tokyo Night Storm
+- Theme Importing and Exporting using `.json` files
+
+- Built-in Fonts (6):
+  - System Default
+  - Georgia
+  - Consolas
+  - Arial
+  - Verdana
+  - Times New Roman
+- Custom Fonts — Import `.ttf`, `.otf`, `.woff`, or `.woff2` fonts via settings
+- A custom frameless window with integrated controls and full edge and corner resizing
+
+### Reading
+
+- Syntax highlighting for hundreds of languages
+- Fully rendered:
+  - Images
+  - Fenced code
+  - Tables
+  - Headings
+  - Task lists
+  - Blockquotes
+  - Footnotes
 - In-document search with highlighting, match navigation, and a case-sensitivity toggle
 - Print to PDF through the OS print dialog — light-on-white for legibility, or matched to your theme
+- Adjustable reading width (480–1400 px) and line height
+- Configurable "preserve line breaks" mode
 
-**Editing**
+### Editing
 
-- A [CodeMirror 6](https://codemirror.net/) editor with Markdown-aware highlighting, toggled per tab
+- A full text editor with Markdown-aware highlighting, toggled per tab
 - Split view with a draggable divider and synchronized scrolling
 - A formatting toolbar and rebindable shortcuts for bold, italic, strikethrough, inline code, headings, lists, links, images, and indentation
 - Smart Enter that continues lists and blockquotes, and exits the block on a second press
 - Themed find-and-replace inside the editor
 - Per-file draft autosave with a recovery prompt — and a conflict warning if the file changed on disk
 
-**Workspace**
+### Workspace
 
 - Tabs with independent scroll, zoom, and split-view state, reorderable by keyboard
 - A folder sidebar with name filtering, expand/collapse-all, and live file watching that reloads externally edited tabs
@@ -35,104 +78,106 @@ OxideMD reads, renders, and edits Markdown without bundling a browser. It draws 
 - Drag and drop `.md` files onto the window to open them; drop an image into the editor to insert it
 - A responsive layout: on narrow windows the sidebars become overlay drawers and the toolbar folds its overflow into a "⋯" menu, so the app stays usable down to its minimum size
 
-**Appearance**
+### System
 
-- Atom One Dark, Atom One Light, and system themes
-- Configurable accent colors for headings and list bullets
-- Custom fonts — add a `.ttf`, `.otf`, `.woff`, or `.woff2` from settings, and it persists across sessions
-- A frameless window with integrated controls and full edge and corner resizing
+- Fully customizable **Keyboard Shortcuts** with conflict detection
+- Built-in Application Updater
+- CLI Support - `oxidemd path/to/file.md` opens files at launch; `oxidemd --reset-all --yes` wipes all state for a clean recovery
+- Error Logging
+- Config files stored per platform:
+  - Windows: `%APPDATA%\oxidemd\OxideMD\config`
+  - Linux: `~/.config/oxidemd`
+  - MacOS: `~/Library/Application Support/com.oxidemd.OxideMD`
 
-**Under the hood**
+## Installation
 
-- Rebindable shortcuts with conflict detection
-- An in-app updater for Windows (NSIS/MSI), macOS (`.app`), and Linux AppImage; RPM and DEB users get a one-click link to the release page
-- A date-stamped log file per launch in the OS log directory, capturing both Rust and frontend errors
-- `oxidemd path/to/file.md` opens files at launch; `oxidemd --reset-all --yes` wipes all state for a clean recovery
-- Config stored per platform: `%APPDATA%\oxidemd\OxideMD\config` (Windows), `~/.config/oxidemd` (Linux), `~/Library/Application Support/com.oxidemd.OxideMD` (macOS)
-
-## Install
+### Manual - Prebuilt Installers
 
 Prebuilt installers are attached to every [release](https://github.com/FenrirTheGray/OxideMD/releases).
 
-| Platform | Formats                                                           |
-| -------- | ----------------------------------------------------------------- |
-| Windows  | `.msi`, `.exe` (NSIS)                                             |
-| macOS    | `.dmg` (Apple Silicon and Intel)                                  |
-| Linux    | apt / dnf repository (auto-updating), `.AppImage`, `.deb`, `.rpm` |
-| Arch     | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro)           |
+| Platform             | Formats                                                 |
+| -------------------- | ------------------------------------------------------- |
+| Windows              | `.msi`, `.exe` (NSIS)                                   |
+| macOS                | `.dmg` (Apple Silicon and Intel)                        |
+| Linux - Debian Based | `.deb`, `.AppImage` (Debian / Ubuntu)                   |
+| Linux - RHEL Based   | `.rpm`, `.AppImage` (Fedora / RHEL)                     |
+| Linux - Arch Based   | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro) |
 
-### Linux (apt / dnf) — recommended
+## Updating
 
-Install from the OxideMD package repository (x86-64) to get updates through your
-package manager. One-time setup commands are on the
-[install page](https://fenrirthegray.github.io/OxideMD/):
+### Manual Updates - Through Settings
 
-- **Debian / Ubuntu** — add the apt repo, then `sudo apt install oxide-md`
-- **Fedora / RHEL** — add the dnf repo, then `sudo dnf install oxide-md`
+**<u>Installation Steps:</u>**
 
-Afterward OxideMD updates with the rest of the system (`sudo apt upgrade` /
-`sudo dnf upgrade`). The loose installers above remain available for a one-off
-manual install (those don't auto-update).
+1. Open `Settings`
+2. Navigate to the `About` section
+3. Press the `Check for Updates` button
+4. Click the `Install` button *- (appears if a new version is available)*
 
-### Arch-based
+> The app  will **update and restart itself** if you installed this app through one of the following installers:
+> - Windows (`.msi` or `.exe`)
+> - MacOS (`.dmg`)
+> - Linux (`.AppImage` )
+>
+> Other packages (`.deb`, `.rpm` and `.pkg.tar.zst`) require manual download and installation.
 
-On Arch-based systems, grab `oxidemd-bin-<version>-1-x86_64.pkg.tar.zst` from the [latest release](https://github.com/FenrirTheGray/OxideMD/releases/latest) and install it:
-
-```bash
-sudo pacman -U ./oxidemd-bin-<version>-1-x86_64.pkg.tar.zst
-```
-
-You can also build from the PKGBUILDs in [`packaging/aur/`](packaging/aur/README.md): `oxidemd` builds from source, `oxidemd-bin` repackages the prebuilt binary.
+### Automatic Updates - Through Package Managers
+Automatic updates are supported for `.deb` and `.rpm` packages through their respective package managers.
+One-time setup commands required for this app to be added to them can be found on the [install page](https://fenrirthegray.github.io/OxideMD/).
 
 ## Keyboard shortcuts
 
-> On macOS, read `Ctrl` as `Cmd`. Every shortcut below is rebindable from **Settings → Shortcuts**.
+> On macOS, read `Ctrl` as `Cmd`. Every shortcut below is rebindable from **Settings → Shortcuts** — except tab navigation and move-tab, which are fixed on Linux.
 
-| Shortcut                 | Action                           |
-| ------------------------ | -------------------------------- |
-| `Ctrl+N`                 | New file                         |
-| `Ctrl+O`                 | Open file(s)                     |
-| `Ctrl+S`                 | Save                             |
-| `Ctrl+W`                 | Close tab                        |
-| `Ctrl+E`                 | Toggle edit mode                 |
-| `Ctrl+F`                 | Search / find                    |
-| `Ctrl+P`                 | Print to PDF                     |
-| `Ctrl+R`                 | Reload file                      |
-| `Ctrl+Tab` / `Shift+Tab` | Next / previous tab              |
-| `Ctrl+Shift+←` / `→`     | Move tab                         |
-| `Ctrl++` / `-` / `0`     | Zoom in / out / reset            |
-| `Ctrl+B` / `I` / `K`     | Bold / italic / link (edit mode) |
-| `Enter` / `Shift+Enter`  | Next / previous search match     |
-| `Esc`                    | Close search or settings         |
+| Shortcut                      | Action                           |
+| ----------------------------- | -------------------------------- |
+| `Ctrl+N`                      | New file                         |
+| `Ctrl+O`                      | Open file(s)                     |
+| `Ctrl+S`                      | Save                             |
+| `Ctrl+W`                      | Close tab                        |
+| `Ctrl+E`                      | Toggle edit mode                 |
+| `Ctrl+F`                      | Search / find                    |
+| `Ctrl+P`                      | Print to PDF                     |
+| `Ctrl+R`                      | Reload file                      |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab              |
+| `Ctrl+Shift+←` / `→`          | Move tab                         |
+| `Ctrl++` / `-` / `0`          | Zoom in / out / reset            |
+| `Ctrl+B` / `I` / `K`          | Bold / italic / link (edit mode) |
+| `Enter` / `Shift+Enter`       | Next / previous search match     |
+| `Esc`                         | Close search or settings         |
 
 ## Build from source
 
-You'll need [Rust](https://rustup.rs/) (stable) and [Node.js](https://nodejs.org/) for the frontend bundler.
+### Requirements:
+- Rust: [https://rustup.rs/](https://rustup.rs/)
+- NodeJS: [https://nodejs.org/](https://nodejs.org/)
 
-**Linux (Debian/Ubuntu):**
+### Dependencies:
+- Linux (Debian/Ubuntu):
+  ```bash
+  sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
+      libssl-dev libayatana-appindicator3-dev librsvg2-dev
+  ```
 
-```bash
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
-    libssl-dev libayatana-appindicator3-dev librsvg2-dev
-```
+- Linux (Arch):
+  ```bash
+  sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl librsvg
+  ```
+- Windows:
+  - MSVC toolchain and Microsoft C++ Build Tools
+  - WebView2 (ships with Windows 10 1803+ and Windows 11)
 
-**Linux (Arch):**
-
-```bash
-sudo pacman -S --needed webkit2gtk-4.1 base-devel curl wget file openssl librsvg
-```
-
-**Windows:** the MSVC toolchain and Microsoft C++ Build Tools. WebView2 ships with Windows 10 1803+ and Windows 11.
-
-**macOS:** `xcode-select --install`.
-
-Then install dependencies and start the dev server:
-
-```bash
-cargo install tauri-cli --version "^2" --locked
-npm install
-cargo tauri dev          # dev run; auto-builds the frontend via esbuild
-```
+- macOS:
+  ```
+  xcode-select --install
+  ```
+### Building the App:
+Install cargo and start the dev server:
+  ```bash
+  cargo install tauri-cli --version "^2" --locked
+  npm install
+  cargo tauri dev          # dev run; auto-builds the frontend via esbuild
+  ```
 
 Before committing, run the frontend checks — `esbuild` strips TypeScript types but never checks them, so `tsc` is the safety net:
 
