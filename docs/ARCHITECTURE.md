@@ -139,11 +139,10 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   interceptor that re-emits the `Ctrl+Tab` family as IPC events.
 - **`commands.rs`** — every `#[tauri::command]`, their helper types, and the
   pure helpers (path canonicalization, the folder walk, the search scanner).
-- **`config.rs`** — the `Config` struct and its `Default`, TOML load/save,
-  `migrate_config` for schema-version upgrades, the per-platform config / fonts
-  / themes paths, the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
-  identifier triple and the `project_dirs()` helper, and recent-files
-  maintenance.
+- **`config.rs`** — the `Config` struct and its `Default`, TOML load/save, the
+  per-platform config / fonts / themes paths, the `APP_QUALIFIER` /
+  `APP_ORGANIZATION` / `APP_NAME` identifier triple and the `project_dirs()`
+  helper, and recent-files maintenance.
 - **`markdown.rs`** — pulldown-cmark source → HTML string: heading slugs/ids,
   footnotes, local-image resolution, raw-HTML escaping, and the soft-break
   atomic.
@@ -193,11 +192,14 @@ co-located `*.test.ts`).
 
 - **`accel.ts`** — accelerator parse/serialize, split out of `keybindings.ts`
   so it can be tested without the DOM or Tauri globals.
+- **`escape.ts`** — `escapeHtml`, the shared HTML-escaper used by the modules
+  that build markup from user-controlled text (tab titles, paths, error
+  strings); a single copy replacing the duplicates those modules each carried.
 - **`md-table.ts`** — `formatMarkdownBuffer` and its table-alignment /
   grapheme-width helpers, split out of `editor.ts`; powers the opt-in
   format-on-save.
-- **`timing.ts`** — `debounce` / `throttle`, the shared trailing-edge timing
-  helpers used across the UI modules.
+- **`timing.ts`** — `debounce`, the shared trailing-edge timing helper used
+  across the UI modules.
 
 **`editor/`** — the editing surface. Everything here (and only here) may
 import CodeMirror; the whole directory ships as a lazily-loaded chunk.
@@ -229,7 +231,9 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   loading, and the tab orchestration (General / Reading / Editor / Colors /
   Shortcuts / About).
 - **`controls.ts`** — the generic custom form controls (custom selects,
-  segmented toggles, number steppers) and the dialog focus trap.
+  segmented toggles, number steppers). `wireCustomSelect` is the shared
+  trigger-click + keyboard-navigation wiring, reused by the dynamic font and
+  theme dropdowns so the three selects don't each reimplement it.
 - **`fonts.ts`** — the dynamic font dropdown on the Reading tab.
 - **`palette.ts`** — color-palette data plus the pure `effectivePalette` /
   `effectiveBgColor` helpers and the body appliers.
@@ -247,11 +251,14 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 - **`contextmenu.ts`** — context-aware right-click menus for the tree and tab
   bar (the default webview menu is suppressed). The editor-surface menu comes
   from the lazy editor module via `editorModule()?.buildEditorContextMenu()`.
-- **`counts.ts`** — the status-bar line/word/char counts. Allocation-free
-  counting; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
+- **`counts.ts`** — the status-bar line/word/char counts. O(doc) over the
+  source text; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
 - **`confirm.ts`** — the shared confirm dialog (unsaved changes, draft
-  recovery, settings reset/close prompts), one overlay wired to a
-  resolve-on-click promise.
+  recovery, settings reset/close prompts), a native `<dialog>` wired to a
+  resolve-on-click promise. Like the settings and error modals it uses
+  `showModal()` for the focus trap and inert background, with a `cancel`
+  handler that routes Escape through the app's close path instead of the
+  native instant-close.
 - **`reveal.ts`** — search-hit reveal painting (CSS Highlight API + block
   wash) shared by read mode and the edit-mode preview.
 
@@ -277,10 +284,11 @@ mode can use them without pulling in the lazy CodeMirror chunk.
 `directories` crate from the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
 triple. `load_config` falls back to `Config::default()` on any read or parse
 error. The struct is `#[serde(default)]`, so a file written by an older version
-backfills any newly added field from its default. For schema changes that
-*can't* be expressed as a new default (renamed keys, reinterpreted values), bump
-`CURRENT_CONFIG_VERSION` and add a step to `migrate_config`; it runs once on
-load when the stored `config_version` is behind, then re-saves. The frontend
+backfills any newly added field from its default, and serde ignores keys it no
+longer recognizes — additive schema changes (the common case) need nothing
+more. There is no version-stamped migration pass: a renamed or reinterpreted
+key simply falls back to its default rather than being rewritten, so a breaking
+schema change would need that handling reintroduced. The frontend
 fetches the whole struct once at init (`state.config = await
 invoke('get_config')`) and `save_config_cmd` persists it back. Some settings
 must reach the renderer immediately: the soft-break flag is mirrored into the
