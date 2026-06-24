@@ -4,6 +4,12 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.8.2] - 2026-06-24
+
+### Fixed
+
+- Headings whose slug matches another heading's auto-generated disambiguation suffix (e.g. a "Step 1" heading alongside repeated "Step" headings) no longer share a duplicate `id`, so every heading stays reachable by its anchor link
+
 ## [4.8.1] - 2026-06-24
 
 ### Changed
