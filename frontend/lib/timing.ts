@@ -23,23 +23,3 @@ export function debounce(fn, ms) {
   };
   return debounced;
 }
-
-// Leading-edge throttle: runs immediately, then ignores further calls for
-// `ms`. Useful for high-frequency events where the first sample is the one
-// that matters. Carries `.cancel()` to reopen the gate early.
-export function throttle(fn, ms) {
-  let blockedUntil = 0;
-  let timer = null;
-  function throttled(...args) {
-    const now = Date.now();
-    if (now >= blockedUntil) {
-      blockedUntil = now + ms;
-      fn.apply(this, args);
-    }
-  }
-  throttled.cancel = () => {
-    blockedUntil = 0;
-    if (timer !== null) { clearTimeout(timer); timer = null; }
-  };
-  return throttled;
-}

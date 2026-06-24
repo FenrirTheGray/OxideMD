@@ -110,11 +110,7 @@ export async function printActiveTab() {
     printRoot.innerHTML = '';
     loaderOverlay.classList.add('hidden');
     window.removeEventListener('afterprint', onAfterPrint);
-    // Cross-spec: addEventListener('change') is the modern API but
-    // Safari < 14 only supports the deprecated addListener form.
-    // Detach via both shapes for safety.
-    if (printMql.removeEventListener) printMql.removeEventListener('change', onMqlChange);
-    else if (printMql.removeListener) printMql.removeListener(onMqlChange);
+    printMql.removeEventListener('change', onMqlChange);
     if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = 0; }
   };
 
@@ -133,8 +129,7 @@ export async function printActiveTab() {
     if (e.matches) return;
     finish();
   };
-  if (printMql.addEventListener) printMql.addEventListener('change', onMqlChange);
-  else if (printMql.addListener) printMql.addListener(onMqlChange);
+  printMql.addEventListener('change', onMqlChange);
 
   // Fallback signal.
   const onAfterPrint = () => finish();

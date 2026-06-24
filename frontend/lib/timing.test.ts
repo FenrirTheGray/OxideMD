@@ -4,7 +4,7 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { debounce, throttle } from "./timing.ts";
+import { debounce } from "./timing.ts";
 
 test('debounce: fires once, trailing, after the quiet window', () => {
   mock.timers.enable({ apis: ['setTimeout'] });
@@ -43,23 +43,6 @@ test('debounce: cancel() drops a pending invocation', () => {
     fn.cancel();
     mock.timers.tick(200);
     assert.equal(calls, 0);
-  } finally {
-    mock.timers.reset();
-  }
-});
-
-test('throttle: leading-edge, then gated for the interval', () => {
-  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
-  try {
-    let calls = 0;
-    const fn = throttle(() => { calls++; }, 100);
-    fn();                  // runs immediately
-    assert.equal(calls, 1);
-    fn(); fn();            // gated
-    assert.equal(calls, 1);
-    mock.timers.tick(100);
-    fn();                  // gate reopened
-    assert.equal(calls, 2);
   } finally {
     mock.timers.reset();
   }

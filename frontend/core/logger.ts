@@ -16,9 +16,7 @@
 import { invoke } from "./state.ts";
 
 // Numeric levels match the plugin's `LogLevel` enum (1=trace … 5=error).
-const LEVEL = Object.freeze({
-  TRACE: 1, DEBUG: 2, INFO: 3, WARN: 4, ERROR: 5,
-});
+const LEVEL = { WARN: 4, ERROR: 5 };
 
 function describe(value) {
   if (value === undefined || value === null) return '';
@@ -55,10 +53,6 @@ export function logError(scope, message, err) {
 export function logWarn(scope, message, detail) {
   console.warn(`[${scope}] ${message}`, detail ?? '');
   send(LEVEL.WARN, scope, message, detail);
-}
-
-export function logInfo(scope, message, detail) {
-  send(LEVEL.INFO, scope, message, detail);
 }
 
 window.addEventListener('error', (event) => {

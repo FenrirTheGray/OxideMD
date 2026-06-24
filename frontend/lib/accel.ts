@@ -100,6 +100,5 @@ export function normalizeKey(raw) {
   for (const name of NAMED_KEYS) {
     if (raw.toLowerCase() === name.toLowerCase()) return name;
   }
-  if (raw.length === 1) return raw.toUpperCase();
   return raw.toUpperCase();
 }
