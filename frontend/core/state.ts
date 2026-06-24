@@ -26,7 +26,7 @@ function mdExtensions() {
   return Array.isArray(list) && list.length ? list : MD_EXTS_DEFAULT;
 }
 
-function pathExtension(p) {
+export function pathExtension(p) {
   const dot = p.lastIndexOf('.');
   // No dot, or the last dot belongs to a directory name (it sits before
   // the final path separator) rather than the file's basename.
@@ -84,7 +84,6 @@ export const state = {
   activeFontFilename: null,
   copyResetTimer: null,
   filePickerOpen: false,
-  releaseFocusTrap: null,
   treeFilter: '',
   confirmDialogOpen: false,
   errorDialogOpen: false,
@@ -178,7 +177,7 @@ export const searchCount     = document.getElementById('search-count');
 export const searchReplaceInput = document.getElementById('search-replace-input');
 export const searchReplace      = document.getElementById('search-replace');
 export const searchReplaceAll   = document.getElementById('search-replace-all');
-export const settingsOverlay = document.getElementById('settings-overlay');
+export const settingsOverlay = document.getElementById('settings-overlay') as HTMLDialogElement;
 export const btnLogo         = document.getElementById('btn-logo');
 export const shortcutsPopover = document.getElementById('shortcuts-popover');
 export const outlineSidebar  = document.getElementById('outline-sidebar');
@@ -202,14 +201,14 @@ export const sidebarSearchPanel    = document.getElementById('sidebar-search-pan
 export const sidebarSearchInput    = document.getElementById('sidebar-search-input');
 export const sidebarSearchClearBtn = document.getElementById('sidebar-search-clear');
 export const sidebarSearchResultsEl = document.getElementById('sidebar-search-results');
-export const confirmOverlay   = document.getElementById('confirm-overlay');
+export const confirmOverlay   = document.getElementById('confirm-overlay') as HTMLDialogElement;
 export const confirmDialog    = document.getElementById('confirm-dialog');
 export const confirmDialogTitle = document.getElementById('confirm-dialog-title');
 export const confirmDialogBody  = document.getElementById('confirm-dialog-body');
 export const confirmCancelBtn = document.getElementById('confirm-cancel');
 export const confirmDiscardBtn = document.getElementById('confirm-discard');
 export const confirmSaveBtn   = document.getElementById('confirm-save');
-export const errorOverlay     = document.getElementById('error-overlay');
+export const errorOverlay     = document.getElementById('error-overlay') as HTMLDialogElement;
 export const errorDialogTitle = document.getElementById('error-dialog-title');
 export const errorDialogBody  = document.getElementById('error-dialog-body');
 export const errorOkBtn       = document.getElementById('error-ok');
@@ -222,7 +221,7 @@ export const WELCOME_HTML = contentEl.innerHTML;
 export function hasActiveOverlay() {
   return state.filePickerOpen
     || !searchBar.classList.contains('hidden')
-    || !settingsOverlay.classList.contains('hidden')
-    || !confirmOverlay.classList.contains('hidden')
-    || !errorOverlay.classList.contains('hidden');
+    || settingsOverlay.open
+    || confirmOverlay.open
+    || errorOverlay.open;
 }

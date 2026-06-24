@@ -34,8 +34,15 @@
   z-index: 200;
   animation: overlay-fade var(--dur) var(--ease);
 }
-#picker-backdrop,
-#settings-overlay {
+#picker-backdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* `<dialog>` only lays out when open; an unconditional `display: flex` here
+   would override the UA `dialog:not([open]) { display: none }` and leave the
+   modal on screen at load. Gate it on [open]. */
+#settings-overlay[open] {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,9 +76,32 @@
 .picker-loader-label {
   line-height: 1;
 }
-#picker-backdrop.hidden,
-#settings-overlay.hidden {
+#picker-backdrop.hidden {
   display: none;
+}
+
+/* The three modal overlays are native <dialog>s opened with showModal(),
+   which gives focus-trapping and an inert background for free. Reset the
+   UA dialog box (a centered fit-content card with border/padding) so each
+   stays the full-screen flex container its layout assumes. The dim is the
+   element's own background; the ::backdrop behind it stays transparent.
+   `dialog:not([open])` is display:none by default, replacing `.hidden`. */
+#settings-overlay,
+#confirm-overlay,
+#error-overlay {
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+}
+#settings-overlay::backdrop,
+#confirm-overlay::backdrop,
+#error-overlay::backdrop {
+  background: transparent;
 }
 
 /* Settings exit animation */

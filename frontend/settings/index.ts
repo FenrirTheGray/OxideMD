@@ -757,10 +757,11 @@ export function openSettings(tabName) {
     refreshSaveButtonState();
   });
   activateSettingsTab(tabName || "general");
-  settingsOverlay.classList.remove("hidden");
-  state.releaseFocusTrap = trapFocus(
-    document.getElementById("settings-dialog"),
-  );
+  // showModal() traps focus + inerts the background natively, and restores
+  // focus to the trigger on close(). Escape routes through closeSettings
+  // (see the global handler in app.ts) for the unsaved-changes prompt; the
+  // cancel listener below blocks the native instant-close that would skip it.
+  settingsOverlay.showModal();
   // Form just mirrored state.config — nothing to save yet.
   refreshSaveButtonState();
 }
@@ -1039,10 +1040,7 @@ function applyThemeToControls(colors) {
 
 export async function closeSettings() {
   endShortcutCapture();
-  if (
-    settingsOverlay.classList.contains("hidden") ||
-    settingsOverlay.classList.contains("closing")
-  )
+  if (!settingsOverlay.open || settingsOverlay.classList.contains("closing"))
     return;
   // Unsaved changes → confirm before discarding them. Save commits and then
   // closes; Discard closes losing the tweaks; Cancel keeps the dialog open.
@@ -1051,10 +1049,6 @@ export async function closeSettings() {
     if (decision === "cancel") return;
     if (decision === "save") await saveSettings();
     // "discard" falls through to the revert-and-close path below.
-  }
-  if (state.releaseFocusTrap) {
-    state.releaseFocusTrap();
-    state.releaseFocusTrap = null;
   }
   // Revert any live preview changes — the theme-class swap and the
   // interface-palette swatches both apply live to <body> while the
@@ -1069,12 +1063,17 @@ export async function closeSettings() {
   settingsOverlay.addEventListener(
     "animationend",
     () => {
-      settingsOverlay.classList.add("hidden");
+      settingsOverlay.close();
       settingsOverlay.classList.remove("closing");
     },
     { once: true },
   );
 }
+
+// Escape routes through the global handler's closeSettings (for the
+// unsaved-changes prompt); block the native dialog Escape so it can't
+// close instantly and skip that prompt.
+settingsOverlay.addEventListener("cancel", (e) => e.preventDefault());
 
 // Build the candidate config from the current dialog state. Reused
 // by `saveSettings` (commit path) and by `settingsAreDirty` (Save

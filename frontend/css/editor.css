@@ -589,13 +589,14 @@ body.resizing-split * {
   /* Plain dim, no backdrop blur — see components.css for the rationale. */
   background: rgba(0, 0, 0, 0.38);
   z-index: 300;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+/* Only flex-lay-out when open, or this ID rule overrides the UA
+   `dialog:not([open]) { display: none }` and the modal shows at load. */
+#confirm-overlay[open] {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: overlay-fade var(--dur) var(--ease);
-}
-#confirm-overlay.hidden {
-  display: none;
 }
 #confirm-overlay.closing {
   animation: overlay-fade-out var(--dur) var(--ease) forwards;
@@ -719,13 +720,14 @@ body.resizing-split * {
   /* Plain dim, no backdrop blur — see components.css for the rationale. */
   background: rgba(0, 0, 0, 0.38);
   z-index: 350;
+  animation: overlay-fade var(--dur) var(--ease);
+}
+/* Only flex-lay-out when open, or this ID rule overrides the UA
+   `dialog:not([open]) { display: none }` and the modal shows at load. */
+#error-overlay[open] {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: overlay-fade var(--dur) var(--ease);
-}
-#error-overlay.hidden {
-  display: none;
 }
 #error-overlay.closing {
   animation: overlay-fade-out var(--dur) var(--ease) forwards;
