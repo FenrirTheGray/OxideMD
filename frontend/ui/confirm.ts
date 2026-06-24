@@ -15,17 +15,12 @@ import {
   confirmOverlay, confirmDialogTitle, confirmDialogBody,
   confirmCancelBtn, confirmDiscardBtn, confirmSaveBtn,
 } from "../core/state.ts";
+import { escapeHtml } from "../lib/escape.ts";
 
 let confirmResolve = null;
 // Which button is the "primary" action for the current dialog open —
 // drives both initial focus and what Enter resolves to.
 let confirmPrimary = 'save';
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
 
 // `saveHidden` lets the toolbar's Discard flow reuse this dialog as a
 // pure confirm (the user already chose to discard — Save would be
