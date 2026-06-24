@@ -732,9 +732,16 @@ mod tests {
         let out = render("# Step 1\n\n# Step\n\n# Step\n", None);
         assert!(out.contains("<h1 id=\"step-1\">"));
         assert!(out.contains("<h1 id=\"step\">"));
-        assert!(out.contains("<h1 id=\"step-2\">"), "collision not resolved: {out}");
+        assert!(
+            out.contains("<h1 id=\"step-2\">"),
+            "collision not resolved: {out}"
+        );
         // The first "step-1" (from "Step 1") must not be reused by a later heading.
-        assert_eq!(out.matches("id=\"step-1\"").count(), 1, "duplicate id: {out}");
+        assert_eq!(
+            out.matches("id=\"step-1\"").count(),
+            1,
+            "duplicate id: {out}"
+        );
     }
 
     #[test]
