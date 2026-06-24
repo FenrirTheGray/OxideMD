@@ -45,7 +45,7 @@ import {
   setBodyTheme,
 } from "./palette.ts";
 import { checkForUpdates, hideUpdateStatus } from "./updates.ts";
-import { trapFocus } from "./controls.ts";
+import { wireCustomSelect } from "./controls.ts";
 import { fontSelect, rebuildFontDropdown } from "./fonts.ts";
 
 // ── Settings tab structure & placement convention ──────────────────────────
@@ -211,84 +211,9 @@ function applyStoredCustomThemeSelection() {
   else clearCustomThemeSelection();
 }
 
-// ── Custom theme select open/close/keyboard ───────────────────────────────
-function openCustomThemeSelect() {
-  document.querySelectorAll(".custom-select.open").forEach((s) => {
-    s.classList.remove("open");
-    s.querySelector(".custom-select-trigger").setAttribute(
-      "aria-expanded",
-      "false",
-    );
-  });
-  customThemeSelect.classList.add("open");
-  customThemeTrigger.setAttribute("aria-expanded", "true");
-}
-
-function closeCustomThemeSelect() {
-  customThemeSelect.classList.remove("open");
-  customThemeTrigger.setAttribute("aria-expanded", "false");
-  customThemeOptionsContainer
-    .querySelectorAll(".custom-select-option")
-    .forEach((o) => o.classList.remove("focused"));
-}
-
-customThemeTrigger.addEventListener("click", () => {
-  if (customThemeSelect.classList.contains("open")) closeCustomThemeSelect();
-  else openCustomThemeSelect();
-});
-
-customThemeTrigger.addEventListener("keydown", (e) => {
-  const opts = Array.from(
-    customThemeOptionsContainer.querySelectorAll(".custom-select-option"),
-  );
-  let focusedIdx = opts.findIndex((o) => o.classList.contains("focused"));
-
-  switch ((e as KeyboardEvent).key) {
-    case "Enter":
-    case " ":
-      e.preventDefault();
-      if (customThemeSelect.classList.contains("open") && focusedIdx >= 0) {
-        (opts[focusedIdx] as HTMLElement).click();
-      } else {
-        openCustomThemeSelect();
-      }
-      break;
-    case "ArrowDown":
-      e.preventDefault();
-      if (!customThemeSelect.classList.contains("open")) {
-        openCustomThemeSelect();
-        break;
-      }
-      focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
-      opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
-      if (opts[focusedIdx])
-        (opts[focusedIdx] as HTMLElement).scrollIntoView({ block: "nearest" });
-      break;
-    case "ArrowUp":
-      e.preventDefault();
-      if (!customThemeSelect.classList.contains("open")) {
-        openCustomThemeSelect();
-        break;
-      }
-      focusedIdx = Math.max(focusedIdx - 1, 0);
-      opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
-      if (opts[focusedIdx])
-        (opts[focusedIdx] as HTMLElement).scrollIntoView({ block: "nearest" });
-      break;
-    case "Escape":
-      if (customThemeSelect.classList.contains("open")) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeCustomThemeSelect();
-        (customThemeTrigger as HTMLElement).focus();
-      }
-      break;
-    case "Tab":
-      if (customThemeSelect.classList.contains("open"))
-        closeCustomThemeSelect();
-      break;
-  }
-});
+// Trigger click + keyboard nav over the dynamic option list. Captured so
+// the click handlers below can dismiss the menu after a pick.
+const customThemeCtl = wireCustomSelect(customThemeSelect as HTMLElement);
 
 // Finds a theme by its dropdown filename ID — bundled (`builtin:<slug>`)
 // or user-imported (`<name>.json`). Returns undefined for the Default
@@ -433,7 +358,7 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
         ? ATOM_ONE_DARK.name
         : ATOM_ONE_LIGHT.name;
     setCustomThemeSelection((opt as HTMLElement).dataset.value, pretty);
-    closeCustomThemeSelect();
+    customThemeCtl.close();
     // This path awaited get_default_config before applying, so the dialog's
     // delegated click dirty-check already ran against the pre-apply state.
     // Recompute explicitly or Save stays stale until the next interaction.
@@ -450,7 +375,7 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
     applyThemeToControls(theme.colors);
     setCustomThemeSelection(theme.filename, theme.name);
   }
-  closeCustomThemeSelect();
+  customThemeCtl.close();
 });
 
 // ── Shortcuts panel ────────────────────────────────────────────────────────
@@ -625,18 +550,14 @@ document.addEventListener(
 // would flip body class and swap bg inputs before they're populated.
 let populatingSettings = false;
 
-// Parses the comma-separated Markdown-extension field into a clean,
-// normalized list: split on commas, trim, lowercase, strip every
-// leading dot, drop empties, and dedupe. A field that normalizes to
-// nothing falls back to the defaults so the folder browser never shows
-// zero files.
+// Cleans the chips control's `.value` array into a normalized extension
+// list: trim, lowercase, strip leading dots, drop empties, dedupe. A list
+// that normalizes to nothing falls back to the defaults so the folder
+// browser never shows zero files.
 function parseMdExtensions(raw) {
-  // Accepts either the chips control's normalized array (`.value`) or a
-  // raw comma string, so the same fallback-to-defaults logic covers both.
-  const parts = Array.isArray(raw) ? raw : String(raw || "").split(",");
   const seen = new Set();
   const out = [];
-  for (const part of parts) {
+  for (const part of raw) {
     const ext = part.trim().toLowerCase().replace(/^\.+/, "");
     if (ext && !seen.has(ext)) {
       seen.add(ext);
@@ -1136,17 +1057,12 @@ function buildCandidateConfig() {
 // candidate and the disk-loaded state.config, so a naive
 // JSON.stringify diff would flag false positives.
 function stableStringify(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return "[" + value.map(stableStringify).join(",") + "]";
-  }
-  const keys = Object.keys(value).sort();
-  return (
-    "{" +
-    keys
-      .map((k) => JSON.stringify(k) + ":" + stableStringify(value[k]))
-      .join(",") +
-    "}"
+  // Replacer reorders every plain object's keys; JSON.stringify then
+  // recurses into the reordered copy. Arrays/primitives pass through.
+  return JSON.stringify(value, (_k, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v,
   );
 }
 

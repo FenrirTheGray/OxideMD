@@ -8,6 +8,7 @@
 // (loadCustomFont) stays in settings.js since applyConfig/saveSettings own it.
 
 import { invoke, state } from "../core/state.ts";
+import { wireCustomSelect } from "./controls.ts";
 
 const fontSelect = document.getElementById("setting-font");
 const fontTrigger = fontSelect.querySelector(".custom-select-trigger");
@@ -15,83 +16,8 @@ const fontOptionsContainer = fontSelect.querySelector(".custom-select-options");
 
 export { fontSelect };
 
-// ── Font select open/close/keyboard ───────────────────────────────────────
-function openFontSelect() {
-  document.querySelectorAll(".custom-select.open").forEach((s) => {
-    s.classList.remove("open");
-    s.querySelector(".custom-select-trigger").setAttribute(
-      "aria-expanded",
-      "false",
-    );
-  });
-  fontSelect.classList.add("open");
-  fontTrigger.setAttribute("aria-expanded", "true");
-}
-
-function closeFontSelect() {
-  fontSelect.classList.remove("open");
-  fontTrigger.setAttribute("aria-expanded", "false");
-  fontOptionsContainer
-    .querySelectorAll(".custom-select-option")
-    .forEach((o) => o.classList.remove("focused"));
-}
-
-fontTrigger.addEventListener("click", () => {
-  if (fontSelect.classList.contains("open")) closeFontSelect();
-  else openFontSelect();
-});
-
-fontTrigger.addEventListener("keydown", (e: KeyboardEvent) => {
-  const opts = Array.from(
-    fontOptionsContainer.querySelectorAll(".custom-select-option"),
-  ) as HTMLElement[];
-  let focusedIdx = opts.findIndex((o) => o.classList.contains("focused"));
-
-  switch (e.key) {
-    case "Enter":
-    case " ":
-      e.preventDefault();
-      if (fontSelect.classList.contains("open") && focusedIdx >= 0) {
-        opts[focusedIdx].click();
-      } else {
-        openFontSelect();
-      }
-      break;
-    case "ArrowDown":
-      e.preventDefault();
-      if (!fontSelect.classList.contains("open")) {
-        openFontSelect();
-        break;
-      }
-      focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
-      opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
-      if (opts[focusedIdx])
-        opts[focusedIdx].scrollIntoView({ block: "nearest" });
-      break;
-    case "ArrowUp":
-      e.preventDefault();
-      if (!fontSelect.classList.contains("open")) {
-        openFontSelect();
-        break;
-      }
-      focusedIdx = Math.max(focusedIdx - 1, 0);
-      opts.forEach((o, i) => o.classList.toggle("focused", i === focusedIdx));
-      if (opts[focusedIdx])
-        opts[focusedIdx].scrollIntoView({ block: "nearest" });
-      break;
-    case "Escape":
-      if (fontSelect.classList.contains("open")) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeFontSelect();
-        (fontTrigger as HTMLElement).focus();
-      }
-      break;
-    case "Tab":
-      if (fontSelect.classList.contains("open")) closeFontSelect();
-      break;
-  }
-});
+// Trigger click + keyboard nav over the dynamic option list.
+wireCustomSelect(fontSelect as HTMLElement);
 
 // Override the value getter/setter for the font select to work with dynamic options
 Object.defineProperty(fontSelect, "value", {

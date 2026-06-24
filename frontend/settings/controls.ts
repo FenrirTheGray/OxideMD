@@ -10,12 +10,75 @@
 // so the generic custom-select loop skips them by id.
 
 // ── Custom selects ─────────────────────────────────────────────────────────
+// Wire a custom-select's trigger: click to toggle, full keyboard nav
+// (Enter/Space/Arrows/Esc/Tab). Options are read live from the DOM each
+// event, so dynamically-populated dropdowns (font, theme) share this too.
+// "Selecting" just clicks the focused option, reusing whatever click
+// handler that option carries. Returns { open, close } for callers that
+// need to dismiss the menu from elsewhere.
+export function wireCustomSelect(sel: HTMLElement) {
+  const trigger = sel.querySelector(".custom-select-trigger") as HTMLElement;
+  const opts = () =>
+    Array.from(sel.querySelectorAll(".custom-select-option")) as HTMLElement[];
+  const isOpen = () => sel.classList.contains("open");
+
+  function close() {
+    sel.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+    opts().forEach((o) => o.classList.remove("focused"));
+  }
+  function open() {
+    document.querySelectorAll(".custom-select.open").forEach((s) => {
+      if (s === sel) return;
+      s.classList.remove("open");
+      s.querySelector(".custom-select-trigger")!.setAttribute("aria-expanded", "false");
+    });
+    sel.classList.add("open");
+    trigger.setAttribute("aria-expanded", "true");
+    focus(opts().findIndex((o) => o.classList.contains("selected")));
+  }
+  function focus(i: number) {
+    const list = opts();
+    if (!list.length) return;
+    const clamped = Math.min(list.length - 1, Math.max(0, i));
+    list.forEach((o, n) => o.classList.toggle("focused", n === clamped));
+    list[clamped].scrollIntoView({ block: "nearest" });
+  }
+
+  trigger.addEventListener("click", () => (isOpen() ? close() : open()));
+  trigger.addEventListener("keydown", (e: KeyboardEvent) => {
+    const i = opts().findIndex((o) => o.classList.contains("focused"));
+    switch (e.key) {
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (isOpen() && i >= 0) opts()[i].click();
+        else open();
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        isOpen() ? focus(i + 1) : open();
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        isOpen() ? focus(i - 1) : open();
+        break;
+      case "Escape":
+        if (isOpen()) { e.preventDefault(); e.stopPropagation(); close(); trigger.focus(); }
+        break;
+      case "Tab":
+        if (isOpen()) close();
+        break;
+    }
+  });
+  return { open, close };
+}
+
 document.querySelectorAll(".custom-select").forEach((el) => {
   const sel = el as HTMLElement;
   if (sel.id === "setting-font" || sel.id === "setting-custom-theme") return;
   const trigger = sel.querySelector(".custom-select-trigger") as HTMLElement;
   const options = sel.querySelectorAll(".custom-select-option") as NodeListOf<HTMLElement>;
-  let focusedIndex = -1;
 
   // Expose .value getter/setter so existing code works unchanged
   Object.defineProperty(sel, "value", {
@@ -36,98 +99,11 @@ document.querySelectorAll(".custom-select").forEach((el) => {
     },
   });
 
-  function openSelect() {
-    document.querySelectorAll(".custom-select.open").forEach((s) => {
-      if (s !== sel) closeSelect(s as HTMLElement);
-    });
-    sel.classList.add("open");
-    trigger.setAttribute("aria-expanded", "true");
-    // Focus the currently selected option
-    focusedIndex = Array.from(options).findIndex((o) =>
-      o.classList.contains("selected"),
-    );
-    if (focusedIndex === -1) focusedIndex = 0;
-    updateOptionFocus();
-  }
-
-  function closeSelect(s?: HTMLElement) {
-    const target = s || sel;
-    target.classList.remove("open");
-    target.querySelector(".custom-select-trigger")!.setAttribute(
-      "aria-expanded",
-      "false",
-    );
-    target.querySelectorAll(".custom-select-option").forEach((o) =>
-      o.classList.remove("focused"),
-    );
-  }
-
-  function updateOptionFocus() {
-    options.forEach((o, i) =>
-      o.classList.toggle("focused", i === focusedIndex),
-    );
-    if (focusedIndex >= 0)
-      options[focusedIndex].scrollIntoView({ block: "nearest" });
-  }
-
-  function selectFocused() {
-    if (focusedIndex >= 0 && options[focusedIndex]) {
-      (sel as any).value = options[focusedIndex].dataset.value;
-    }
-    closeSelect();
-    trigger.focus();
-  }
-
-  trigger.addEventListener("click", () => {
-    if (sel.classList.contains("open")) closeSelect();
-    else openSelect();
-  });
-
-  // Keyboard support
-  trigger.addEventListener("keydown", (e: KeyboardEvent) => {
-    switch (e.key) {
-      case "Enter":
-      case " ":
-        e.preventDefault();
-        if (sel.classList.contains("open")) selectFocused();
-        else openSelect();
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        if (!sel.classList.contains("open")) {
-          openSelect();
-          break;
-        }
-        focusedIndex = Math.min(focusedIndex + 1, options.length - 1);
-        updateOptionFocus();
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        if (!sel.classList.contains("open")) {
-          openSelect();
-          break;
-        }
-        focusedIndex = Math.max(focusedIndex - 1, 0);
-        updateOptionFocus();
-        break;
-      case "Escape":
-        if (sel.classList.contains("open")) {
-          e.preventDefault();
-          e.stopPropagation();
-          closeSelect();
-          trigger.focus();
-        }
-        break;
-      case "Tab":
-        if (sel.classList.contains("open")) closeSelect();
-        break;
-    }
-  });
-
+  const ctl = wireCustomSelect(sel);
   options.forEach((opt) => {
     opt.addEventListener("click", () => {
       (sel as any).value = opt.dataset.value;
-      closeSelect();
+      ctl.close();
       trigger.focus();
     });
   });
