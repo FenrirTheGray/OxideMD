@@ -17,7 +17,6 @@ import {
 } from "../core/state.ts";
 
 let confirmResolve = null;
-let lastFocus = null;
 // Which button is the "primary" action for the current dialog open —
 // drives both initial focus and what Enter resolves to.
 let confirmPrimary = 'save';
@@ -139,9 +138,11 @@ function formatDraftTimestamp(ts) {
 }
 
 function openConfirmDialog() {
-  confirmOverlay.classList.remove('hidden');
+  // showModal() gives the focus trap + inert background natively, and
+  // restores focus to the trigger on close(). The rAF below moves the
+  // initial focus from showModal's first-focusable to the primary button.
+  if (!confirmOverlay.open) confirmOverlay.showModal();
   state.confirmDialogOpen = true;
-  lastFocus = document.activeElement;
   requestAnimationFrame(() => {
     const target = confirmPrimary === 'discard' ? confirmDiscardBtn
                  : confirmPrimary === 'cancel'  ? confirmCancelBtn
@@ -158,14 +159,16 @@ function closeConfirmDialog(decision) {
   confirmResolve = null;
   confirmOverlay.classList.add('closing');
   setTimeout(() => {
+    confirmOverlay.close();
     confirmOverlay.classList.remove('closing');
-    confirmOverlay.classList.add('hidden');
     state.confirmDialogOpen = false;
-    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
-    lastFocus = null;
     r(decision);
   }, 200);
 }
+
+// Escape closes via the keydown handler below (resolving 'cancel'); block
+// the native dialog Escape so it can't close instantly without resolving.
+confirmOverlay.addEventListener('cancel', (e) => e.preventDefault());
 
 confirmSaveBtn.addEventListener('click', () => closeConfirmDialog('save'));
 confirmDiscardBtn.addEventListener('click', () => closeConfirmDialog('discard'));

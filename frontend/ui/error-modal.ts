@@ -7,12 +7,12 @@ import { state, errorOverlay, errorDialogTitle, errorDialogBody, errorOkBtn } fr
 import { logError } from '../core/logger.ts';
 
 let errorResolve: (() => void) | null = null;
-let errorLastFocus: Element | null = null;
 
 function openErrorDialog() {
-  errorOverlay.classList.remove('hidden');
+  // Native showModal() traps focus, inerts the background, and restores
+  // focus to the trigger on close().
+  if (!errorOverlay.open) errorOverlay.showModal();
   state.errorDialogOpen = true;
-  errorLastFocus = document.activeElement;
   requestAnimationFrame(() => errorOkBtn.focus());
   return new Promise<void>((resolve) => { errorResolve = resolve; });
 }
@@ -23,16 +23,16 @@ function closeErrorDialog() {
   errorResolve = null;
   errorOverlay.classList.add('closing');
   setTimeout(() => {
+    errorOverlay.close();
     errorOverlay.classList.remove('closing');
-    errorOverlay.classList.add('hidden');
     state.errorDialogOpen = false;
-    if (errorLastFocus && document.contains(errorLastFocus)) {
-      (errorLastFocus as HTMLElement).focus();
-    }
-    errorLastFocus = null;
     r();
   }, 200);
 }
+
+// Escape closes via the keydown handler below; block the native dialog
+// Escape so it can't bypass the close animation / resolve.
+errorOverlay.addEventListener('cancel', (e) => e.preventDefault());
 
 errorOkBtn.addEventListener('click', closeErrorDialog);
 errorOverlay.addEventListener('click', (e) => {

@@ -595,8 +595,7 @@
   </div>
 
   <!-- ── Settings modal ─────────────────────────────────────────────── -->
-  <div id="settings-overlay" class="hidden"
-       role="dialog" aria-modal="true" aria-labelledby="settings-dialog-title">
+  <dialog id="settings-overlay" aria-labelledby="settings-dialog-title">
     <div id="settings-dialog">
 
       <div id="settings-header">
@@ -1254,11 +1253,10 @@
       </div>
 
     </div><!-- /settings-dialog -->
-  </div><!-- /settings-overlay -->
+  </dialog><!-- /settings-overlay -->
 
   <!-- ── Unsaved changes confirm dialog ─────────────────────────────── -->
-  <div id="confirm-overlay" class="hidden"
-       role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
+  <dialog id="confirm-overlay" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-body">
     <div id="confirm-dialog">
       <div id="confirm-header">
         <span id="confirm-dialog-title">Unsaved changes</span>
@@ -1272,11 +1270,11 @@
         <button id="confirm-save" type="button" class="primary">Save</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <!-- ── Error modal (blocking; must be dismissed) ───────────────────── -->
-  <div id="error-overlay" class="hidden"
-       role="alertdialog" aria-modal="true" aria-labelledby="error-dialog-title" aria-describedby="error-dialog-body">
+  <dialog id="error-overlay"
+       role="alertdialog" aria-labelledby="error-dialog-title" aria-describedby="error-dialog-body">
     <div id="error-dialog">
       <div id="error-header">
         <svg id="error-icon" viewBox="0 0 24 24" width="18" height="18" fill="none"
@@ -1294,7 +1292,7 @@
         <button id="error-ok" type="button" class="primary">OK</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
   <!-- ── Toast notifications ────────────────────────────────────────── -->
   <!-- toast.js appends `.toast` cards here; the container is fixed,

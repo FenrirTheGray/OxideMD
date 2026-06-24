@@ -550,12 +550,12 @@ document.addEventListener('keydown', (e) => {
     // The confirm dialog is handled in editor.js (it owns the
     // resolve-on-key promise); we just stop here so settings/search
     // below don't also fire.
-    if (!confirmOverlay.classList.contains('hidden')) { return; }
+    if (confirmOverlay.open) { return; }
     if (!shortcutsPopover.classList.contains('hidden')) {
       e.preventDefault(); e.stopPropagation();
       closeShortcutsPopover(); btnLogo.focus(); return;
     }
-    if (!settingsOverlay.classList.contains('hidden')) {
+    if (settingsOverlay.open) {
       e.preventDefault(); e.stopPropagation();
       closeSettings(); return;
     }
