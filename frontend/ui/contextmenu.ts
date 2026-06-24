@@ -18,7 +18,7 @@ import {
 } from "../core/state.ts";
 import {
   loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
-  createNewFile, dropTabsForDeletedPath,
+  createNewFile, dropTabsForDeletedPath, parentDir,
 } from "./tabs.ts";
 import { editorModule } from "../editor/lazy.ts";
 import { printActiveTab } from "../features/print.ts";
@@ -185,11 +185,6 @@ function selectAllIn(root) {
 
 // ── Per-context builders ─────────────────────────────────────────────────
 
-function parentDirOf(p) {
-  const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
-  return idx === -1 ? '' : p.slice(0, idx);
-}
-
 // Permanently delete a tree entry after an explicit confirmation. The
 // folder root is never offered here (it has no tree node), so this only
 // ever targets a file or a subfolder. On success any open tabs backing
@@ -218,7 +213,7 @@ function buildTreeMenu(nodeEl) {
     items.push({ label: 'Open in New Tab', action: () => loadFile(path) });
     items.push({ separator: true });
     // "New File…" for a file is rooted at its parent directory.
-    items.push({ label: 'New File…', action: () => createNewFile(parentDirOf(path)) });
+    items.push({ label: 'New File…', action: () => createNewFile(parentDir(path)) });
     items.push({ label: 'Delete File…', action: () => deleteTreeEntry(path, false) });
   } else {
     // Right-clicking a folder offers "New File…" rooted at that folder,
