@@ -1,7 +1,7 @@
 use crate::highlight::Highlighter;
 use crate::util::{html_escape, html_escape_attr};
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -68,7 +68,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let parser = Parser::new_ext(source, options);
 
     let mut html = String::new();
-    let mut heading_counts: HashMap<String, usize> = HashMap::new();
+    let mut used_heading_ids: HashSet<String> = HashSet::new();
 
     // State
     let mut in_code_block = false;
@@ -91,7 +91,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let mut current_heading: Option<HeadingLevel> = None;
     // An explicit `{#id}` heading attribute, if the source supplied one.
     // When present it overrides the auto-generated slug for the heading's
-    // `id`, but still flows through `heading_counts` so a later collision
+    // `id`, but still flows through `used_heading_ids` so a later collision
     // (with another explicit id or an auto-slug) gets disambiguated.
     let mut heading_explicit_id: Option<String> = None;
     let mut in_image: Option<(String, String)> = None; // (src, title)
@@ -132,18 +132,27 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 };
                 let content = html.split_off(heading_start);
                 // An explicit `{#id}` wins over the slug, but still runs
-                // through `heading_counts` so a later collision (with
+                // through `used_heading_ids` so a later collision (with
                 // another explicit id or an auto-slug) is disambiguated.
                 let base = heading_explicit_id
                     .take()
                     .unwrap_or_else(|| slugify(&heading_slug_buf));
-                let count = heading_counts.entry(base.clone()).or_insert(0);
-                let id = if *count == 0 {
-                    base.clone()
+                // Probe forward for a free id rather than tracking a per-base
+                // counter: a counter's `base-N` can itself collide with a
+                // real slug already in use (e.g. "step-1" from "# Step 1"
+                // versus the 2nd "# Step"), handing two headings the same id.
+                let id = if used_heading_ids.insert(base.clone()) {
+                    base
                 } else {
-                    format!("{}-{}", base, count)
+                    let mut n = 1;
+                    loop {
+                        let candidate = format!("{}-{}", base, n);
+                        if used_heading_ids.insert(candidate.clone()) {
+                            break candidate;
+                        }
+                        n += 1;
+                    }
                 };
-                *count += 1;
                 html.push_str(&format!("<{} id=\"{}\">{}</{}>", tag, id, content, tag));
                 heading_slug_buf.clear();
                 current_heading = None;
@@ -714,6 +723,18 @@ mod tests {
         let out = render("# Intro\n\n# Intro\n", None);
         assert!(out.contains("<h1 id=\"intro\">"));
         assert!(out.contains("<h1 id=\"intro-1\">"));
+    }
+
+    #[test]
+    fn render_heading_slug_collides_with_disambiguation_suffix() {
+        // "Step 1" slugs to "step-1"; the 2nd "Step" would naively also
+        // become "step-1". Each heading must still get a unique id.
+        let out = render("# Step 1\n\n# Step\n\n# Step\n", None);
+        assert!(out.contains("<h1 id=\"step-1\">"));
+        assert!(out.contains("<h1 id=\"step\">"));
+        assert!(out.contains("<h1 id=\"step-2\">"), "collision not resolved: {out}");
+        // The first "step-1" (from "Step 1") must not be reused by a later heading.
+        assert_eq!(out.matches("id=\"step-1\"").count(), 1, "duplicate id: {out}");
     }
 
     #[test]
