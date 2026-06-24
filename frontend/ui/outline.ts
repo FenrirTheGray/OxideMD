@@ -22,6 +22,7 @@ import {
 } from "../core/state.ts";
 import { activeTab, syncToolbar } from "./tabs.ts";
 import { editorModule } from "../editor/lazy.ts";
+import { escapeHtml } from "../lib/escape.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const FENCE_RE   = /^\s*(```|~~~)/;
@@ -60,11 +61,6 @@ export function parseOutline(text) {
   return out;
 }
 
-function jumpToHeadingInEditor(line) {
-  // Routed through the lazy editor module — the outline only offers
-  // editor-line jumps while a tab is editing, which implies it's loaded.
-  editorModule()?.jumpEditorToLine(line);
-}
 
 // View-mode jump: the rendered preview's heading order matches the
 // outline's (we generate both from the same source), so we can index
@@ -84,12 +80,6 @@ function jumpToHeadingInPreview(index) {
   } else {
     target.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
 }
 
 function renderOutline(entries) {
@@ -199,8 +189,10 @@ if (outlineSidebar) {
     const tab = activeTab();
     if (!tab) return;
     if (tab.editing) {
+      // Routed through the lazy editor module — editor-line jumps are only
+      // offered while a tab is editing, which implies it's loaded.
       const line = parseInt(item.dataset.line, 10);
-      if (Number.isFinite(line)) jumpToHeadingInEditor(line);
+      if (Number.isFinite(line)) editorModule()?.jumpEditorToLine(line);
     } else {
       const index = parseInt(item.dataset.index, 10);
       if (Number.isFinite(index)) jumpToHeadingInPreview(index);

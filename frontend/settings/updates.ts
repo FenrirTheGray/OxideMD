@@ -6,6 +6,7 @@
 // and `hideUpdateStatus` (called when opening the dialog).
 
 import { invoke, listen } from "../core/state.ts";
+import { escapeHtml } from "../lib/escape.ts";
 
 const UPDATE_ICON_AVAILABLE =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M5 21h14"/></svg>';
@@ -100,7 +101,7 @@ async function installUpdate(version) {
         "error",
         `
         ${UPDATE_ICON_ERROR}
-        <span class="update-message">Update failed: ${errStr.replace(/</g, "&lt;")}</span>
+        <span class="update-message">Update failed: ${escapeHtml(errStr)}</span>
         <button type="button" class="update-download">Open releases</button>
       `,
       );
@@ -141,7 +142,7 @@ export async function checkForUpdates() {
   } catch (e) {
     showUpdateStatus(
       "error",
-      `${UPDATE_ICON_ERROR}<span class="update-message">Failed to check for updates: ${String(e).replace(/</g, "&lt;")}</span>`,
+      `${UPDATE_ICON_ERROR}<span class="update-message">Failed to check for updates: ${escapeHtml(String(e))}</span>`,
     );
   } finally {
     btn.disabled = false;

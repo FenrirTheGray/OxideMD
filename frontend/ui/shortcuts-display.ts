@@ -7,6 +7,7 @@
 // close buttons (so per-tab close tooltips reflect the live binding).
 
 import { ACTIONS, getAction, accelToTokens } from "../core/keybindings.ts";
+import { escapeHtml } from "../lib/escape.ts";
 import {
   state,
   shortcutsPopover, contentEl,
@@ -77,11 +78,6 @@ function tooltipFor(label, tokens) {
   return tokens.length ? `${label} (${tokens.join('+')})` : label;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
 
 function renderPopover() {
   if (!shortcutsPopover) return;
