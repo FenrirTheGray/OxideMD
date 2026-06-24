@@ -133,6 +133,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0  # full history so the sync step's branch push isn't a shallow update
+          # Don't persist the default GITHUB_TOKEN as an http.extraheader: that
+          # Authorization header overrides the App token embedded in the sync
+          # step's push URL, so the push would authenticate as github-actions[bot]
+          # (not a ruleset bypass actor) and be rejected. The public-repo fetch
+          # below still works anonymously; the push carries its own App token.
+          persist-credentials: false
 
       # The build step chowns the workspace to the unprivileged builder, so
       # later root-run git/gh calls would trip git's dubious-ownership guard.
