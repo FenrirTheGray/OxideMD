@@ -4,18 +4,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-/// Bump this whenever the on-disk config schema changes in a way that
-/// older config files can't be deserialized faithfully (renamed keys,
-/// changed value semantics, removed fields whose absence matters).
-/// `migrate_config` runs once per launch to bring older files forward.
-pub const CURRENT_CONFIG_VERSION: u32 = 1;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
-    /// Schema version. Files written by older OxideMD builds lack this
-    /// field; serde fills it with `0`, which triggers a migration pass.
-    pub config_version: u32,
     pub theme: String,
     pub font_family: String,
     pub font_size: u32,
@@ -109,7 +100,6 @@ pub fn project_dirs() -> Option<ProjectDirs> {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            config_version: CURRENT_CONFIG_VERSION,
             theme: "dark".into(),
             font_family: "system-ui".into(),
             font_size: 16,
@@ -178,7 +168,7 @@ pub fn load_config() -> Config {
         Ok(s) => s,
         Err(_) => return Config::default(),
     };
-    let mut config: Config = match toml::from_str(&content) {
+    let config: Config = match toml::from_str(&content) {
         Ok(c) => c,
         Err(e) => {
             // The file exists but won't parse. Defaulting here is fine, but
@@ -198,27 +188,7 @@ pub fn load_config() -> Config {
             return Config::default();
         }
     };
-    if config.config_version < CURRENT_CONFIG_VERSION {
-        migrate_config(&mut config);
-        config.config_version = CURRENT_CONFIG_VERSION;
-        // Best-effort persist — if it fails we still hand the in-memory
-        // migrated config back, the next save_config() will retry.
-        let _ = save_config(&config);
-    }
     config
-}
-
-/// Brings older config files forward to `CURRENT_CONFIG_VERSION` in
-/// place. Each `if config.config_version < N { ... }` block is a single
-/// schema step; they cascade so a v0 config runs through every step in
-/// order. Currently a no-op placeholder — the v0→v1 jump exists only to
-/// stamp the version field onto existing files, so future migrations
-/// have a baseline they can detect against.
-fn migrate_config(_config: &mut Config) {
-    // Example shape for future schema changes:
-    //   if _config.config_version < 2 {
-    //       // rename old key, drop unknown values, fill new default …
-    //   }
 }
 
 pub fn save_config(config: &Config) -> Result<(), String> {
@@ -277,7 +247,6 @@ mod tests {
         let cfg = Config::default();
         let s = toml::to_string_pretty(&cfg).unwrap();
         let parsed: Config = toml::from_str(&s).unwrap();
-        assert_eq!(parsed.config_version, cfg.config_version);
         assert_eq!(parsed.md_extensions, cfg.md_extensions);
         assert_eq!(parsed.theme, cfg.theme);
     }
