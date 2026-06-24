@@ -257,13 +257,8 @@ export async function closeOtherTabs(keepId) {
   }
 }
 
-export async function closeAllTabs() {
-  const ids = tabs.map(t => t.id);
-  for (const id of ids) {
-    await closeTab(id);
-    if (tabs.some(t => t.id === id)) break;
-  }
-}
+// Close all = close all "other" tabs with no tab kept.
+export const closeAllTabs = () => closeOtherTabs(null);
 
 export function applyActiveTab() {
   const tab = activeTab();
@@ -633,7 +628,7 @@ function renderRecentFiles() {
   }
 }
 
-function parentDir(p) {
+export function parentDir(p) {
   if (!p) return '';
   const idx = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
   return idx === -1 ? '' : p.slice(0, idx);

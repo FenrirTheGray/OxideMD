@@ -12,6 +12,7 @@ import {
   btnSave, btnDiscard, btnPreview,
   statusIndicator, statusText,
   modKey,
+  pathExtension,
 } from "../core/state.ts";
 import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
 import { syncWatcher } from "../ui/folder.ts";
@@ -488,12 +489,6 @@ const DROP_IMAGE_EXTS = new Set([
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico', 'tif', 'tiff',
 ]);
 
-function fileExt(path) {
-  const base = path.split(/[\\/]/).pop() || '';
-  const dot = base.lastIndexOf('.');
-  return dot > 0 ? base.slice(dot + 1).toLowerCase() : '';
-}
-
 // True when the editor is mounted (edit mode) and the client point lands on
 // the CodeMirror surface — the gate for treating a file drop as an image
 // insertion rather than an "open this file" drop.
@@ -517,7 +512,7 @@ export function clearEditorDropHint() {
 // and consumed here, so the caller skips its open-file fallback.
 export async function dropImagesIntoEditor(paths, x, y) {
   if (!pointInEditor(x, y)) return false;
-  const images = paths.filter((p) => DROP_IMAGE_EXTS.has(fileExt(p)));
+  const images = paths.filter((p) => DROP_IMAGE_EXTS.has(pathExtension(p)));
   if (!images.length) return false; // non-images fall through (e.g. a .md)
 
   const tab = activeTab();

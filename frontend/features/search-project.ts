@@ -19,23 +19,18 @@ import { closeFilterMode } from "../ui/folder.ts";
 import { activeTab } from "../core/tab-state.ts";
 import { editorModule } from "../editor/lazy.ts";
 import { revealReadLine } from "../ui/reveal.ts";
+import { escapeHtml } from "../lib/escape.ts";
+import { debounce } from "../lib/timing.ts";
 
 const SVG_FILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
 
 // Debounce window before a keystroke triggers a folder-wide scan — long
 // enough to coalesce fast typing, short enough to feel responsive.
 const SEARCH_DEBOUNCE = 180;
-let searchTimer = null;
 // Monotonic token so a slow scan that resolves after a newer one was
 // kicked off can't overwrite the fresher results.
 let searchSeq = 0;
 let panelOpen = false;
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-  ));
-}
 
 // Whether the project-search toggle should be available at all: only
 // when a folder is open. Called by folder.js on open/close.
@@ -168,10 +163,7 @@ async function runProjectSearch(query) {
   }
 }
 
-function scheduleSearch(query) {
-  if (searchTimer) clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { searchTimer = null; runProjectSearch(query); }, SEARCH_DEBOUNCE);
-}
+const scheduleSearch = debounce(runProjectSearch, SEARCH_DEBOUNCE);
 
 export function openProjectSearch() {
   if (!state.currentFolder) return;
@@ -197,7 +189,7 @@ export function closeProjectSearch() {
   }
   // Reset the panel so a later reopen (e.g. after closing/reopening a
   // folder) starts clean rather than showing a stale query + results.
-  if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+  scheduleSearch.cancel();
   searchSeq++; // cancel any in-flight search
   if (sidebarSearchInput) (sidebarSearchInput as HTMLInputElement).value = '';
   if (sidebarSearchClearBtn) sidebarSearchClearBtn.classList.add('hidden');
@@ -232,7 +224,7 @@ if (sidebarSearchClearBtn) {
   sidebarSearchClearBtn.addEventListener('click', () => {
     (sidebarSearchInput as HTMLInputElement).value = '';
     sidebarSearchClearBtn.classList.add('hidden');
-    if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; }
+    scheduleSearch.cancel();
     searchSeq++; // cancel any in-flight search
     sidebarSearchResultsEl.innerHTML = '';
     sidebarSearchInput.focus();
