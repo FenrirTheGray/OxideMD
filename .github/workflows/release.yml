@@ -166,10 +166,9 @@ jobs:
       # released version, with real checksums. The default GITHUB_TOKEN can't
       # push to main (GitHub bars the Actions bot from bypassing the branch's
       # pull-request rule), so mint a short-lived token from a GitHub App that
-      # IS listed in main's "allow specified actors to bypass required pull
-      # requests". Runs last so a failure here never strips the release of its
-      # artifacts. If the App isn't configured (no PKGBUILD_SYNC_APP_ID) both
-      # steps skip and the release still succeeds.
+      # is in main's ruleset bypass list. Runs last so a failure here never
+      # strips the release of its artifacts. If the App isn't configured (no
+      # PKGBUILD_SYNC_APP_ID) both steps skip and the release still succeeds.
       - name: Generate PKGBUILD-sync token
         id: sync-token
         if: env.APP_ID != ''
