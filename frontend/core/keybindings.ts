@@ -28,7 +28,7 @@ export { parseAccel, formatAccelParts, canonicalizeAccel };
 // Modifier-only keys — during capture, a keydown with one of these as the
 // key should be ignored until the user presses a real key.
 export const MODIFIER_ONLY_KEYS = new Set([
-  'Control', 'Shift', 'Alt', 'Meta', 'OS', 'Hyper', 'Super',
+  'Control', 'Shift', 'Alt', 'Meta', 'Hyper', 'Super',
 ]);
 
 // ── Matching against KeyboardEvent ─────────────────────────────────────────
