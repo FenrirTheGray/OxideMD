@@ -4,6 +4,13 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.8.1] - 2026-06-24
+
+### Changed
+
+- The Settings, unsaved-changes, and error dialogs now use the platform's native modal dialog, for more reliable focus trapping, background inerting, and Escape handling across the supported webviews
+- Internal cleanup with no behavior change: shared helpers (HTML escaping, custom-select keyboard handling, path and timing utilities) are now deduplicated into single copies, dead code was removed, and the syntax highlighter holds just the one theme it renders with
+
 ## [4.8.0] - 2026-06-12
 
 ### Fixed
