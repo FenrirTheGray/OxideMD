@@ -1,5 +1,6 @@
 use crate::config::{
-    add_recent_file, fonts_dir, load_config, save_config, themes_dir, Config, MD_EXTS_DEFAULT,
+    add_recent_file, drafts_dir, fonts_dir, load_config, save_config, themes_dir, Config,
+    MD_EXTS_DEFAULT,
 };
 use crate::markdown;
 use base64::Engine;
@@ -61,11 +62,36 @@ pub async fn render_preview(content: String, path: String) -> Result<String, Str
     .map_err(|e| e.to_string())?
 }
 
+/// Writes `content` to `path` atomically: stream it into a temp file in the
+/// *same* directory, `fsync`, then `rename` over the target. Same-dir keeps
+/// the rename on one filesystem so it's a genuine atomic replace — a crash
+/// mid-write can never leave a half-written (torn) file on disk, which for a
+/// note editor is the user's source of truth. On Unix the target's existing
+/// permission bits are copied onto the temp before persisting so an atomic
+/// replace doesn't silently reset the file's mode.
+fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
+    let dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(dir).map_err(|e| e.to_string())?;
+    tmp.write_all(content.as_bytes())
+        .map_err(|e| e.to_string())?;
+    tmp.as_file().sync_all().map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    if let Ok(meta) = fs::metadata(path) {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = tmp
+            .as_file()
+            .set_permissions(std::fs::Permissions::from_mode(meta.permissions().mode()));
+    }
+    tmp.persist(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn save_file(path: String, content: String) -> Result<OpenResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let raw = PathBuf::from(&path);
-        fs::write(&raw, &content).map_err(|e| e.to_string())?;
+        atomic_write(&raw, &content)?;
         let canonical = fs::canonicalize(&raw).unwrap_or(raw);
         Ok(build_open_result(canonical, content))
     })
@@ -199,7 +225,7 @@ pub async fn save_new_file(
     tauri::async_runtime::spawn_blocking(move || {
         let exts = md_extensions(&load_config());
         let path = ensure_md_extension(PathBuf::from(&chosen), &exts);
-        fs::write(&path, &content).map_err(|e| e.to_string())?;
+        atomic_write(&path, &content)?;
         let canonical = fs::canonicalize(&path).unwrap_or(path);
         Ok(Some(build_open_result(canonical, content)))
     })
@@ -814,6 +840,97 @@ pub async fn file_sha256(path: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+// ── Per-file edit drafts (crash recovery) ───────────────────────────────
+// Drafts live as JSON files under the OS cache dir (see `drafts_dir`), one
+// per source file, named by the SHA-256 of the absolute path so any path
+// (spaces, unicode, length) maps to a safe filename. This replaces the old
+// localStorage store: no ~5 MB browser quota, so a large note's draft always
+// fits and never evicts another file's draft. The frontend `draft-store.ts`
+// drives these; the in-memory tab buffer stays authoritative, so a failed
+// draft write only weakens crash recovery, never loses live edits.
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct DraftPayload {
+    pub content: String,
+    #[serde(rename = "savedAt")]
+    pub saved_at: u64,
+    #[serde(rename = "diskHashAtWrite")]
+    pub disk_hash_at_write: Option<String>,
+}
+
+/// SHA-256 hex of a source path, used as the draft's filename stem.
+fn draft_key(path: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(path.as_bytes());
+    let digest = h.finalize();
+    let mut out = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
+}
+
+fn draft_file(path: &str) -> Result<PathBuf, String> {
+    let dir = drafts_dir().ok_or("no drafts directory available")?;
+    Ok(dir.join(format!("{}.json", draft_key(path))))
+}
+
+/// Persist a draft for `path`. Written atomically so a crash mid-write can't
+/// corrupt the recovery file.
+#[tauri::command]
+pub async fn write_draft(
+    path: String,
+    content: String,
+    disk_hash: Option<String>,
+    saved_at: u64,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = drafts_dir().ok_or("no drafts directory available")?;
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let payload = DraftPayload {
+            content,
+            saved_at,
+            disk_hash_at_write: disk_hash,
+        };
+        let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+        atomic_write(&dir.join(format!("{}.json", draft_key(&path))), &json)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Read the draft for `path`, or `None` if there isn't one (or it's
+/// unreadable/corrupt — a bad draft should never block opening the file).
+#[tauri::command]
+pub async fn read_draft(path: String) -> Result<Option<DraftPayload>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = draft_file(&path)?;
+        match fs::read_to_string(&file) {
+            Ok(s) => Ok(serde_json::from_str::<DraftPayload>(&s).ok()),
+            Err(_) => Ok(None),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Delete the draft for `path` (after a successful save or explicit discard).
+/// A missing file is success — the end state is "no draft".
+#[tauri::command]
+pub async fn clear_draft(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = draft_file(&path)?;
+        match fs::remove_file(&file) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 pub struct PastedImage {
     pub absolute_path: String,
@@ -839,12 +956,11 @@ pub async fn write_pasted_image(
         let assets = parent.join("assets");
         fs::create_dir_all(&assets).map_err(|e| format!("Failed to create assets dir: {e}"))?;
 
+        // Share the drag-drop allow-list so paste and drop accept exactly the
+        // same formats (previously paste rejected avif/ico/tif/tiff that drop
+        // allowed).
         let ext = extension.trim_start_matches('.').to_lowercase();
-        let allowed = matches!(
-            ext.as_str(),
-            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp"
-        );
-        if !allowed {
+        if !DROP_IMAGE_EXTS.contains(&ext.as_str()) {
             return Err(format!("Unsupported image extension: {ext}"));
         }
 
@@ -852,12 +968,20 @@ pub async fn write_pasted_image(
             .decode(base64_data.as_bytes())
             .map_err(|e| format!("Invalid base64: {e}"))?;
 
+        // `paste-<millis>` as the stem, but routed through the same
+        // collision-safe helper the drop path uses so two pastes in the same
+        // millisecond (or a stepped-back clock) get `-1`/`-2` rather than
+        // clobbering each other.
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
-        let filename = format!("paste-{}.{}", stamp, ext);
-        let abs = assets.join(&filename);
+        let abs = unique_asset_path(&assets, &format!("paste-{stamp}"), &ext);
+        let filename = abs
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("image")
+            .to_string();
         fs::write(&abs, &bytes).map_err(|e| format!("Failed to write image: {e}"))?;
 
         let canonical = fs::canonicalize(&abs).unwrap_or(abs);

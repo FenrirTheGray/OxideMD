@@ -119,15 +119,17 @@ export const ACTIONS = [
   { id: 'closeFolder',   category: 'File', label: 'Close folder',     defaultAccel: 'Mod+Shift+W' },
   { id: 'searchInFolder',category: 'File', label: 'Search in folder', defaultAccel: 'Mod+Shift+F' },
   { id: 'save',          category: 'File', label: 'Save file',        defaultAccel: 'Mod+S' },
+  { id: 'saveNoFormat',  category: 'File', label: 'Save without formatting', defaultAccel: 'Mod+Shift+S' },
   { id: 'reload',        category: 'File', label: 'Reload file',      defaultAccel: 'Mod+R' },
   { id: 'print',         category: 'File', label: 'Print to PDF',     defaultAccel: 'Mod+P' },
   { id: 'exportHtml',    category: 'File', label: 'Export as HTML…', defaultAccel: 'Mod+Shift+E' },
 
   { id: 'toggleEdit',    category: 'View', label: 'Toggle edit mode', defaultAccel: 'Mod+E' },
   { id: 'cycleSplitMode',category: 'View', label: 'Cycle split layout', defaultAccel: 'Mod+\\' },
-  // Single Mod+F binding for both contexts. The handler in app.js asks
-  // editor.js whether the CM6 surface has focus and routes to its
-  // built-in find/replace panel; otherwise it opens the read-mode bar.
+  // Single Mod+F binding for both contexts. The unified #search-bar
+  // (features/search.ts) self-routes on isEditing(): in edit mode it drives
+  // CodeMirror's SearchQuery, otherwise it searches the rendered read view.
+  // CM6's own find panel is never opened (searchKeymap is omitted in editor.ts).
   { id: 'toggleSearch',  category: 'View', label: 'Search',           defaultAccel: 'Mod+F' },
   { id: 'zoomIn',        category: 'View', label: 'Zoom in',
     // Mod+Plus: numpad; Mod+=: US-layout unshifted; Mod+Shift+Plus: the

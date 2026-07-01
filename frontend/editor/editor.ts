@@ -21,8 +21,8 @@ import {
   setLoading, clearStatus, applyZoom,
 } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
-import { updateCounts } from "../ui/counts.ts";
-import { promptDiscardChanges } from "../ui/confirm.ts";
+import { updateCounts, updateCountsFrom, countWords } from "../ui/counts.ts";
+import { promptDiscardChanges, promptOverwriteChanged } from "../ui/confirm.ts";
 import { clearReveal, highlightMatchIn } from "../ui/reveal.ts";
 import { applyFormat } from "./editor-format.ts";
 import { registerHandler, dispatchKey } from "../core/keybindings.ts";
@@ -35,7 +35,7 @@ import { formatMarkdownBuffer } from "../lib/md-table.ts";
 import { debounce } from "../lib/timing.ts";
 
 import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemirror/view';
-import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
+import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder, Compartment } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
@@ -44,10 +44,21 @@ import {
   search, SearchQuery, setSearchQuery, getSearchQuery,
   findNext, findPrevious, replaceNext, replaceAll,
 } from '@codemirror/search';
+import { Idiomorph } from 'idiomorph';
+import { nextSnippetField, prevSnippetField, clearSnippet, hasNextSnippetField, hasPrevSnippetField } from '@codemirror/autocomplete';
 
 // Module-level handle to the current EditorView. The CM6 scroller
 // (view.scrollDOM) is the actual scrolling element, not editor-pane.
 let editorView = null;
+
+// Compartments for the three editor settings that used to be baked into the
+// view at build time (so a toggle only took effect on the next full remount).
+// Wrapping them lets reconfigureEditorSettings() apply a Settings change to
+// the live editor while preserving undo history and selection. Reused across
+// mounts — only one view exists at a time.
+const wrapCompartment = new Compartment();
+const gutterCompartment = new Compartment();
+const attrsCompartment = new Compartment();
 
 // Exposed so other modules (tabs.js, contextmenu.js) can read the live
 // buffer and scroll position without poking at the DOM.
@@ -57,6 +68,14 @@ export function getEditorValue() {
 }
 export function getEditorScrollTop() {
   return editorView ? editorView.scrollDOM.scrollTop : 0;
+}
+export function getEditorSelectionHead() {
+  return editorView ? editorView.state.selection.main.head : 0;
+}
+// The live CM EditorState — snapshotted per tab so switching away and back
+// restores undo history + selection instead of rebuilding from the string.
+export function getEditorState() {
+  return editorView ? editorView.state : undefined;
 }
 
 // ── Split layout (per-tab) ─────────────────────────────────────────────
@@ -92,23 +111,62 @@ function applySplitToTab(tab) {
   applySplitMode(tab.splitMode || 'split', false);
 }
 
-// Edit-mode counts refresh, debounced: materializing the document string
-// and scanning it for words is O(doc) — too heavy to run on every
-// keystroke and cursor movement of a large file. CM6 states are immutable
-// snapshots, so a trailing-edge fire against an already-replaced state is
-// merely stale, never wrong-document: mount/unmount cancel any pending
-// fire before the active tab can change underneath it.
+// Incremental line/word/char counts held in the editor state. Chars and
+// lines are O(1) from the doc; word count is maintained by recomputing only
+// the line-span each change touched (a `\S+` word never crosses a newline,
+// so a line's word count is self-contained — recomputing just the touched
+// lines and applying the delta is exact). This replaces the old
+// doc.toString()+full-rescan on every debounced fire, which was O(doc) per
+// keystroke on large files.
+function docCounts(doc) {
+  return {
+    lines: doc.length === 0 ? 0 : doc.lines,
+    words: countWords(doc.toString()),
+    chars: doc.length,
+  };
+}
+const countField = StateField.define({
+  create(state) { return docCounts(state.doc); },
+  update(value, tr) {
+    if (!tr.docChanged) return value;
+    let minA = Infinity, maxA = -1, minB = Infinity, maxB = -1;
+    tr.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
+      if (fromA < minA) minA = fromA;
+      if (toA > maxA) maxA = toA;
+      if (fromB < minB) minB = fromB;
+      if (toB > maxB) maxB = toB;
+    });
+    let words = value.words;
+    if (maxA >= 0) {
+      const oldDoc = tr.startState.doc, newDoc = tr.state.doc;
+      const oldWords = countWords(
+        oldDoc.sliceString(oldDoc.lineAt(minA).from, oldDoc.lineAt(maxA).to));
+      const newWords = countWords(
+        newDoc.sliceString(newDoc.lineAt(minB).from, newDoc.lineAt(maxB).to));
+      words += newWords - oldWords;
+    }
+    const doc = tr.state.doc;
+    return { lines: doc.length === 0 ? 0 : doc.lines, words, chars: doc.length };
+  },
+});
+
+// Edit-mode counts refresh, debounced off the keystroke path. Reads the
+// incrementally-maintained countField (no full rescan) and counts the small
+// selection string on demand. CM6 states are immutable snapshots, so a
+// trailing-edge fire against an already-replaced state is merely stale,
+// never wrong-document; mount/unmount cancel any pending fire before the
+// active tab can change underneath it.
 const debouncedEditorCounts = debounce((cmState) => {
   const sel = cmState.selection.main;
   const selectionText = sel.empty ? '' : cmState.sliceDoc(sel.from, sel.to);
-  updateCounts(cmState.doc.toString(), selectionText);
+  updateCountsFrom(cmState.field(countField), selectionText);
 }, 100);
 
 // Outline refresh re-parses the whole buffer and rebuilds the sidebar
 // DOM via innerHTML; debounce it off the keystroke path. Mode switches
 // and tab switches still call refreshOutline() directly for an instant
 // repaint.
-const debouncedOutlineRefresh = debounce(refreshOutline, 200);
+const debouncedOutlineRefresh = debounce(() => refreshOutline({ idle: true }), 200);
 
 // ── Smart list / quote continuation on Enter ─────────────────────────
 // When the cursor is at the end of a list-item or blockquote line,
@@ -184,8 +242,16 @@ function smartEnter(view) {
   return false;
 }
 
+// Shift+Enter always inserts a plain newline, bypassing marker continuation
+// — a one-key opt-out of the smart list/quote behavior (GitHub-style).
+function plainNewline(view) {
+  view.dispatch(view.state.replaceSelection('\n'), { scrollIntoView: true, userEvent: 'input' });
+  return true;
+}
+
 const smartListKeymap = Prec.high(keymap.of([
   { key: 'Enter', run: smartEnter },
+  { key: 'Shift-Enter', run: plainNewline },
 ]));
 
 // ── Search-result reveal highlight (editor) ──────────────────────────
@@ -401,24 +467,52 @@ function buildView(tab) {
     // through to the global toggleSearch action that opens our bar instead.
     search({ top: true }),
     oxideSearchHighlighter,
+    // Snippet field navigation (link/image inserts use snippet tab-stops).
+    // Each command is a no-op returning false when no field is active, so
+    // these bindings are inert otherwise. The capture-phase handler below
+    // defers Tab to this keymap while a field is active so indent doesn't
+    // eat it.
+    Prec.high(keymap.of([
+      { key: 'Tab', run: nextSnippetField, shift: prevSnippetField },
+      { key: 'Escape', run: clearSnippet },
+    ])),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     markdown({ extensions: [oxideMarkdownExt] }),
     syntaxHighlighting(oxideHighlightStyle),
     revealHighlightField,
-    EditorView.contentAttributes.of({
+    countField,
+    // These three are wrapped in Compartments so a Settings change can
+    // reconfigure them on the live editor (see reconfigureEditorSettings)
+    // without destroying the view — preserving undo history and selection.
+    attrsCompartment.of(EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab.title}`,
       'spellcheck': spellCheck ? 'true' : 'false',
-    }),
+    })),
+    wrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
+    gutterCompartment.of(showLineNumbers ? lineNumbers() : []),
     oxideCmTheme,
     updateListener,
   ];
-  if (wordWrap) baseExtensions.push(EditorView.lineWrapping);
-  if (showLineNumbers) baseExtensions.push(lineNumbers());
 
-  const editorState = EditorState.create({
-    doc: tab.raw ?? '',
-    extensions: baseExtensions,
-  });
+  // Restore the tab's full CM state (undo history + selection) if we parked
+  // one on switch/exit; otherwise build fresh from the string buffer. The
+  // fresh path seeds the caret from tab.editorSelection (clamped to the
+  // buffer, which may have shrunk on discard/reload) so it doesn't drop to
+  // offset 0. Reload / draft recovery clear tab.editorState so a stale state
+  // can't override newer disk content.
+  const restored = tab.editorState;
+  let editorState;
+  if (restored) {
+    editorState = restored;
+  } else {
+    const doc = tab.raw ?? '';
+    const anchor = Math.min(tab.editorSelection ?? 0, doc.length);
+    editorState = EditorState.create({
+      doc,
+      selection: EditorSelection.cursor(anchor),
+      extensions: baseExtensions,
+    });
+  }
 
   const view = new EditorView({ state: editorState });
   view.dom.classList.add('md-editor');
@@ -510,10 +604,22 @@ export function clearEditorDropHint() {
 // the document's assets/ folder (like paste) and insert a markdown image
 // reference at the drop point. Returns true when the drop was over the editor
 // and consumed here, so the caller skips its open-file fallback.
+let lastDropKey = '';
+let lastDropAt = 0;
+
 export async function dropImagesIntoEditor(paths, x, y) {
   if (!pointInEditor(x, y)) return false;
   const images = paths.filter((p) => DROP_IMAGE_EXTS.has(pathExtension(p)));
   if (!images.length) return false; // non-images fall through (e.g. a .md)
+
+  // Tauri v2 can fire a single file-drop twice (tauri#14134). Ignore an
+  // identical payload (same paths + drop point) landing within a short
+  // window so the image isn't imported and inserted twice.
+  const key = `${x},${y}|${images.join('|')}`;
+  const now = Date.now();
+  if (key === lastDropKey && now - lastDropAt < 600) return true;
+  lastDropKey = key;
+  lastDropAt = now;
 
   const tab = activeTab();
   if (!tab?.path) {
@@ -572,6 +678,10 @@ export function mountEditor(tab) {
   const view = buildView(tab);
   editorPane.appendChild(view.dom);
   editorView = view;
+  // Sync the setting compartments to the current config — a no-op for a
+  // freshly-built state, but corrects a restored state whose compartments
+  // were parked under a since-changed Settings value.
+  applyEditorSettings(view, state.config);
 
   // Restore this tab's split layout (frac + mode) before the panes paint.
   applySplitToTab(tab);
@@ -599,6 +709,31 @@ function unmountEditor() {
   previewPane.innerHTML = '';
 }
 
+// Set the three editor-setting compartments on `view` to match `cfg` in one
+// dispatch. Idempotent — reconfiguring to the same value is a cheap no-op —
+// so it doubles as the "resync a restored state's stale compartments" call
+// in buildView and the live-toggle path from Settings.
+function applyEditorSettings(view, cfg) {
+  if (!view) return;
+  const tab = activeTab();
+  view.dispatch({ effects: [
+    wrapCompartment.reconfigure((cfg?.editor_word_wrap !== false) ? EditorView.lineWrapping : []),
+    gutterCompartment.reconfigure(cfg?.editor_line_numbers ? lineNumbers() : []),
+    attrsCompartment.reconfigure(EditorView.contentAttributes.of({
+      'aria-label': `Edit ${tab?.title ?? ''}`,
+      'spellcheck': cfg?.editor_spell_check ? 'true' : 'false',
+    })),
+  ] });
+}
+
+// Apply word-wrap / line-number / spell-check changes to the live editor via
+// compartment reconfiguration instead of a destructive remount, so a Settings
+// toggle takes effect immediately without losing undo history or selection.
+// No-op when no editor is mounted. Called from settings save.
+export function reconfigureEditorSettings(_prev, next) {
+  applyEditorSettings(editorView, next ?? state.config);
+}
+
 export function setPreviewHtml(html) {
   // Drop any prior reveal first: the patch may detach its ranges and
   // the block class, so clear them explicitly to keep the registry tidy.
@@ -615,49 +750,22 @@ export function setPreviewHtml(html) {
   });
 }
 
-// Patch the preview's top-level nodes in place instead of innerHTML-
-// swapping the whole pane. A full swap re-parses and re-lays-out the
-// entire document and — worst on weak machines — re-creates every <img>,
-// re-fetching and re-decoding it through the asset protocol on every
-// debounced render while the user types. Successive renders are
-// block-stable outside the edited region, so trim the matching prefix
-// and suffix (isEqualNode is a native deep compare) and replace only the
-// middle: typing in one paragraph costs one block, not the document.
+// Morph the preview's children to match the new render instead of an
+// innerHTML swap. A full swap re-parses and re-lays-out the whole document
+// and — worst on weak machines — re-creates every <img>, re-fetching and
+// re-decoding it through the asset protocol on every debounced render while
+// the user types. idiomorph matches nodes by structure + id (headings carry
+// ids) and mutates in place, so an unchanged block — decoded image bitmap
+// included — survives untouched, and it handles moved/inserted blocks the
+// old prefix/suffix scan couldn't (e.g. inserting a paragraph near the top).
 function patchPreviewDom(container: HTMLElement, html: string) {
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
-  // Hydrate before diffing so old (already-hydrated) and new nodes are
-  // compared in the same form. convertFileSrc is deterministic, so an
-  // unchanged image block compares equal and its element — decoded
-  // bitmap included — survives the patch untouched.
+  // Hydrate before morphing so old (already-hydrated) and new <img> nodes
+  // compare equal — convertFileSrc is deterministic, so an unchanged image
+  // is left in place with its decoded bitmap intact.
   hydrateImages(tpl.content);
-
-  const oldNodes = Array.from(container.childNodes);
-  const newNodes = Array.from(tpl.content.childNodes);
-
-  let start = 0;
-  const maxStart = Math.min(oldNodes.length, newNodes.length);
-  while (start < maxStart && oldNodes[start].isEqualNode(newNodes[start])) start++;
-
-  let endOld = oldNodes.length - 1;
-  let endNew = newNodes.length - 1;
-  while (endOld >= start && endNew >= start
-         && oldNodes[endOld].isEqualNode(newNodes[endNew])) {
-    endOld--;
-    endNew--;
-  }
-
-  // Identical render — keep the live DOM (scroll, selection, images) as is.
-  if (start > endOld && start > endNew) return;
-
-  // First node of the matched suffix, or null to append at the end.
-  const anchor = endOld + 1 < oldNodes.length ? oldNodes[endOld + 1] : null;
-  for (let i = start; i <= endOld; i++) container.removeChild(oldNodes[i]);
-  if (start <= endNew) {
-    const frag = document.createDocumentFragment();
-    for (let i = start; i <= endNew; i++) frag.appendChild(newNodes[i]);
-    container.insertBefore(frag, anchor);
-  }
+  Idiomorph.morph(container, tpl.content, { morphStyle: 'innerHTML' });
 }
 
 // ── Draft autosave (per-file localStorage) ───────────────────────────
@@ -699,21 +807,24 @@ export function cancelPendingDraftWrite() {
 // buffer keeps changing while an invoke is in-flight, so we only commit
 // the HTML if this request is still the newest one when it returns.
 const PREVIEW_DEBOUNCE_MS = 200;
-// Threshold (in characters) above which we slow the preview debounce
-// to LARGE_FILE_DEBOUNCE_MS — re-rendering a 1 MB+ markdown file on
-// every keystroke saturates the IPC pipe.
-const LARGE_FILE_THRESHOLD = 200_000;
-const LARGE_FILE_DEBOUNCE_MS = 600;
+// Debounce grows continuously with document size instead of a hard cliff at
+// one threshold: re-rendering a 1 MB+ file on every keystroke saturates the
+// IPC pipe, but a 199k→201k step change felt arbitrary. Scale linearly from
+// the base up to a ceiling (~600ms is reached around 200k chars).
+const PREVIEW_DEBOUNCE_MAX_MS = 600;
 let previewTimer = null;
 let previewRenderSeq = 0;
+
+function previewDebounceForLength(len) {
+  return Math.min(PREVIEW_DEBOUNCE_MAX_MS, PREVIEW_DEBOUNCE_MS + Math.floor(len / 1000) * 2);
+}
 
 function schedulePreviewRender(delay?: number) {
   if (previewTimer) clearTimeout(previewTimer);
   let computed = delay;
   if (computed === undefined) {
     const tab = activeTab();
-    const len = (tab?.raw ?? '').length;
-    computed = len > LARGE_FILE_THRESHOLD ? LARGE_FILE_DEBOUNCE_MS : PREVIEW_DEBOUNCE_MS;
+    computed = previewDebounceForLength((tab?.raw ?? '').length);
   }
   previewTimer = setTimeout(() => {
     previewTimer = null;
@@ -788,6 +899,10 @@ export function exitEditMode({ keepHtml = true } = {}) {
   // Capture pane scroll positions so re-entering edit mode lands where
   // we left off.
   tab.editorScrollTop = editorView ? editorView.scrollDOM.scrollTop : 0;
+  tab.editorSelection = editorView ? editorView.state.selection.main.head : 0;
+  // Park the full CM state so a Ctrl+E back into this tab restores undo
+  // history + selection rather than rebuilding from the string buffer.
+  tab.editorState = editorView ? editorView.state : tab.editorState;
   tab.previewScrollTop = previewPane.scrollTop;
   tab.editing = false;
   document.body.classList.remove('editing');
@@ -843,7 +958,7 @@ async function saveUntitledTab(tab) {
   return true;
 }
 
-export async function saveActiveFile() {
+export async function saveActiveFile({ skipFormat = false } = {}) {
   const tab = activeTab();
   if (!tab || !tab.editing) return false;
   // An in-place save is a no-op when clean; an untitled tab always needs
@@ -853,7 +968,8 @@ export async function saveActiveFile() {
   // Format on save (opt-in). Swap the editor's buffer if the formatter
   // changed anything so the user sees the saved form and the dirty
   // tracking stays consistent. Applied before either save path writes.
-  if (state.config?.editor_format_on_save) {
+  // `skipFormat` (the Save-without-formatting action) bypasses it one-off.
+  if (!skipFormat && state.config?.editor_format_on_save) {
     const formatted = formatMarkdownBuffer(tab.raw ?? '');
     if (formatted !== (tab.raw ?? '')) {
       tab.raw = formatted;
@@ -867,6 +983,19 @@ export async function saveActiveFile() {
 
   // Untitled tabs have no path yet — route to the save-as flow.
   if (!tab.path) return saveUntitledTab(tab);
+
+  // If the file changed on disk since we opened/last-saved it (another tool
+  // or machine), warn before overwriting that external edit. Best-effort: a
+  // hash we can't compute doesn't block the save.
+  if (tab.diskHash) {
+    try {
+      const live = await invoke('file_sha256', { path: tab.path });
+      if (live && live !== tab.diskHash) {
+        const decision = await promptOverwriteChanged(tab);
+        if (decision !== 'save') return false;
+      }
+    } catch {}
+  }
 
   setLoading();
   try {
@@ -1119,6 +1248,12 @@ export function editorClearSearch() {
 document.addEventListener('keydown', (e) => {
   if (!(e.target instanceof Element)) return;
   if (!(e.target as HTMLElement).closest('.cm-content')) return;
+  // While a snippet field is active, let Tab/Shift-Tab reach CM6's snippet
+  // keymap to move between fields instead of routing to indent/outdent.
+  if ((e.key === 'Tab' || e.key === 'Escape') && editorView &&
+      (hasNextSnippetField(editorView.state) || hasPrevSnippetField(editorView.state))) {
+    return;
+  }
   if (dispatchKey(e, state.bindings, 'editor')) e.stopPropagation();
 }, true);
 
@@ -1151,12 +1286,17 @@ export function jumpEditorToLine(line) {
 async function cmCopy(view, sel) {
   const text = view.state.sliceDoc(sel.start, sel.end);
   if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch {}
+  try { await navigator.clipboard.writeText(text); }
+  catch { showToast('Clipboard copy failed', 'error'); }
 }
 async function cmCut(view, sel) {
   const text = view.state.sliceDoc(sel.start, sel.end);
   if (!text) return;
-  try { await navigator.clipboard.writeText(text); } catch {}
+  // Only delete once the clipboard write actually succeeds — otherwise a
+  // rejected writeText would drop the selection without it ever reaching the
+  // clipboard, i.e. silent data loss.
+  try { await navigator.clipboard.writeText(text); }
+  catch { showToast('Clipboard write failed — text not cut', 'error'); return; }
   view.dispatch({
     changes: { from: sel.start, to: sel.end, insert: '' },
     selection: EditorSelection.cursor(sel.start),
@@ -1165,7 +1305,10 @@ async function cmCut(view, sel) {
 }
 async function cmPaste(view, sel) {
   let text = '';
-  try { text = await navigator.clipboard.readText(); } catch {}
+  // Distinguish a blocked read (worth surfacing) from a genuinely empty
+  // clipboard (a legitimate no-op) by catching into an early return.
+  try { text = await navigator.clipboard.readText(); }
+  catch { showToast('Clipboard access was blocked', 'error'); return; }
   if (!text) return;
   view.dispatch({
     changes: { from: sel.start, to: sel.end, insert: text },
@@ -1178,6 +1321,15 @@ function cmSelectAll(view) {
     selection: EditorSelection.range(0, view.state.doc.length),
   });
   view.focus();
+}
+
+// Display accelerator for a rebindable action id, sourced from the live
+// keybindings so the menu label follows a user's rebind instead of a
+// hardcoded string (fixes stale Underline / missing Code labels). Returns
+// undefined when the action is unbound, so the menu simply omits the hint.
+function accelFor(id) {
+  const primary = state.bindings?.[id]?.primary;
+  return primary ? primary.replace('Mod', modKey) : undefined;
 }
 
 // Item list for a right-click on the editor surface, consumed by
@@ -1197,11 +1349,11 @@ export function buildEditorContextMenu() {
     { label: 'Paste',  action: () => cmPaste(view, sel), shortcut: `${modKey}+V` },
     { label: 'Select All', action: () => cmSelectAll(view), shortcut: `${modKey}+A` },
     { separator: true },
-    { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: `${modKey}+B` },
-    { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: `${modKey}+I` },
-    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: `${modKey}+U` },
-    { label: 'Code',   action: () => applyFormat(view, 'code') },
-    { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: `${modKey}+K` },
+    { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: accelFor('bold') },
+    { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: accelFor('italic') },
+    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: accelFor('underline') },
+    { label: 'Code',   action: () => applyFormat(view, 'code'),   shortcut: accelFor('code') },
+    { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: accelFor('link') },
   ];
 }
 
@@ -1226,6 +1378,76 @@ const suppressNextScroll = new WeakSet();
 // compositor, so the editor scroll crawls. Deferring to rAF touches
 // layout at most once per frame and keeps it off the scroll event.
 let scrollSyncFrame = 0;
+
+// Write `target` to `to.scrollTop`, marking it so the resulting scroll event
+// isn't mirrored back, with the same two-frame unmark fallback the
+// proportional path uses (a clamped write may fire no scroll event).
+function writeSyncedScroll(to, target) {
+  const toMax = to.scrollHeight - to.clientHeight;
+  if (toMax <= 0) return;
+  const clamped = Math.max(0, Math.min(toMax, target));
+  if (Math.abs(to.scrollTop - clamped) < 0.5) return;
+  suppressNextScroll.add(to);
+  to.scrollTop = clamped;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { suppressNextScroll.delete(to); });
+  });
+}
+
+// ── Source-line scroll mapping (D9) ──────────────────────────────────
+// Proportional sync drifts whenever the document has tall blocks (images,
+// tables, code) because a source line's fractional position ≠ its rendered
+// fractional position. When the renderer annotates top-level preview blocks
+// with `data-source-line`, we instead map by source line: find the two
+// mapped blocks bounding the current position and linearly interpolate.
+// Falls back to proportional when no annotations are present, so this is a
+// no-op until the renderer emits them.
+function sourceLineBlocks() {
+  const els = previewPane.querySelectorAll('[data-source-line]');
+  const out: { line: number; top: number }[] = [];
+  const base = previewPane.getBoundingClientRect().top - previewPane.scrollTop;
+  els.forEach((el) => {
+    const line = parseInt(el.getAttribute('data-source-line') ?? '', 10);
+    if (Number.isFinite(line)) out.push({ line, top: el.getBoundingClientRect().top - base });
+  });
+  return out; // document order == ascending line and ascending top
+}
+
+// Bracket `key` between the last block at/below it and the next one, and
+// return the linear interpolation of their `val`s. `pick`/`other` select
+// which field is the search key vs the interpolated output.
+function interpolateBlocks(blocks, key, pick, other) {
+  let lo = blocks[0];
+  let hi = null;
+  for (const b of blocks) {
+    if (b[pick] <= key) lo = b;
+    else { hi = b; break; }
+  }
+  if (!hi) return lo[other];
+  const span = hi[pick] - lo[pick];
+  const frac = span > 0 ? (key - lo[pick]) / span : 0;
+  return lo[other] + frac * (hi[other] - lo[other]);
+}
+
+function syncEditorToPreviewByLine(ev) {
+  const blocks = sourceLineBlocks();
+  if (!blocks.length) return false;
+  const info = ev.lineBlockAtHeight(ev.scrollDOM.scrollTop);
+  const topLine = ev.state.doc.lineAt(info.from).number;
+  writeSyncedScroll(previewPane, interpolateBlocks(blocks, topLine, 'line', 'top'));
+  return true;
+}
+
+function syncPreviewToEditorByLine(ev) {
+  const blocks = sourceLineBlocks();
+  if (!blocks.length) return false;
+  const line = interpolateBlocks(blocks, previewPane.scrollTop, 'top', 'line');
+  const lineNo = Math.max(1, Math.min(ev.state.doc.lines, Math.round(line)));
+  const top = ev.lineBlockAt(ev.state.doc.line(lineNo).from).top;
+  writeSyncedScroll(ev.scrollDOM, top);
+  return true;
+}
+
 function mirrorScroll(from, to) {
   if (suppressNextScroll.has(from)) {
     suppressNextScroll.delete(from);
@@ -1234,22 +1456,22 @@ function mirrorScroll(from, to) {
   if (scrollSyncFrame) return;
   scrollSyncFrame = requestAnimationFrame(() => {
     scrollSyncFrame = 0;
+    // Prefer source-line mapping when the renderer annotated the preview;
+    // otherwise fall back to the proportional map below.
+    const ev = editorView;
+    if (ev && previewPane.querySelector('[data-source-line]')) {
+      const done = from === ev.scrollDOM
+        ? syncEditorToPreviewByLine(ev)
+        : syncPreviewToEditorByLine(ev);
+      if (done) return;
+    }
     // Read the live positions inside the frame so a coalesced burst maps
     // from the gesture's final scrollTop, not the first event's.
     const fromMax = from.scrollHeight - from.clientHeight;
     const toMax = to.scrollHeight - to.clientHeight;
     if (fromMax <= 0 || toMax <= 0) return;
     const frac = from.scrollTop / fromMax;
-    const target = toMax * frac;
-    if (Math.abs(to.scrollTop - target) < 0.5) return;
-    suppressNextScroll.add(to);
-    to.scrollTop = target;
-    // Fallback: if the write didn't end up firing a scroll event (e.g.
-    // it clamped to the same integer we were already at), clear the
-    // mark after two frames so a real user scroll on `to` isn't eaten.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => { suppressNextScroll.delete(to); });
-    });
+    writeSyncedScroll(to, toMax * frac);
   });
 }
 if (previewPane) {

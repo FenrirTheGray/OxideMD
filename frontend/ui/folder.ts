@@ -59,6 +59,7 @@ async function flushFsChanges() {
           tab.title = result.title;
           tab.raw = result.raw ?? '';
           tab.savedRaw = tab.raw;
+          tab.editorState = undefined; // external change — drop stale CM state
           if (tab.id === state.activeTabId) {
             const scrollTop = contentScroll.scrollTop;
             renderContent(result.html);

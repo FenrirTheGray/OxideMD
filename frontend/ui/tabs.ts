@@ -127,6 +127,10 @@ export function switchToTab(id) {
       if (liveValue != null) {
         cur.raw = liveValue;
         cur.editorScrollTop = editorModule()?.getEditorScrollTop() ?? 0;
+        cur.editorSelection = editorModule()?.getEditorSelectionHead() ?? 0;
+        // Preserve the full CM state (undo history + selection) so returning
+        // to this tab restores it instead of rebuilding from the string.
+        cur.editorState = editorModule()?.getEditorState() ?? undefined;
       }
       cur.previewScrollTop = previewPane.scrollTop;
     } else {
@@ -554,7 +558,7 @@ export async function loadFile(path) {
 // promptRecoverDraft so the dialog can warn the user before they choose
 // to overwrite the newer disk content with their (older) draft.
 async function maybeOfferDraftRecovery(path, diskRaw) {
-  const draft = readDraft(path);
+  const draft = await readDraft(path);
   if (!draft) return;
   if (draft.content === diskRaw) { clearDraft(path); return; }
   const tab = tabs.find(t => t.path === path);
@@ -569,6 +573,7 @@ async function maybeOfferDraftRecovery(path, diskRaw) {
   const decision = await promptRecoverDraft(tab, draft, { conflict });
   if (decision === 'save') {
     tab.raw = draft.content;
+    tab.editorState = undefined; // buffer replaced — rebuild CM state from it
     await (await loadEditorModule()).enterEditMode();
   } else if (decision === 'discard') {
     clearDraft(path);
@@ -648,6 +653,7 @@ export async function reloadFile() {
     tab.title = result.title;
     tab.raw = result.raw ?? '';
     tab.savedRaw = tab.raw;
+    tab.editorState = undefined; // disk content changed — drop stale CM state
     applyActiveTab();
     renderTabBar();
   } catch (e) {

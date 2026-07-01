@@ -1084,6 +1084,9 @@ async function saveSettings() {
   // emits inert remote-image placeholders); flipping it just re-hydrates
   // the visible view to load or drop the live srcs.
   const prevLoadRemoteImages = state.config.load_remote_images;
+  // Captured to live-reconfigure the mounted editor's word-wrap / line-number
+  // / spell-check compartments without a destructive remount.
+  const prevConfig = state.config;
   const newConfig = buildCandidateConfig();
   setLoading();
   try {
@@ -1095,6 +1098,9 @@ async function saveSettings() {
     state.bindings = effectiveBindings(newConfig.keybindings);
     renderShortcutsUI();
     applyConfig(state.config);
+    // Live-apply editor word-wrap / line-numbers / spell-check to a mounted
+    // editor via compartment reconfiguration (no-op if none is mounted).
+    editorModule()?.reconfigureEditorSettings?.(prevConfig, newConfig);
     // Re-paint the welcome screen's recent-files panel so the toggle
     // takes effect immediately without needing to reopen the window.
     applyRecentFiles(state.recentFiles);
