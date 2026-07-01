@@ -67,8 +67,34 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
 
     let parser = Parser::new_ext(source, options);
 
+    // Source-line map (D9): byte offset -> 1-based line, so each top-level
+    // rendered block can carry `data-source-line` for editor↔preview scroll
+    // sync. Only depth-0 blocks are annotated; `block_depth` (below) tracks
+    // nesting so a paragraph inside a list/quote isn't tagged as top-level.
+    let line_starts: Vec<usize> = std::iter::once(0)
+        .chain(source.match_indices('\n').map(|(i, _)| i + 1))
+        .collect();
+    let line_of = |off: usize| -> usize {
+        match line_starts.binary_search(&off) {
+            Ok(i) => i + 1,
+            Err(i) => i.max(1),
+        }
+    };
+    let data_line = |depth: usize, line: usize| -> String {
+        if depth == 0 {
+            format!(" data-source-line=\"{line}\"")
+        } else {
+            String::new()
+        }
+    };
+
     let mut html = String::new();
     let mut used_heading_ids: HashSet<String> = HashSet::new();
+    // Block nesting depth and the source line captured at the start of a
+    // heading / code block (their tags are emitted at End via split_off).
+    let mut block_depth: usize = 0;
+    let mut heading_src_line: usize = 0;
+    let mut code_src_line: usize = 0;
 
     // State
     let mut in_code_block = false;
@@ -110,13 +136,14 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     // started at).
     let mut footnote_def: Option<(usize, usize)> = None;
 
-    for event in parser {
+    for (event, range) in parser.into_offset_iter() {
         match event {
             // ── Blocks ──────────────────────────────────────────────────────
             Event::Start(Tag::Heading { level, id, .. }) => {
                 current_heading = Some(level);
                 heading_start = html.len();
                 heading_slug_buf.clear();
+                heading_src_line = line_of(range.start);
                 // An explicit `{#id}` attribute, when present, becomes the
                 // heading's `id` instead of the auto-generated slug.
                 heading_explicit_id = id.map(|s| s.to_string());
@@ -153,20 +180,40 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                         n += 1;
                     }
                 };
-                html.push_str(&format!("<{} id=\"{}\">{}</{}>", tag, id, content, tag));
+                html.push_str(&format!(
+                    "<{} id=\"{}\"{}>{}</{}>",
+                    tag,
+                    id,
+                    data_line(block_depth, heading_src_line),
+                    content,
+                    tag
+                ));
                 heading_slug_buf.clear();
                 current_heading = None;
             }
 
-            Event::Start(Tag::Paragraph) => html.push_str("<p>"),
+            Event::Start(Tag::Paragraph) => html.push_str(&format!(
+                "<p{}>",
+                data_line(block_depth, line_of(range.start))
+            )),
             Event::End(TagEnd::Paragraph) => html.push_str("</p>\n"),
 
-            Event::Start(Tag::BlockQuote(_)) => html.push_str("<blockquote>"),
-            Event::End(TagEnd::BlockQuote(_)) => html.push_str("</blockquote>\n"),
+            Event::Start(Tag::BlockQuote(_)) => {
+                html.push_str(&format!(
+                    "<blockquote{}>",
+                    data_line(block_depth, line_of(range.start))
+                ));
+                block_depth += 1;
+            }
+            Event::End(TagEnd::BlockQuote(_)) => {
+                block_depth = block_depth.saturating_sub(1);
+                html.push_str("</blockquote>\n");
+            }
 
             Event::Start(Tag::CodeBlock(kind)) => {
                 in_code_block = true;
                 code_buf.clear();
+                code_src_line = line_of(range.start);
                 code_lang = match kind {
                     CodeBlockKind::Fenced(lang) => lang.to_string(),
                     CodeBlockKind::Indented => String::new(),
@@ -199,18 +246,19 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     .replace('\n', "&#10;")
                     .replace('\r', "&#13;");
                 html.push_str(&format!(
-                    "<div class=\"codeblock\" data-code=\"{}\">{}<button type=\"button\" class=\"codeblock-copy\" aria-label=\"Copy code\" title=\"Copy code\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg></button><pre><code{}>{}</code></pre></div>\n",
-                    raw_attr, lang_label, lang_class, highlighted
+                    "<div class=\"codeblock\" data-code=\"{}\"{}>{}<button type=\"button\" class=\"codeblock-copy\" aria-label=\"Copy code\" title=\"Copy code\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"9\" y=\"9\" width=\"12\" height=\"12\" rx=\"2\"/><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"/></svg></button><pre><code{}>{}</code></pre></div>\n",
+                    raw_attr, data_line(block_depth, code_src_line), lang_label, lang_class, highlighted
                 ));
                 code_buf.clear();
                 code_lang.clear();
             }
 
             Event::Start(Tag::List(start)) => {
+                let dl = data_line(block_depth, line_of(range.start));
                 if let Some(n) = start {
-                    html.push_str(&format!("<ol start=\"{}\">", n));
+                    html.push_str(&format!("<ol start=\"{}\"{}>", n, dl));
                 } else {
-                    html.push_str("<ul>");
+                    html.push_str(&format!("<ul{}>", dl));
                 }
             }
             Event::End(TagEnd::List(ordered)) => {
@@ -220,8 +268,16 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     html.push_str("</ul>\n");
                 }
             }
-            Event::Start(Tag::Item) => html.push_str("<li>"),
-            Event::End(TagEnd::Item) => html.push_str("</li>\n"),
+            // A list item holds blocks, so bump the depth while inside one so
+            // its paragraphs aren't annotated as top-level.
+            Event::Start(Tag::Item) => {
+                html.push_str("<li>");
+                block_depth += 1;
+            }
+            Event::End(TagEnd::Item) => {
+                block_depth = block_depth.saturating_sub(1);
+                html.push_str("</li>\n");
+            }
 
             Event::TaskListMarker(checked) => {
                 html.push_str(&format!(
@@ -238,12 +294,16 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 let next = footnote_numbers.len() + 1;
                 let num = *footnote_numbers.entry(label.to_string()).or_insert(next);
                 footnote_def = Some((num, html.len()));
+                // The definition body is split_off into the footnotes section;
+                // bump depth so its paragraphs aren't annotated as top-level.
+                block_depth += 1;
             }
             Event::End(TagEnd::FootnoteDefinition) => {
                 if let Some((num, start)) = footnote_def.take() {
                     let body = html.split_off(start);
                     footnote_defs.push((num, body));
                 }
+                block_depth = block_depth.saturating_sub(1);
             }
             Event::FootnoteReference(label) => {
                 let next = footnote_numbers.len() + 1;
@@ -257,7 +317,10 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             // ── Tables ──────────────────────────────────────────────────────
             Event::Start(Tag::Table(alignments)) => {
                 table_alignments = alignments;
-                html.push_str("<table>");
+                html.push_str(&format!(
+                    "<table{}>",
+                    data_line(block_depth, line_of(range.start))
+                ));
             }
             Event::End(TagEnd::Table) => {
                 html.push_str("</table>\n");
@@ -408,7 +471,10 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             }
             Event::HardBreak => html.push_str("<br>"),
 
-            Event::Rule => html.push_str("<hr>\n"),
+            Event::Rule => html.push_str(&format!(
+                "<hr{}>\n",
+                data_line(block_depth, line_of(range.start))
+            )),
 
             // Raw HTML in the source is rendered as literal text, not
             // executed. Passing it through unchanged is an XSS vector:
@@ -583,7 +649,7 @@ mod tests {
     #[test]
     fn render_plain_paragraph() {
         let out = render("hello world", None);
-        assert_eq!(out, "<p>hello world</p>\n");
+        assert_eq!(out, "<p data-source-line=\"1\">hello world</p>\n");
     }
 
     #[test]
@@ -615,7 +681,7 @@ mod tests {
     #[test]
     fn render_unordered_list() {
         let out = render("- one\n- two\n", None);
-        assert!(out.contains("<ul>"));
+        assert!(out.contains("<ul data-source-line=\"1\">"));
         assert!(out.contains("<li>one</li>"));
         assert!(out.contains("<li>two</li>"));
     }
@@ -623,7 +689,7 @@ mod tests {
     #[test]
     fn render_ordered_list_with_start() {
         let out = render("3. a\n4. b\n", None);
-        assert!(out.contains("<ol start=\"3\">"));
+        assert!(out.contains("<ol start=\"3\""));
     }
 
     #[test]
@@ -704,7 +770,7 @@ mod tests {
     fn render_table_with_alignment() {
         let md = "| a | b |\n|:--|--:|\n| 1 | 2 |\n";
         let out = render(md, None);
-        assert!(out.contains("<table>"));
+        assert!(out.contains("<table data-source-line=\"1\">"));
         assert!(out.contains("<thead>"));
         assert!(out.contains("style=\"text-align:left\""));
         assert!(out.contains("style=\"text-align:right\""));
@@ -713,7 +779,7 @@ mod tests {
     #[test]
     fn render_heading_assigns_id() {
         let out = render("# Hello World\n", None);
-        assert!(out.contains("<h1 id=\"hello-world\">"));
+        assert!(out.contains("<h1 id=\"hello-world\""));
         assert!(out.contains("Hello World"));
         assert!(out.contains("</h1>"));
     }
@@ -721,8 +787,8 @@ mod tests {
     #[test]
     fn render_heading_duplicate_ids_disambiguated() {
         let out = render("# Intro\n\n# Intro\n", None);
-        assert!(out.contains("<h1 id=\"intro\">"));
-        assert!(out.contains("<h1 id=\"intro-1\">"));
+        assert!(out.contains("<h1 id=\"intro\""));
+        assert!(out.contains("<h1 id=\"intro-1\""));
     }
 
     #[test]
@@ -730,10 +796,10 @@ mod tests {
         // "Step 1" slugs to "step-1"; the 2nd "Step" would naively also
         // become "step-1". Each heading must still get a unique id.
         let out = render("# Step 1\n\n# Step\n\n# Step\n", None);
-        assert!(out.contains("<h1 id=\"step-1\">"));
-        assert!(out.contains("<h1 id=\"step\">"));
+        assert!(out.contains("<h1 id=\"step-1\""));
+        assert!(out.contains("<h1 id=\"step\""));
         assert!(
-            out.contains("<h1 id=\"step-2\">"),
+            out.contains("<h1 id=\"step-2\""),
             "collision not resolved: {out}"
         );
         // The first "step-1" (from "Step 1") must not be reused by a later heading.
@@ -749,7 +815,7 @@ mod tests {
         let out = render("## **bold** x\n", None);
         // The <strong> must be INSIDE <h2>, not orphaned before it.
         assert!(
-            out.contains("<h2 id=\"bold-x\"><strong>bold</strong> x</h2>"),
+            out.contains("<h2 id=\"bold-x\" data-source-line=\"1\"><strong>bold</strong> x</h2>"),
             "unexpected output: {out}"
         );
     }
@@ -770,7 +836,7 @@ mod tests {
     fn render_heading_with_inline_code_preserves_code_inside_hn() {
         let out = render("## `code` x\n", None);
         assert!(
-            out.contains("<h2 id=\"code-x\"><code>code</code> x</h2>"),
+            out.contains("<h2 id=\"code-x\" data-source-line=\"1\"><code>code</code> x</h2>"),
             "unexpected output: {out}"
         );
     }
@@ -780,14 +846,14 @@ mod tests {
         let out = render("## ![alt](img.png) x\n", None);
         // Alt contributes to the slug; the <img> tag stays inside <h2>.
         assert!(out.contains("id=\"alt-x\""), "unexpected output: {out}");
-        assert!(out.contains("<h2 id=\"alt-x\"><img src="));
+        assert!(out.contains("<h2 id=\"alt-x\" data-source-line=\"1\"><img src="));
         assert!(out.contains("</h2>"));
     }
 
     #[test]
     fn render_heading_with_link_preserves_anchor_inside_hn() {
         let out = render("## [see](./x.md) this\n", None);
-        assert!(out.contains("<h2 id=\"see-this\">"));
+        assert!(out.contains("<h2 id=\"see-this\""));
         assert!(out.contains("<a href=\"./x.md\""));
         assert!(out.contains("see</a>"));
         assert!(out.contains("</h2>"));
@@ -796,19 +862,19 @@ mod tests {
     #[test]
     fn render_heading_with_emphasis_preserves_em_inside_hn() {
         let out = render("### *emph* rest\n", None);
-        assert!(out.contains("<h3 id=\"emph-rest\"><em>emph</em> rest</h3>"));
+        assert!(out.contains("<h3 id=\"emph-rest\" data-source-line=\"1\"><em>emph</em> rest</h3>"));
     }
 
     #[test]
     fn render_hr() {
         let out = render("---\n", None);
-        assert!(out.contains("<hr>"));
+        assert!(out.contains("<hr"));
     }
 
     #[test]
     fn render_blockquote() {
         let out = render("> quoted\n", None);
-        assert!(out.contains("<blockquote>"));
+        assert!(out.contains("<blockquote data-source-line=\"1\">"));
         assert!(out.contains("quoted"));
         assert!(out.contains("</blockquote>"));
     }
@@ -1102,7 +1168,7 @@ mod tests {
         let out = render("# Hello World {#custom}\n", None);
         // The explicit `{#id}` wins over the auto-generated slug.
         assert!(
-            out.contains("<h1 id=\"custom\">"),
+            out.contains("<h1 id=\"custom\""),
             "explicit id not used: {out}"
         );
         assert!(
@@ -1118,13 +1184,37 @@ mod tests {
         // later auto-slug that collides with it gets a `-1` suffix.
         let out = render("# A {#custom}\n\n# Custom\n", None);
         assert!(
-            out.contains("<h1 id=\"custom\">"),
+            out.contains("<h1 id=\"custom\""),
             "explicit id not used: {out}"
         );
         assert!(
-            out.contains("<h1 id=\"custom-1\">"),
+            out.contains("<h1 id=\"custom-1\""),
             "collision not disambiguated: {out}"
         );
+    }
+
+    #[test]
+    fn render_emits_source_line_on_top_level_blocks() {
+        // D9: top-level blocks carry data-source-line (1-based) for scroll
+        // sync; nested blocks (list items, blockquote bodies) do not.
+        let out = render("para\n\n## Head\n\n- item\n", None);
+        assert!(out.contains("<p data-source-line=\"1\">"), "{out}");
+        assert!(
+            out.contains("<h2 id=\"head\" data-source-line=\"3\">"),
+            "{out}"
+        );
+        assert!(out.contains("<ul data-source-line=\"5\">"), "{out}");
+        // The list item's implicit paragraph is nested, so not annotated.
+        assert!(!out.contains("<li><p"), "{out}");
+    }
+
+    #[test]
+    fn render_nested_block_has_no_source_line() {
+        // A paragraph inside a blockquote is depth>0 → no data-source-line;
+        // only the blockquote itself is annotated.
+        let out = render("> quoted paragraph\n", None);
+        assert!(out.contains("<blockquote data-source-line=\"1\">"), "{out}");
+        assert!(!out.contains("<p data-source-line"), "{out}");
     }
 
     #[test]

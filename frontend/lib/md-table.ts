@@ -67,6 +67,10 @@ const _segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter)
   : null;
 export function graphemeWidth(g) {
   if (/\p{Extended_Pictographic}/u.test(g)) return 2;
+  // A grapheme made up of only combining marks / zero-width characters
+  // occupies no column. A base+combining grapheme keeps its base's width
+  // because codePointAt(0) below reads the base character.
+  if (/^[\p{M}​‌‍⁠﻿]+$/u.test(g)) return 0;
   const cp = g.codePointAt(0);
   if (cp == null) return 1;
   if (
@@ -80,7 +84,11 @@ export function graphemeWidth(g) {
     (cp >= 0xF900 && cp <= 0xFAFF) ||
     (cp >= 0xFE30 && cp <= 0xFE4F) ||
     (cp >= 0xFF00 && cp <= 0xFF60) ||
-    (cp >= 0xFFE0 && cp <= 0xFFE6)
+    (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+    // Supplementary-plane wide ranges: Ideographic Symbols & Punctuation,
+    // and CJK Unified Ideographs Ext B–G + the compatibility supplement.
+    (cp >= 0x16FE0 && cp <= 0x16FFF) ||
+    (cp >= 0x20000 && cp <= 0x3FFFD)
   ) return 2;
   return 1;
 }
@@ -143,14 +151,20 @@ export function alignMarkdownTables(text) {
   const out = [];
   let inFence = false;
   let fenceChar = '';
+  let fenceLen = 0;
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
     const fence = line.match(/^\s*(```+|~~~+)/);
     if (fence) {
-      const ch = fence[1][0];
-      if (!inFence) { inFence = true; fenceChar = ch; }
-      else if (ch === fenceChar) { inFence = false; fenceChar = ''; }
+      const marks = fence[1];
+      const ch = marks[0];
+      // CommonMark: the closing fence must use the same character and be at
+      // least as long as the opener, so a ```` block isn't closed by ```.
+      if (!inFence) { inFence = true; fenceChar = ch; fenceLen = marks.length; }
+      else if (ch === fenceChar && marks.length >= fenceLen) {
+        inFence = false; fenceChar = ''; fenceLen = 0;
+      }
       out.push(line);
       i++;
       continue;

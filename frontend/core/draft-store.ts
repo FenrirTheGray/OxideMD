@@ -1,79 +1,62 @@
-// Per-file edit drafts persisted in localStorage so an unexpected window
-// close, reload, or crash doesn't lose unsaved keystrokes. Drafts are
-// keyed by absolute file path; the value carries the raw markdown plus a
-// savedAt timestamp used both for the recovery prompt copy and for
-// quota-eviction (oldest goes first).
+// Per-file edit drafts persisted via the Rust backend (Tauri temp/cache
+// files) so an unexpected window close, reload, or crash doesn't lose
+// unsaved keystrokes. Drafts are keyed by absolute file path; the payload
+// carries the raw markdown plus a savedAt timestamp.
 //
-// `diskHashAtWrite` records the SHA-256 of the on-disk file at the
-// moment the draft was last written. On recovery, tabs.js compares it
-// to the live on-disk hash; a mismatch means the file changed under us
-// (another tool, another machine) and we surface that to the user
-// before potentially clobbering their external edit with a stale draft.
+// Moved off localStorage (M1/M5): localStorage's ~5 MB ceiling is a poor
+// fit for a markdown editor where one note can exceed the whole budget, and
+// its synchronous writes stutter mid-typing on large files. The OS-level
+// draft store (see `drafts_dir` / write_draft/read_draft/clear_draft in
+// src-tauri) has effectively no ceiling, so the old quota-eviction dance is
+// gone, and writes happen off the UI thread.
 //
-// Lifecycle: editor.js debounces writes per input, calls clearDraft after
-// a successful save, and tabs.js prompts the user via promptRecoverDraft
-// when a draft exists for a freshly-opened file.
+// `diskHashAtWrite` records the SHA-256 of the on-disk file at the moment
+// the draft was last written. On recovery, tabs.ts compares it to the live
+// on-disk hash; a mismatch means the file changed under us (another tool,
+// another machine) and we surface that before clobbering the external edit.
+//
+// Lifecycle: editor.ts debounces writes per input, calls clearDraft after a
+// successful save, and tabs.ts prompts via promptRecoverDraft when a draft
+// exists for a freshly-opened file. Writes/clears are fire-and-forget (the
+// in-memory tab buffer stays authoritative); readDraft is awaited.
 
-const PREFIX = 'oxidemd:draft:';
-const keyFor = (path) => PREFIX + path;
+import { invoke } from "./state.ts";
 
-export function readDraft(path) {
+type Draft = { content: string; savedAt: number; diskHashAtWrite: string | null };
+
+export async function readDraft(path): Promise<Draft | null> {
   if (!path) return null;
   try {
-    const raw = localStorage.getItem(keyFor(path));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.content !== 'string') return null;
+    const r: any = await invoke("read_draft", { path });
+    if (!r || typeof r.content !== "string") return null;
     return {
-      content: parsed.content,
-      savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : Date.now(),
-      diskHashAtWrite: typeof parsed.diskHashAtWrite === 'string' ? parsed.diskHashAtWrite : null,
+      content: r.content,
+      savedAt: typeof r.savedAt === "number" ? r.savedAt : Date.now(),
+      diskHashAtWrite: typeof r.diskHashAtWrite === "string" ? r.diskHashAtWrite : null,
     };
   } catch {
     return null;
   }
 }
 
-export function writeDraft(path, content, diskHashAtWrite = null) {
+export async function writeDraft(path, content, diskHashAtWrite = null) {
   if (!path) return;
-  const payload = JSON.stringify({
-    content,
-    savedAt: Date.now(),
-    diskHashAtWrite: diskHashAtWrite || null,
-  });
   try {
-    localStorage.setItem(keyFor(path), payload);
-  } catch (e) {
-    // Quota or storage unavailable. Try once more after evicting the
-    // oldest draft; if that still fails we silently give up — the
-    // in-memory tab buffer is the user's source of truth either way.
-    if (e?.name === 'QuotaExceededError' && evictOldestDraft()) {
-      try { localStorage.setItem(keyFor(path), payload); } catch {}
-    }
+    await invoke("write_draft", {
+      path,
+      content,
+      diskHash: diskHashAtWrite || null,
+      savedAt: Date.now(),
+    });
+  } catch {
+    // Storage unavailable/failed — the in-memory tab buffer is the user's
+    // source of truth, so a missed draft only weakens crash recovery.
   }
 }
 
-export function clearDraft(path) {
+export async function clearDraft(path) {
   if (!path) return;
-  try { localStorage.removeItem(keyFor(path)); } catch {}
-}
-
-function evictOldestDraft() {
-  let oldestKey = null;
-  let oldestAt = Infinity;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key || !key.startsWith(PREFIX)) continue;
-    try {
-      const parsed = JSON.parse(localStorage.getItem(key));
-      const at = typeof parsed?.savedAt === 'number' ? parsed.savedAt : 0;
-      if (at < oldestAt) { oldestAt = at; oldestKey = key; }
-    } catch {
-      // Corrupt entry — evict it preferentially.
-      oldestKey = key;
-      break;
-    }
-  }
-  if (!oldestKey) return false;
-  try { localStorage.removeItem(oldestKey); return true; } catch { return false; }
+  try {
+    await invoke("clear_draft", { path });
+  } catch {}
 }

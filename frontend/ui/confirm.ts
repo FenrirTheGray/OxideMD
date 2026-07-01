@@ -61,6 +61,25 @@ export function promptDiscardChanges(tab) {
   return openConfirmDialog();
 }
 
+// Warn when the file changed on disk since it was opened (another tool /
+// machine) and the user is about to overwrite it with an in-app save.
+// Resolves 'save' to overwrite, 'cancel' to abort the save. Cancel is
+// primary so a stray Enter/Escape protects the external edit.
+export function promptOverwriteChanged(tab) {
+  setConfirmContents({
+    title: 'File changed on disk',
+    bodyHtml: `<span class="confirm-file-name">${escapeHtml(tab.title || 'This file')}</span> has changed on disk since you opened it. Saving now will overwrite those changes.`,
+    saveLabel: 'Overwrite',
+    cancelHidden: false,
+    saveHidden: false,
+    discardLabel: 'Discard',
+    primary: 'cancel',
+  });
+  // Reuse the two-button shape: hide Discard, keep Save(=Overwrite)+Cancel.
+  confirmDiscardBtn.hidden = true;
+  return openConfirmDialog();
+}
+
 // Confirm before the Settings "Reset defaults" button clobbers config.
 // Reuses the shared confirm overlay as a pure two-button confirm (Save
 // is hidden — there's nothing to save). The "Discard" button is

@@ -159,6 +159,13 @@ pub fn error_log_dir() -> Option<PathBuf> {
     project_dirs().map(|dirs| dirs.config_dir().join("error-log"))
 }
 
+/// Directory for per-file edit drafts (crash recovery). Lives under the OS
+/// cache dir rather than the config dir — drafts are regenerable scratch
+/// data, not user settings. The draft commands create it on demand.
+pub fn drafts_dir() -> Option<PathBuf> {
+    project_dirs().map(|dirs| dirs.cache_dir().join("drafts"))
+}
+
 pub fn load_config() -> Config {
     let path = match config_path() {
         Some(p) => p,

@@ -7,13 +7,15 @@
 		"test": "node --import tsx --test \"frontend/**/*.test.ts\""
 	},
 	"dependencies": {
+		"@codemirror/autocomplete": "^6.20.3",
 		"@codemirror/commands": "^6.10.3",
 		"@codemirror/lang-markdown": "^6.5.0",
 		"@codemirror/language": "^6.12.3",
 		"@codemirror/search": "^6.6.0",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.41.1",
-		"@resvg/resvg-js": "^2.6.2"
+		"@resvg/resvg-js": "^2.6.2",
+		"idiomorph": "^0.7.4"
 	},
 	"devDependencies": {
 		"@types/node": "^25.9.2",

@@ -153,6 +153,9 @@ body.editing #editor-split {
   cursor: col-resize;
   transition: background var(--dur-sm) var(--ease);
   user-select: none;
+  /* Claim the touch gesture so a touch-drag resizes the divider instead of
+     being pre-empted by the browser's scroll/pan. */
+  touch-action: none;
 }
 #split-divider:hover,
 #split-divider.dragging,

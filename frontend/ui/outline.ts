@@ -109,11 +109,22 @@ export function isOutlineOpen() {
 // Repaint the outline list from the active tab's current buffer. Cheap
 // enough to call on every open, tab switch, edit-mode change, and
 // (debounced) doc edit — skips entirely while the sidebar is hidden.
-export function refreshOutline() {
+export function refreshOutline(opts: { idle?: boolean } = {}) {
   if (!isOpen) return;
-  const tab = activeTab();
-  const entries = tab ? parseOutline(tab.raw ?? '') : [];
-  outlineSidebarBody.innerHTML = renderOutline(entries);
+  const paint = () => {
+    if (!isOpen) return; // may have closed during the idle wait
+    const tab = activeTab();
+    const entries = tab ? parseOutline(tab.raw ?? '') : [];
+    outlineSidebarBody.innerHTML = renderOutline(entries);
+  };
+  // The debounced edit path passes { idle:true } so the re-parse + innerHTML
+  // rebuild yields to input frames; direct callers (open, tab/mode switch)
+  // repaint immediately for a snappy response.
+  if (opts.idle && typeof requestIdleCallback === 'function') {
+    requestIdleCallback(paint, { timeout: 500 });
+  } else {
+    paint();
+  }
 }
 
 // Persist the open/closed state the way sidebar_width is persisted —

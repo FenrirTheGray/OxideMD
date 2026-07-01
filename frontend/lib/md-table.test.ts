@@ -44,6 +44,9 @@ test('visibleWidth: ASCII, CJK, and emoji count correctly', () => {
   assert.equal(visibleWidth('中文'), 4);      // 2 wide chars
   assert.equal(visibleWidth('✅'), 2);         // single-codepoint emoji
   assert.equal(visibleWidth('🛠️'), 2);        // surrogate pair + VS16
+  assert.equal(visibleWidth('𠀀'), 2);         // CJK Ext-B (astral, U+20000)
+  assert.equal(visibleWidth('é'), 1);    // base + combining acute = 1
+  assert.equal(visibleWidth('a​b'), 2);   // zero-width space adds nothing
 });
 
 test('padCell: alignment padding to a target width', () => {

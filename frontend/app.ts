@@ -481,6 +481,11 @@ registerHandler('save', (e) => {
   const tab = activeTab();
   if (tab?.editing) editorModule()?.saveActiveFile();
 });
+registerHandler('saveNoFormat', (e) => {
+  e?.preventDefault();
+  const tab = activeTab();
+  if (tab?.editing) editorModule()?.saveActiveFile({ skipFormat: true });
+});
 registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
 registerHandler('print',  (e) => { e?.preventDefault(); printActiveTab(); });
 registerHandler('exportHtml', async (e) => {
