@@ -4,6 +4,17 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.8.3] - 2026-07-02
+
+### Added
+
+- Unsaved edits are now autosaved to an on-disk draft and offered back for recovery the next time you open the file
+- Inline Markdown formatting commands: insert links and images (auto-filling the URL from the clipboard when one is present) and wrap the selection in emphasis, strong, or inline-code markers
+
+### Changed
+
+- Editor and preview scroll sync is now matched by source line — each top-level rendered block carries its originating line — so the two panes track each other more accurately
+
 ## [4.8.2] - 2026-06-24
 
 ### Fixed
