@@ -32,6 +32,7 @@ import { logError } from "../core/logger.ts";
 import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
+import { diffSplice } from "./md-transform.ts";
 import { debounce } from "../lib/timing.ts";
 
 import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemirror/view';
@@ -629,8 +630,9 @@ export async function dropImagesIntoEditor(paths, x, y) {
   }
 
   // Insert where the user dropped, falling back to the cursor position.
-  let pos = editorView.state.selection.main.from;
-  const at = editorView.posAtCoords({ x, y });
+  const view = editorView;
+  let pos = view.state.selection.main.from;
+  const at = view.posAtCoords({ x, y });
   if (at != null) pos = at;
 
   const refs = [];
@@ -646,6 +648,10 @@ export async function dropImagesIntoEditor(paths, x, y) {
     }
   }
   if (!refs.length) return true;
+  // The imports above are async — the editor may have been remounted for
+  // another tab meanwhile, and the doc may have shrunk below the drop point.
+  if (editorView !== view) return true;
+  pos = Math.min(pos, view.state.doc.length);
 
   const insertion = refs.join('\n');
   editorView.dispatch({
@@ -786,9 +792,6 @@ function scheduleDraftWrite(tab) {
   draftTimer = setTimeout(() => {
     draftTimer = null;
     if (!tab?.path) return;
-    // Don't gate on isDirty() — that returns false the moment a tab
-    // exits edit mode (Ctrl+E without saving), which would wipe the
-    // draft for a still-dirty in-memory buffer. Compare buffers directly.
     const buf = tab.raw ?? '';
     const disk = tab.savedRaw ?? '';
     if (buf !== disk) writeDraft(tab.path, buf, tab.diskHash || null);
@@ -907,7 +910,21 @@ export function exitEditMode({ keepHtml = true } = {}) {
   tab.editing = false;
   document.body.classList.remove('editing');
   unmountEditor();
-  if (keepHtml) renderContent(tab.html);
+  if (keepHtml) {
+    renderContent(tab.html);
+    // tab.html is the last *saved* render — stale when the buffer has
+    // unsaved edits. Re-render the live buffer and swap it in when it
+    // lands (unless the user already switched tabs or re-entered editing).
+    if (isDirty(tab)) {
+      invoke('render_preview', { content: tab.raw ?? '', path: tab.path ?? '' })
+        .then((html) => {
+          tab.html = html;
+          const cur = activeTab();
+          if (cur === tab && !cur.editing) renderContent(html);
+        })
+        .catch(() => {});
+    }
+  }
   // Switch the status-bar counts from the live buffer back to the tab's
   // raw source (no selection segment in read mode).
   updateCounts(tab.raw ?? '', undefined);
@@ -920,6 +937,15 @@ export function exitEditMode({ keepHtml = true } = {}) {
 // The Markdown table aligner + pre-save tidier (formatMarkdownBuffer) lives
 // in the dependency-free, unit-tested frontend/lib/md-table.js. Opt-in via
 // editor_format_on_save.
+
+// Swap the editor buffer to `next` via the smallest possible splice so the
+// selection and scroll survive (a whole-document replacement maps the caret
+// to the change boundary). No-op when the buffer already matches.
+function replaceEditorBuffer(next) {
+  if (!editorView) return;
+  const splice = diffSplice(editorView.state.doc.toString(), next);
+  if (splice) editorView.dispatch({ changes: splice, scrollIntoView: true });
+}
 
 // Save-as for an untitled tab: prompt for a destination, write the live
 // buffer, then adopt the returned path so subsequent saves go in-place.
@@ -949,6 +975,15 @@ async function saveUntitledTab(tab) {
   invoke('file_sha256', { path: tab.path })
     .then((hash) => { tab.diskHash = hash; })
     .catch(() => {});
+  // Park the live CM state so the remount below keeps undo history,
+  // selection, and scroll instead of rebuilding from the string (the first
+  // save of an untitled note used to wipe undo and jump the caret to the
+  // top). Skipped if the backend normalized the content — a parked state
+  // whose doc differs from tab.raw would diverge from the saved buffer.
+  if (editorView && editorView.state.doc.toString() === tab.raw) {
+    tab.editorState = editorView.state;
+    tab.editorScrollTop = editorView.scrollDOM.scrollTop;
+  }
   // Re-render the chrome for the now-file-backed tab: window/document
   // title, status-bar path, tree highlight, and the editor rebound to the
   // new path (so the live preview and image paste resolve correctly).
@@ -960,7 +995,10 @@ async function saveUntitledTab(tab) {
 
 export async function saveActiveFile({ skipFormat = false } = {}) {
   const tab = activeTab();
-  if (!tab || !tab.editing) return false;
+  // No `editing` gate: a tab that exited edit mode with unsaved changes is
+  // still dirty and must be savable (the close-tab prompt's "save" routes
+  // here). With no editor mounted, the buffer swap below is just a no-op.
+  if (!tab) return false;
   // An in-place save is a no-op when clean; an untitled tab always needs
   // the save-as dialog so it can choose a destination.
   if (tab.path && !isDirty(tab)) return true;
@@ -973,11 +1011,7 @@ export async function saveActiveFile({ skipFormat = false } = {}) {
     const formatted = formatMarkdownBuffer(tab.raw ?? '');
     if (formatted !== (tab.raw ?? '')) {
       tab.raw = formatted;
-      if (editorView) {
-        editorView.dispatch({
-          changes: { from: 0, to: editorView.state.doc.length, insert: formatted },
-        });
-      }
+      replaceEditorBuffer(formatted);
     }
   }
 
@@ -1039,9 +1073,7 @@ export async function discardActiveFile() {
   const restored = tab.savedRaw ?? '';
   tab.raw = restored;
   if (editorView) {
-    editorView.dispatch({
-      changes: { from: 0, to: editorView.state.doc.length, insert: restored },
-    });
+    replaceEditorBuffer(restored);
     editorView.focus();
   }
   const dirty = isDirty(tab);

@@ -34,7 +34,10 @@ export function syncToolbar() {
   const hasTab = state.activeTabId !== null;
   const tab = activeTab();
   const editing = !!tab?.editing;
-  (btnReload as HTMLButtonElement).disabled = !hasTab || editing;
+  const dirty = isDirty(tab);
+  // Reload is blocked whenever it would clobber unsaved work: while editing,
+  // and for a buffer that exited edit mode still dirty.
+  (btnReload as HTMLButtonElement).disabled = !hasTab || editing || dirty;
   // Search works in both modes now (the unified #search-bar drives CodeMirror
   // in edit mode), so it's enabled whenever a tab is open.
   (btnSearch as HTMLButtonElement).disabled = !hasTab;
@@ -73,7 +76,6 @@ export function syncToolbar() {
   (btnModeToggle as HTMLButtonElement).disabled = !canToggle;
   btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
 
-  const dirty = editing && ((tab?.raw ?? '') !== (tab?.savedRaw ?? ''));
   (btnSave as HTMLButtonElement).disabled = !dirty;
   if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
   editToolbar.hidden = !editing;
@@ -291,7 +293,6 @@ export function applyActiveTab() {
     }
   } else {
     renderContent(tab.html);
-    state.originalContent = tab.html;
     // Read mode: counts come from the tab's raw markdown source. Runs on
     // every tab switch and on exiting edit mode (both route through here).
     updateCounts(tab.raw ?? '', '');
@@ -324,7 +325,6 @@ export function showWelcome() {
   renderShortcutsUI();
   renderRecentFiles();
   contentEl.style.fontSize = '';
-  state.originalContent = '';
   appWindow.setTitle('OxideMD');
   document.title = 'OxideMD';
   setStatusFilePath('');
@@ -642,10 +642,10 @@ export function parentDir(p) {
 export async function reloadFile() {
   const tab = activeTab();
   if (!tab?.path) return;
-  // Reloading while editing would clobber unsaved edits. The toolbar
-  // already disables this button in edit mode, but guard anyway so the
-  // Ctrl+R shortcut also respects it.
-  if (tab.editing) return;
+  // Reloading would clobber unsaved edits — while editing, or after exiting
+  // edit mode with a still-dirty buffer. The toolbar already disables the
+  // button in those states, but guard anyway so Ctrl+R also respects it.
+  if (tab.editing || isDirty(tab)) return;
   setLoading();
   try {
     const result = await invoke('open_file', { path: tab.path });

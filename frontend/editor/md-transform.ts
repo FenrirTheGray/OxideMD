@@ -9,6 +9,26 @@ export const LIST_PREFIX_RE = /^(?:-\s\[[ xX]\]\s|-\s|\d+\.\s)/;
 
 const ORDERED_RE = /^(\d+)\.\s/;
 
+// Minimal single-splice diff between two versions of a buffer: shared prefix
+// and suffix are kept, only the differing middle is replaced. Used to swap
+// the editor buffer (format-on-save, discard) without a whole-document
+// replacement — CM6 then maps the selection through the small change, so the
+// caret and scroll survive. Returns null when the strings are equal.
+export function diffSplice(
+  oldStr: string, newStr: string,
+): { from: number; to: number; insert: string } | null {
+  if (oldStr === newStr) return null;
+  let from = 0;
+  const max = Math.min(oldStr.length, newStr.length);
+  while (from < max && oldStr.charCodeAt(from) === newStr.charCodeAt(from)) from++;
+  let endOld = oldStr.length, endNew = newStr.length;
+  while (endOld > from && endNew > from
+      && oldStr.charCodeAt(endOld - 1) === newStr.charCodeAt(endNew - 1)) {
+    endOld--; endNew--;
+  }
+  return { from, to: endOld, insert: newStr.slice(from, endNew) };
+}
+
 // Toggle an ordered list over a block of lines.
 //
 // Markdown ordered lists render like an HTML <ol>: only the first item's

@@ -76,7 +76,6 @@ export const state = {
   searchRanges: [],
   searchCurrent: -1,
   searchCaseSensitive: false,
-  originalContent: '',
   customFonts: [],
   customThemes: [],
   builtinThemes: [],
