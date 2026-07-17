@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 
 import {
   toggleOrderedBlock, buildHrInsert, codeSpan, unpadCode, codeFence, stripCodeSpan,
+  diffSplice,
 } from './md-transform.ts';
 
 test('toggleOrderedBlock: numbers a single line', () => {
@@ -35,6 +36,26 @@ test('toggleOrderedBlock: converts bullets to an ordered list', () => {
 
 test('toggleOrderedBlock: toggle-off preserves blank separators', () => {
   assert.equal(toggleOrderedBlock('1. Foo\n\n2. Bar'), 'Foo\n\nBar');
+});
+
+test('diffSplice: null on equal strings, minimal splice otherwise', () => {
+  assert.equal(diffSplice('abc', 'abc'), null);
+  assert.deepEqual(diffSplice('abc', 'aXc'), { from: 1, to: 2, insert: 'X' });
+  assert.deepEqual(diffSplice('abc', 'abXc'), { from: 2, to: 2, insert: 'X' });
+  assert.deepEqual(diffSplice('abXc', 'abc'), { from: 2, to: 3, insert: '' });
+});
+
+test('diffSplice: applying the splice reconstructs the target', () => {
+  const cases = [
+    ['', 'a'], ['a', ''], ['aaa', 'aa'], ['aa', 'aaa'],
+    ['hello world', 'hello brave world'], ['x', 'y'],
+    ['| a | b |', '| a   | b   |'],
+  ];
+  for (const [a, b] of cases) {
+    const s = diffSplice(a, b);
+    const applied = s ? a.slice(0, s.from) + s.insert + a.slice(s.to) : a;
+    assert.equal(applied, b, `${JSON.stringify(a)} -> ${JSON.stringify(b)}`);
+  }
 });
 
 test('buildHrInsert: no separator at the start of the document', () => {

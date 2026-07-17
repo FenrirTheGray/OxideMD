@@ -8,7 +8,7 @@ import {
   hasActiveOverlay,
 } from "../core/state.ts";
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
-import { saveRecentlyFor } from "../core/tab-state.ts";
+import { saveRecentlyFor, isDirty } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
 import { updateProjectSearchAvailability, closeProjectSearch } from "../features/search-project.ts";
 
@@ -46,11 +46,12 @@ async function flushFsChanges() {
   for (const p of paths) {
     const tab = tabs.find(t => t.path === p);
     if (tab) {
-      // Don't clobber the tab while the user is actively editing it, and
-      // don't round-trip our own save through the watcher (the save itself
+      // Don't clobber the tab while the user is actively editing it or
+      // while it carries unsaved edits (exited edit mode dirty), and don't
+      // round-trip our own save through the watcher (the save itself
       // already updated the tab; the inbound fs-changed event is just its
       // echo).
-      if (tab.editing || saveRecentlyFor(p)) {
+      if (tab.editing || isDirty(tab) || saveRecentlyFor(p)) {
         // still fall through to check folder tree refresh
       } else {
         try {
@@ -63,7 +64,6 @@ async function flushFsChanges() {
           if (tab.id === state.activeTabId) {
             const scrollTop = contentScroll.scrollTop;
             renderContent(result.html);
-            state.originalContent = result.html;
             requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
           }
         } catch { /* file vanished; leave tab as-is */ }

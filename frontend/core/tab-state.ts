@@ -30,11 +30,11 @@ export function activeTab() {
 }
 
 // ── Pure predicates (no DOM / editor view needed) ────────────────────────────
-// A tab is dirty only while editing and its live buffer differs from the
-// last-saved disk content.
+// A tab is dirty while its buffer differs from the last-saved disk content —
+// including after exiting edit mode without saving, so the unsaved edits keep
+// their dirty dot, close prompt, and reload/watcher protection in read mode.
 export function isDirty(tab) {
   if (!tab) return false;
-  if (!tab.editing) return false;
   return (tab.raw ?? '') !== (tab.savedRaw ?? '');
 }
 

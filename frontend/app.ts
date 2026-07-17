@@ -45,6 +45,7 @@ import { loadCustomFont, applyConfig, openSettings, closeSettings } from "./sett
 // is the correct behavior.
 import { editorModule, loadEditorModule } from "./editor/lazy.ts";
 import { activeTab } from "./ui/tabs.ts";
+import { isDirty } from "./core/tab-state.ts";
 import { printActiveTab } from "./features/print.ts";
 import { showToast } from "./ui/toast.ts";
 import "./ui/error-modal.ts";
@@ -476,15 +477,17 @@ registerHandler('searchInFolder', (e) => {
   e?.preventDefault();
   openProjectSearch();
 });
+// Save fires while editing and for a read-mode tab that exited edit mode
+// with unsaved changes (still dirty, still savable).
 registerHandler('save', (e) => {
   e?.preventDefault();
   const tab = activeTab();
-  if (tab?.editing) editorModule()?.saveActiveFile();
+  if (tab?.editing || isDirty(tab)) editorModule()?.saveActiveFile();
 });
 registerHandler('saveNoFormat', (e) => {
   e?.preventDefault();
   const tab = activeTab();
-  if (tab?.editing) editorModule()?.saveActiveFile({ skipFormat: true });
+  if (tab?.editing || isDirty(tab)) editorModule()?.saveActiveFile({ skipFormat: true });
 });
 registerHandler('reload', (e) => { e?.preventDefault(); reloadFile(); });
 registerHandler('print',  (e) => { e?.preventDefault(); printActiveTab(); });
@@ -574,6 +577,10 @@ document.addEventListener('keydown', (e) => {
     contentScroll.scrollTop = 0;
     return;
   }
+
+  // The Settings dialog is modal: app shortcuts (Ctrl+E/R/W…) must not fire
+  // behind it. Escape is already handled above; everything else stops here.
+  if (settingsOverlay.open) return;
 
   dispatchKey(e, state.bindings, 'global');
 });
