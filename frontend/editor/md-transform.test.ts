@@ -47,6 +47,12 @@ test('toggleOrderedBlock: toggles indented numbered lines back off', () => {
   assert.equal(toggleOrderedBlock('1. a\n  2. b'), 'a\n  b');
 });
 
+test('toggleOrderedBlock: recognizes the `1)` delimiter style on input', () => {
+  assert.equal(toggleOrderedBlock('1) a\n2) b'), 'a\nb');
+  // Re-tagging a `)` list generates the canonical `.` style.
+  assert.equal(toggleOrderedBlock('1) a\nb'), '1. a\n2. b');
+});
+
 test('splitIndent: separates leading whitespace from the rest', () => {
   assert.deepEqual(splitIndent('  - x'), ['  ', '- x']);
   assert.deepEqual(splitIndent('\t# h'), ['\t', '# h']);
