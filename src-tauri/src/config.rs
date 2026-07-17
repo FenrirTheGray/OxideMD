@@ -142,6 +142,12 @@ pub fn add_recent_file(config: &mut Config, path: &str) {
 }
 
 fn config_path() -> Option<PathBuf> {
+    project_dirs().map(|dirs| dirs.config_dir().join("config.json"))
+}
+
+// ponytail: legacy TOML read kept only to migrate pre-4.9 configs; delete
+// this (and the `toml` dep) once migrated installs dominate.
+fn legacy_config_path() -> Option<PathBuf> {
     project_dirs().map(|dirs| dirs.config_dir().join("config.toml"))
 }
 
@@ -153,7 +159,7 @@ pub fn themes_dir() -> Option<PathBuf> {
     project_dirs().map(|dirs| dirs.config_dir().join("themes"))
 }
 
-/// Directory for the daily error logs, alongside `config.toml`, `fonts/`,
+/// Directory for the daily error logs, alongside `config.json`, `fonts/`,
 /// and `themes/`. The error-log writer creates it on demand.
 pub fn error_log_dir() -> Option<PathBuf> {
     project_dirs().map(|dirs| dirs.config_dir().join("error-log"))
@@ -173,9 +179,9 @@ pub fn load_config() -> Config {
     };
     let content = match fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(_) => return Config::default(),
+        Err(_) => return load_legacy_config(),
     };
-    let config: Config = match toml::from_str(&content) {
+    let config: Config = match serde_json::from_str(&content) {
         Ok(c) => c,
         Err(e) => {
             // The file exists but won't parse. Defaulting here is fine, but
@@ -198,12 +204,32 @@ pub fn load_config() -> Config {
     config
 }
 
+/// One-time migration from the pre-4.9 `config.toml`: parse it, persist it
+/// as `config.json`, and leave the old file in place (harmless, and keeps a
+/// downgrade path). Missing or unparseable legacy file → defaults; the old
+/// file is never touched, so nothing is lost either way.
+fn load_legacy_config() -> Config {
+    let Some(path) = legacy_config_path() else {
+        return Config::default();
+    };
+    let Ok(content) = fs::read_to_string(&path) else {
+        return Config::default();
+    };
+    match toml::from_str::<Config>(&content) {
+        Ok(config) => {
+            let _ = save_config(&config);
+            config
+        }
+        Err(_) => Config::default(),
+    }
+}
+
 pub fn save_config(config: &Config) -> Result<(), String> {
     let path = config_path().ok_or("Could not determine config path")?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let content = toml::to_string_pretty(config).map_err(|e| e.to_string())?;
+    let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
     // Write to a sibling temp file then rename over the target, so a crash
     // mid-write can't truncate the existing config into a half-written,
     // unparseable state. `fs::rename` replaces an existing file atomically
@@ -234,8 +260,8 @@ mod tests {
                 .unwrap_or(0)
         ));
         fs::create_dir_all(&dir).unwrap();
-        let target = dir.join("config.toml");
-        let tmp = dir.join("config.toml.tmp");
+        let target = dir.join("config.json");
+        let tmp = dir.join("config.json.tmp");
         fs::write(&target, "old").unwrap();
         fs::write(&tmp, "new").unwrap();
 
@@ -247,10 +273,21 @@ mod tests {
     }
 
     #[test]
-    fn config_round_trips_through_toml() {
+    fn config_round_trips_through_json() {
         // A default config must serialize and parse back identically — the
-        // load path now treats a parse failure as corruption, so a silent
+        // load path treats a parse failure as corruption, so a silent
         // serialize/parse drift would wrongly trip the backup branch.
+        let cfg = Config::default();
+        let s = serde_json::to_string_pretty(&cfg).unwrap();
+        let parsed: Config = serde_json::from_str(&s).unwrap();
+        assert_eq!(parsed.md_extensions, cfg.md_extensions);
+        assert_eq!(parsed.theme, cfg.theme);
+    }
+
+    #[test]
+    fn legacy_toml_config_still_parses() {
+        // The migration path must keep reading the pre-4.9 TOML format
+        // until the `toml` dep is dropped.
         let cfg = Config::default();
         let s = toml::to_string_pretty(&cfg).unwrap();
         let parsed: Config = toml::from_str(&s).unwrap();

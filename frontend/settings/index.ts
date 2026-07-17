@@ -766,7 +766,7 @@ function collectPaletteFromInputs(resolved) {
 }
 
 // ── Custom theme import/export ─────────────────────────────────────────────
-// Maps each color-config field name (as persisted in config.toml and used
+// Maps each color-config field name (as persisted in config.json and used
 // in the exported JSON) to the id of the Colors-tab control that holds it.
 // This is the authoritative whitelist for import validation — any key not
 // listed here is silently ignored.

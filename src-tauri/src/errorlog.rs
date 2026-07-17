@@ -2,7 +2,7 @@
 //
 // Every warning or error the app surfaces is appended as a single line to
 // `<config-dir>/error-log/yyyy-mm-dd-errors.log` (one file per calendar
-// day, alongside `config.toml`/`fonts/`/`themes/`). Each line is
+// day, alongside `config.json`/`fonts/`/`themes/`). Each line is
 // `HH:MM:SS - <message>` in local time. The frontend funnels its logger
 // here through the `append_error_log` command; backend-only failures call
 // `append_error_line` directly.
