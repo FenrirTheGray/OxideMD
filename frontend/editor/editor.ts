@@ -63,7 +63,6 @@ const attrsCompartment = new Compartment();
 
 // Exposed so other modules (tabs.js, contextmenu.js) can read the live
 // buffer and scroll position without poking at the DOM.
-export function getEditorView() { return editorView; }
 export function getEditorValue() {
   return editorView ? editorView.state.doc.toString() : null;
 }

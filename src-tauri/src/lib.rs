@@ -205,7 +205,6 @@ pub fn run() {
     builder
         .plugin(log_plugin)
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
@@ -213,7 +212,6 @@ pub fn run() {
             commands::render_preview,
             commands::get_cli_files,
             commands::pick_file,
-            commands::create_file,
             commands::save_new_file,
             commands::delete_path,
             commands::pick_folder,

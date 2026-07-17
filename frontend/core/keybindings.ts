@@ -189,13 +189,6 @@ const ACTION_BY_ID = new Map(ACTIONS.map(a => [a.id, a]));
 
 export function getAction(id) { return ACTION_BY_ID.get(id); }
 
-// Defaults as primary-only, for the Shortcuts UI.
-export function defaultBindings() {
-  const map = Object.create(null);
-  for (const a of ACTIONS) map[a.id] = a.defaultAccel;
-  return map;
-}
-
 // Merge user overrides on top of defaults. Shape:
 //   effective[id] = { primary: string, aliases: string[] }
 // An empty-string primary = user explicitly unassigned. User override

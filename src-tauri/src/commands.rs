@@ -130,64 +130,11 @@ pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
     .unwrap_or_default()
 }
 
-/// Opens a native save dialog and creates a new, empty markdown file at
-/// the chosen location, returning it as an `OpenResult` so the frontend
-/// can open it in a tab exactly like `open_file`. `dir`, when provided
-/// and non-empty, seeds the dialog's starting directory — used by the
-/// sidebar's "New File…" entry so the file lands inside the folder the
-/// user right-clicked. Returns `Ok(None)` when the user cancels.
-///
-/// The native save dialog handles the overwrite confirmation itself, so
-/// writing an empty string here is the expected, user-approved outcome.
-#[tauri::command]
-pub async fn create_file(
-    app: tauri::AppHandle,
-    dir: Option<String>,
-) -> Result<Option<OpenResult>, String> {
-    let window = app
-        .get_webview_window("main")
-        .ok_or("main window unavailable")?;
-    let picked = tauri::async_runtime::spawn_blocking(move || {
-        let exts = md_extensions(&load_config());
-        let ext_refs: Vec<&str> = exts.iter().map(String::as_str).collect();
-        let mut builder = app
-            .dialog()
-            .file()
-            .set_parent(&window)
-            .add_filter("Markdown", &ext_refs)
-            .set_file_name("untitled.md");
-        if let Some(d) = dir.as_deref() {
-            if !d.is_empty() {
-                builder = builder.set_directory(d);
-            }
-        }
-        builder.blocking_save_file().map(|p| p.to_string())
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let chosen = match picked {
-        Some(p) => p,
-        None => return Ok(None),
-    };
-
-    tauri::async_runtime::spawn_blocking(move || {
-        let exts = md_extensions(&load_config());
-        let path = ensure_md_extension(PathBuf::from(&chosen), &exts);
-        fs::write(&path, "").map_err(|e| e.to_string())?;
-        let canonical = fs::canonicalize(&path).unwrap_or(path);
-        Ok(Some(build_open_result(canonical, String::new())))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
 /// Save-as for an untitled (never-written) buffer: show the native save
 /// dialog (optionally rooted at `dir`), write the current `content` to the
 /// chosen path, and return it in the same shape as `open_file` so the
 /// frontend can adopt the path. Returns `Ok(None)` if the user cancels the
-/// dialog. Mirrors `create_file` but writes the live buffer instead of an
-/// empty file — the new-file flow defers the on-disk write until the user
+/// dialog — the new-file flow defers the on-disk write until the user
 /// explicitly saves.
 #[tauri::command]
 pub async fn save_new_file(

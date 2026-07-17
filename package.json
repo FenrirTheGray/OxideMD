@@ -14,7 +14,6 @@
 		"@codemirror/search": "^6.6.0",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.41.1",
-		"@resvg/resvg-js": "^2.6.2",
 		"idiomorph": "^0.7.4"
 	},
 	"devDependencies": {
