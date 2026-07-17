@@ -4,10 +4,12 @@
 // way the accelerator layer is.
 
 // The marker of any list item (bullet, task, or ordered) at the start of a
-// line, so a line can be re-tagged from one list type to another.
-export const LIST_PREFIX_RE = /^(?:-\s\[[ xX]\]\s|-\s|\d+\.\s)/;
+// line, so a line can be re-tagged from one list type to another. Both
+// CommonMark ordered delimiters (`1.` and `1)`) are recognized on input;
+// generation always emits `1.`.
+export const LIST_PREFIX_RE = /^(?:-\s\[[ xX]\]\s|-\s|\d+[.)]\s)/;
 
-const ORDERED_RE = /^(\d+)\.\s/;
+const ORDERED_RE = /^(\d+)[.)]\s/;
 
 // Split a line into [indent, rest]. The line toggles (headings, lists,
 // quotes) match and insert markers against `rest`, so a nested list item or

@@ -39,7 +39,7 @@ import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemi
 import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder, Compartment } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle, syntaxTree } from '@codemirror/language';
 import { tags, Tag, styleTags } from '@lezer/highlight';
 import {
   search, SearchQuery, setSearchQuery, getSearchQuery,
@@ -170,74 +170,101 @@ const debouncedEditorCounts = debounce((cmState) => {
 const debouncedOutlineRefresh = debounce(() => refreshOutline({ idle: true }), 200);
 
 // ── Smart list / quote continuation on Enter ─────────────────────────
-// When the cursor is at the end of a list-item or blockquote line,
-// pressing Enter inserts the next marker for the user (`- `, `2. `,
-// `> `, `- [ ] `). When the line is just an empty marker — meaning the
-// user pressed Enter twice in a row to break out of the list — we
-// remove the marker and return a true blank line. Anything else falls
-// through to CM6's defaultKeymap so plain Enter still inserts a newline.
-const LIST_LINE  = /^(\s*)([-*+]|\d+\.)(\s+\[[ xX]\])?(\s+)(.*)$/;
-const QUOTE_LINE = /^(\s*)(>+)(\s+)(.*)$/;
+// Enter inside a list item or blockquote continues the marker on the new
+// line (`- `, `2. `, `> `, `- [ ] `), composing through quote prefixes
+// (`> - item` continues `> - `). Mid-line, the tail after the caret moves
+// down as the new item's content — the item is split, matching every other
+// markdown editor. On an empty item (Enter twice in a row) the marker
+// unwinds progressively: a nested item outdents one level, a quoted list
+// drops the list marker but keeps the quote, and a top-level marker line
+// is cleared to a true blank line. Continuation never fires inside code
+// blocks (a shell snippet's `- foo` is code, not a list) or on thematic
+// breaks (`- - -`). Anything unmatched falls through to CM6's
+// defaultKeymap so plain Enter still inserts a newline.
+const QUOTE_PREFIX_RE = /^\s*(?:>[ \t]*)+/;
+const LIST_LINE = /^(\s*)([-*+]|\d+[.)])(\s+\[[ xX]\])?(\s+)(.*)$/;
+// An empty task item with no trailing space (`- [ ]`): LIST_LINE would see
+// the box as content, but the item is empty for breakout purposes.
+const EMPTY_TASK_LINE = /^(\s*)(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s*$/;
+const HR_LINE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 
 function smartEnter(view) {
   const sel = view.state.selection.main;
   if (!sel.empty) return false;
   const line = view.state.doc.lineAt(sel.from);
-  // Only continue the marker when typing at the end of the line; an
-  // Enter from inside a word should split the line normally.
-  if (sel.from !== line.to) return false;
 
-  let m = LIST_LINE.exec(line.text);
-  if (m) {
-    const indent  = m[1];
-    const marker  = m[2];
-    const taskBox = m[3];
-    const sep     = m[4];
-    const content = m[5];
-    if (content === '') {
-      view.dispatch({
-        changes: { from: line.from, to: line.to, insert: '' },
-        selection: EditorSelection.cursor(line.from),
-      });
-      return true;
-    }
-    // Continue the marker on the next line. For an ordered item we bump the
-    // number purely as a typing convenience — Markdown ordered lists render
-    // like an HTML <ol> (only the first item's number matters; the rest are
-    // ignored and auto-incremented by the renderer, CommonMark §5.3), so we
-    // never rewrite the numbers of the lines below: that fought the user's
-    // edits and mangled documents like CHANGELOG.md.
-    let newMarker = marker;
-    if (/^\d+\.$/.test(marker)) {
-      newMarker = `${parseInt(marker, 10) + 1}.`;
-    }
-    const insert = '\n' + indent + newMarker + (taskBox != null ? ' [ ]' : '') + sep;
-    view.dispatch({
-      changes: { from: sel.from, to: sel.from, insert },
-      selection: EditorSelection.cursor(sel.from + insert.length),
-    });
-    return true;
+  // Inside a code block nothing is a list or a quote.
+  for (let n = syntaxTree(view.state).resolveInner(sel.from, -1); n; n = n.parent) {
+    if (n.name === 'FencedCode' || n.name === 'CodeBlock') return false;
   }
 
-  m = QUOTE_LINE.exec(line.text);
-  if (m) {
-    const indent  = m[1];
-    const quotes  = m[2];
-    const sep     = m[3];
-    const content = m[4];
-    if (content === '') {
-      view.dispatch({
-        changes: { from: line.from, to: line.to, insert: '' },
-        selection: EditorSelection.cursor(line.from),
-      });
-      return true;
-    }
-    const insert = '\n' + indent + quotes + sep;
+  const prefix = QUOTE_PREFIX_RE.exec(line.text)?.[0] ?? '';
+  const rest = line.text.slice(prefix.length);
+  const restFrom = line.from + prefix.length;
+  if (HR_LINE.test(rest)) return false;
+
+  const apply = (changes, cursor) => {
     view.dispatch({
-      changes: { from: sel.from, to: sel.from, insert },
-      selection: EditorSelection.cursor(sel.from + insert.length),
+      changes,
+      selection: EditorSelection.cursor(cursor),
+      scrollIntoView: true,
+      userEvent: 'input',
     });
     return true;
+  };
+  // Empty item — unwind one level instead of continuing.
+  const unwind = (indent) => {
+    let insert;
+    if (indent) {
+      const outdented = indent[0] === '\t' ? indent.slice(1) : indent.slice(2);
+      insert = prefix + outdented + rest.slice(indent.length);
+    } else if (prefix) {
+      insert = prefix; // quoted list item: drop the marker, keep the quote
+    } else {
+      insert = '';
+    }
+    return apply({ from: line.from, to: line.to, insert }, line.from + insert.length);
+  };
+
+  const et = EMPTY_TASK_LINE.exec(rest);
+  if (et) return sel.from === line.to ? unwind(et[1]) : false;
+
+  const m = LIST_LINE.exec(rest);
+  if (m) {
+    const [, indent, marker, taskBox, sep, content] = m;
+    // Unwind only from the line end — Enter with the caret at column 0 (or
+    // inside the marker) of an empty item pushes the line down instead.
+    if (content === '') return sel.from === line.to ? unwind(indent) : false;
+    // Splitting is only meaningful from inside the content; a caret inside
+    // the marker itself gets a plain newline.
+    const markerEnd = restFrom + indent.length + marker.length
+      + (taskBox?.length ?? 0) + sep.length;
+    if (sel.from < markerEnd) return false;
+    // Continue (or split) the item. For an ordered item we bump the number
+    // purely as a typing convenience — Markdown ordered lists render like
+    // an HTML <ol> (only the first item's number matters; the rest are
+    // ignored and auto-incremented by the renderer, CommonMark §5.3), so we
+    // never rewrite the numbers of the lines below: that fought the user's
+    // edits and mangled documents like CHANGELOG.md. Accepted flip side:
+    // deleting the first item changes the rendered start number, because
+    // that one number is exactly what the renderer honors.
+    let newMarker = marker;
+    const om = /^(\d+)([.)])$/.exec(marker);
+    if (om) newMarker = `${parseInt(om[1], 10) + 1}${om[2]}`;
+    const insert = '\n' + prefix + indent + newMarker + (taskBox != null ? ' [ ]' : '') + sep;
+    return apply({ from: sel.from, to: sel.from, insert }, sel.from + insert.length);
+  }
+
+  if (prefix) {
+    // Quote line without a list marker.
+    if (rest === '') {
+      return sel.from === line.to
+        ? apply({ from: line.from, to: line.to, insert: '' }, line.from)
+        : false;
+    }
+    if (sel.from < restFrom) return false; // caret inside the quote marker
+    const insert = '\n' + prefix;
+    return apply({ from: sel.from, to: sel.from, insert }, sel.from + insert.length);
   }
 
   return false;
