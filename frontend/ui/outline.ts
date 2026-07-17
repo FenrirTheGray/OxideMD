@@ -23,6 +23,7 @@ import {
 import { activeTab, syncToolbar } from "./tabs.ts";
 import { editorModule } from "../editor/lazy.ts";
 import { escapeHtml } from "../lib/escape.ts";
+import { debounce } from "../lib/timing.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
 const FENCE_RE   = /^\s*(```|~~~)/;
@@ -130,15 +131,13 @@ export function refreshOutline(opts: { idle?: boolean } = {}) {
 // Persist the open/closed state the way sidebar_width is persisted —
 // debounced write through save_config_cmd so a rapid toggle doesn't
 // thrash the config file.
-let pendingVisibilitySave = null;
+const saveOutlineConfig = debounce(() => {
+  invoke('save_config_cmd', { config: state.config }).catch(() => {});
+}, 150);
 function persistOutlineVisible(visible) {
   if (!state.config) return;
   state.config.outline_visible = visible;
-  if (pendingVisibilitySave) clearTimeout(pendingVisibilitySave);
-  pendingVisibilitySave = setTimeout(() => {
-    pendingVisibilitySave = null;
-    invoke('save_config_cmd', { config: state.config }).catch(() => {});
-  }, 150);
+  saveOutlineConfig();
 }
 
 export function openOutline() {
