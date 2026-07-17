@@ -10,6 +10,7 @@ import {
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
 import { saveRecentlyFor, isDirty } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
+import { debounce } from "../lib/timing.ts";
 import { updateProjectSearchAvailability, closeProjectSearch } from "../features/search-project.ts";
 
 const SVG_TWISTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
@@ -28,15 +29,13 @@ export function syncWatcher() {
 }
 
 const pendingFsChanges = new Set();
-let fsChangeTimer = null;
+const scheduleFsFlush = debounce(flushFsChanges, 200);
 export function handleFsChange(path) {
   pendingFsChanges.add(path);
-  if (fsChangeTimer) clearTimeout(fsChangeTimer);
-  fsChangeTimer = setTimeout(flushFsChanges, 200);
+  scheduleFsFlush();
 }
 
 async function flushFsChanges() {
-  fsChangeTimer = null;
   const paths = [...pendingFsChanges];
   pendingFsChanges.clear();
 
@@ -508,16 +507,14 @@ function setSidebarWidth(px, maxOverride = SIDEBAR_MAX) {
 
 let sidebarDragPointerId = null;
 let sidebarContainerLeft = 0;
-let pendingSidebarSave = null;
+const saveSidebarConfig = debounce(() => {
+  invoke('save_config_cmd', { config: state.config }).catch(() => {});
+}, 150);
 
 function persistSidebarWidth(width) {
   if (!state.config) return;
   state.config.sidebar_width = width;
-  if (pendingSidebarSave) clearTimeout(pendingSidebarSave);
-  pendingSidebarSave = setTimeout(() => {
-    pendingSidebarSave = null;
-    invoke('save_config_cmd', { config: state.config }).catch(() => {});
-  }, 150);
+  saveSidebarConfig();
 }
 
 sidebarDivider.addEventListener('pointerdown', (e) => {
