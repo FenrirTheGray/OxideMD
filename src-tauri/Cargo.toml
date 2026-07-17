@@ -30,6 +30,8 @@ tauri-plugin-single-instance = "2"
 
 pulldown-cmark = { version = "0.12", features = ["simd"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
+# ponytail: read-only, migrates pre-4.9 config.toml → config.json; drop
+# once migrated installs dominate (see config.rs load_legacy_config).
 toml = "0.8"
 directories = "5"
 open = "5"
