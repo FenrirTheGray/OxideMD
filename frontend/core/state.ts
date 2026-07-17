@@ -201,7 +201,6 @@ export const sidebarSearchInput    = document.getElementById('sidebar-search-inp
 export const sidebarSearchClearBtn = document.getElementById('sidebar-search-clear');
 export const sidebarSearchResultsEl = document.getElementById('sidebar-search-results');
 export const confirmOverlay   = document.getElementById('confirm-overlay') as HTMLDialogElement;
-export const confirmDialog    = document.getElementById('confirm-dialog');
 export const confirmDialogTitle = document.getElementById('confirm-dialog-title');
 export const confirmDialogBody  = document.getElementById('confirm-dialog-body');
 export const confirmCancelBtn = document.getElementById('confirm-cancel');

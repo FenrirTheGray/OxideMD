@@ -69,9 +69,9 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
 - **File I/O** — `open_file` (read and render to HTML; the canonicalized path is
   the tab-dedup key), `save_file` (write and re-render), `render_preview`
   (re-render source to HTML without touching disk — this powers the live
-  preview), `create_file` (native save dialog → a new empty `.md`), `pick_file`
+  preview), `pick_file`
   (multi-file open dialog). The IO-heavy commands run on blocking threads; the
-  content-loading ones (`open_file` / `save_file` / `create_file`) return an
+  content-loading ones (`open_file` / `save_file` / `save_new_file`) return an
   `OpenResult { html, title, path, raw }`.
 - **Folder browsing** — `pick_folder` (folder dialog, returns the path only),
   `read_folder_tree` (recursive walk → a `FolderTree` of nested `TreeNode`s,
