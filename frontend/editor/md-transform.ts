@@ -9,6 +9,79 @@ export const LIST_PREFIX_RE = /^(?:-\s\[[ xX]\]\s|-\s|\d+\.\s)/;
 
 const ORDERED_RE = /^(\d+)\.\s/;
 
+// Split a line into [indent, rest]. The line toggles (headings, lists,
+// quotes) match and insert markers against `rest`, so a nested list item or
+// indented heading toggles in place instead of getting a second marker at
+// column 0.
+export function splitIndent(l: string): [string, string] {
+  const ind = /^[ \t]*/.exec(l)![0];
+  return [ind, l.slice(ind.length)];
+}
+
+// Expand a [s, e) selection to whole-line bounds for block ops. A non-empty
+// selection ending at column 0 (triple-click and Shift+Down select through
+// the newline) stops at the previous line — the line the caret merely
+// touches is not part of the block.
+export function blockLineSpan(v: string, s: number, e: number): { lineStart: number; lineEnd: number } {
+  const lineStart = s === 0 ? 0 : v.lastIndexOf('\n', s - 1) + 1;
+  const end = e > s && v[e - 1] === '\n' ? e - 1 : e;
+  let lineEnd = v.indexOf('\n', end);
+  if (lineEnd === -1) lineEnd = v.length;
+  return { lineStart, lineEnd };
+}
+
+// ── Inline wrap/unwrap ────────────────────────────────────────────────────
+// Blank-line separator (odd captures survive String.split for reassembly).
+const CHUNK_SPLIT = /(\n[ \t]*\n(?:[ \t]*\n)*)/;
+
+// Wrap `text` in open/close delimiters, one wrap per blank-line-separated
+// chunk (CommonMark emphasis can't span blank lines), skipping each chunk's
+// edge whitespace (a delimiter touching inner whitespace doesn't parse —
+// `**word **` renders its asterisks literally). Whitespace-only text is
+// returned unchanged.
+export function wrapChunks(text: string, open: string, close: string = open): string {
+  return text.split(CHUNK_SPLIT).map((seg, i) => {
+    if (i % 2 === 1) return seg;
+    const lead = /^\s*/.exec(seg)![0];
+    const core = seg.trim();
+    if (!core) return seg;
+    return lead + open + core + close + seg.slice(lead.length + core.length);
+  }).join('');
+}
+
+// Inverse of wrapChunks: strip open/close from every chunk's core. Returns
+// null when any content chunk isn't wrapped — the caller wraps instead.
+// Two edge-lookalike guards:
+//  • single `*`: a core whose star run is even is bold (`**text**`), not
+//    italic — stripping one star would corrupt the bold marker;
+//  • asymmetric delimiters: `<u>a</u> x <u>b</u>` has matching edges but
+//    they belong to two different spans (a closer precedes any opener in
+//    the inner text).
+export function unwrapChunks(text: string, open: string, close: string = open): string | null {
+  let sawContent = false;
+  const parts = text.split(CHUNK_SPLIT).map((seg, i) => {
+    if (i % 2 === 1) return seg;
+    const lead = /^\s*/.exec(seg)![0];
+    const core = seg.trim();
+    if (!core) return seg;
+    sawContent = true;
+    if (core.length < open.length + close.length
+        || !core.startsWith(open) || !core.endsWith(close)) return null;
+    if (open === '*'
+        && (/^\*+/.exec(core)![0].length % 2 === 0
+          || /\*+$/.exec(core)![0].length % 2 === 0)) return null;
+    const inner = core.slice(open.length, core.length - close.length);
+    if (open !== close) {
+      const iClose = inner.indexOf(close);
+      const iOpen = inner.indexOf(open);
+      if (iClose !== -1 && (iOpen === -1 || iClose < iOpen)) return null;
+    }
+    return lead + inner + seg.slice(lead.length + core.length);
+  });
+  if (!sawContent || parts.some(p => p === null)) return null;
+  return parts.join('');
+}
+
 // Minimal single-splice diff between two versions of a buffer: shared prefix
 // and suffix are kept, only the differing middle is replaced. Used to swap
 // the editor buffer (format-on-save, discard) without a whole-document
@@ -49,15 +122,21 @@ export function toggleOrderedBlock(block: string): string {
 
   if (contentLines.length === 0) return `1. ${lines[0]}`;
 
-  const allNumbered = contentLines.every(l => ORDERED_RE.test(l));
+  const allNumbered = contentLines.every(l => ORDERED_RE.test(splitIndent(l)[1]));
   if (allNumbered) {
-    return lines.map(l => (l.trim() === '' ? l : l.replace(ORDERED_RE, ''))).join('\n');
+    return lines.map(l => {
+      if (l.trim() === '') return l;
+      const [ind, rest] = splitIndent(l);
+      return ind + rest.replace(ORDERED_RE, '');
+    }).join('\n');
   }
 
   let n = 0;
-  return lines
-    .map(l => (l.trim() === '' ? l : `${(n += 1)}. ${l.replace(LIST_PREFIX_RE, '')}`))
-    .join('\n');
+  return lines.map(l => {
+    if (l.trim() === '') return l;
+    const [ind, rest] = splitIndent(l);
+    return `${ind}${(n += 1)}. ${rest.replace(LIST_PREFIX_RE, '')}`;
+  }).join('\n');
 }
 
 // Build the text to insert for a thematic break (`---`) at a cursor whose

@@ -35,11 +35,27 @@ export const MODIFIER_ONLY_KEYS = new Set([
 
 export function matchesAccel(e, accel) {
   if (!accel) return false;
+  // The off-platform primary (Ctrl on macOS, the Win/Meta key elsewhere)
+  // can't be expressed in an accel, so a chord holding it must never alias
+  // onto a binding without it — Ctrl+Tab on macOS used to fire the bare
+  // `Tab` accel and indent.
+  if (isMac ? e.ctrlKey : e.metaKey) return false;
   const modDown = isMac ? e.metaKey : e.ctrlKey;
   if (accel.mod !== modDown) return false;
   if (accel.alt !== e.altKey) return false;
   if (accel.shift !== e.shiftKey) return false;
-  return eventKeyName(e) === accel.key;
+  const name = eventKeyName(e);
+  if (name === accel.key) return true;
+  // Non-Latin layouts (Cyrillic, Greek, …) report their own character in
+  // `key`, so letter shortcuts never match by character; fall back to the
+  // physical key (code KeyB → B, Digit1 → 1). Only when the layout char is
+  // non-ASCII — Latin layouts must keep matching by character, or QWERTZ's
+  // swapped Y/Z would fire both ways.
+  if (name.length === 1 && !/[\x20-\x7E]/.test(name)) {
+    const m = /^(?:Key([A-Z])|Digit(\d))$/.exec(e.code || '');
+    if (m) return (m[1] || m[2]) === accel.key;
+  }
+  return false;
 }
 
 // Canonical key name for a KeyboardEvent — same namespace as accel.key.
@@ -138,6 +154,10 @@ export const ACTIONS = [
   { id: 'zoomOut',       category: 'View', label: 'Zoom out',         defaultAccel: 'Mod+-' },
   { id: 'zoomReset',     category: 'View', label: 'Reset zoom',       defaultAccel: 'Mod+0' },
 
+  // On macOS Cmd+Tab is the OS app switcher, so these accels can never fire
+  // there; app.ts hard-wires the platform-conventional Ctrl+(Shift+)Tab
+  // instead (not rebindable, mirroring the GTK-intercepted Linux combos —
+  // raw Ctrl isn't expressible in the accel grammar on Mac).
   { id: 'nextTab',       category: 'Tabs', label: 'Next tab',
     defaultAccel: 'Mod+Tab', rebindableOnLinux: false },
   { id: 'prevTab',       category: 'Tabs', label: 'Previous tab',
