@@ -7,7 +7,7 @@ import { showErrorModal } from "./ui/error-modal.ts";
 
 import {
   invoke, listen, appWindow,
-  isMarkdownPath, stripMarkdownExtension, hasMod,
+  isMac, isMarkdownPath, stripMarkdownExtension, hasMod,
   tabs, state,
   contentEl, contentScroll, previewPane,
   btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnSettings,
@@ -581,6 +581,16 @@ document.addEventListener('keydown', (e) => {
   // The Settings dialog is modal: app shortcuts (Ctrl+E/R/W…) must not fire
   // behind it. Escape is already handled above; everything else stops here.
   if (settingsOverlay.open) return;
+
+  // macOS: Cmd+Tab is the OS app switcher, so the Mod+Tab defaults can
+  // never fire there. Hard-wire the platform-conventional Ctrl+(Shift+)Tab,
+  // mirroring the GTK-level interception on Linux (likewise not rebindable
+  // — raw Ctrl isn't expressible in the accel grammar on Mac).
+  if (isMac && e.ctrlKey && !e.metaKey && !e.altKey && e.key === 'Tab') {
+    e.preventDefault();
+    runAction(e.shiftKey ? 'prevTab' : 'nextTab');
+    return;
+  }
 
   dispatchKey(e, state.bindings, 'global');
 });

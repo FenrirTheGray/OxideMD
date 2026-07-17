@@ -8,8 +8,9 @@ import { EditorSelection } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { snippet } from '@codemirror/autocomplete';
 import {
-  toggleOrderedBlock, buildHrInsert, LIST_PREFIX_RE,
+  toggleOrderedBlock, buildHrInsert, LIST_PREFIX_RE, splitIndent,
   codeSpan, unpadCode, codeFence, stripCodeSpan,
+  blockLineSpan, wrapChunks, unwrapChunks,
 } from './md-transform.ts';
 
 // Walk up from `pos` to the nearest enclosing lezer-markdown node named
@@ -31,6 +32,21 @@ function delimiterMarks(node) {
     if (c.name.endsWith('Mark')) marks.push(c);
   }
   return marks.length >= 2 ? [marks[0], marks[marks.length - 1]] : null;
+}
+
+// True when a node of the right kind exactly spans [from, to]. Guards the
+// select-the-whole-span toggle against edge-lookalikes: `*a* and *b*` has
+// star edges but is two spans, and `**text**`'s outer `*`s are half of a
+// bold marker. Bold additionally accepts an exact Emphasis — selecting
+// `***text***` and toggling bold must strip to `*text*` (the outer node of
+// a triple-star span is the Emphasis).
+function isExactInlineSpan(state, from, to, nodeName, marker) {
+  if (!nodeName || to <= from) return false;
+  const names = marker === '**' ? [nodeName, 'Emphasis'] : [nodeName];
+  for (let n = syntaxTree(state).resolveInner(from, 1); n; n = n.parent) {
+    if (n.from === from && n.to === to && names.includes(n.name)) return true;
+  }
+  return false;
 }
 
 function getSel(view) {
@@ -57,15 +73,12 @@ function atLineStart(v, pos) {
 }
 
 // Block-op helper: expand the current selection to cover whole lines.
-// Mirrors the textarea version's edge case where a selection ending at a
-// line boundary doesn't pull in the empty line below.
+// The column-0 edge case (a selection ending at a line start must not pull
+// the touched line into the block) lives in blockLineSpan, unit-tested.
 function expandToLines(view) {
   const v = getDoc(view);
   const { s, e } = getSel(view);
-  const lineStart = v.lastIndexOf('\n', s - 1) + 1;
-  let lineEnd = v.indexOf('\n', e);
-  if (lineEnd === -1) lineEnd = v.length;
-  if (e > s && e === lineStart && lineEnd !== v.length) lineEnd = lineStart;
+  const { lineStart, lineEnd } = blockLineSpan(v, s, e);
   return { lineStart, lineEnd, block: v.slice(lineStart, lineEnd) };
 }
 
@@ -77,6 +90,15 @@ function expandToLines(view) {
 function wrapInline(view, marker, placeholder, nodeName?) {
   const mLen = marker.length;
   const { state } = view;
+  // Star runs adjacent to a boundary decide the italic/bold context there:
+  // an odd run carries an italic layer (`*`, `***`), an even one is bold
+  // only (`**`) — stripping one star from it would corrupt the bold marker
+  // (bold→italic used to silently turn `**text**` into `*text*`). Bounded
+  // window: runs longer than 8 stars are noise, and the scan stays O(1).
+  const starRunBefore = (pos) =>
+    /\*{0,8}$/.exec(state.sliceDoc(Math.max(0, pos - 8), pos))![0].length;
+  const starRunAfter = (pos) =>
+    /^\*{0,8}/.exec(state.sliceDoc(pos, Math.min(state.doc.length, pos + 8)))![0].length;
   const tr = state.changeByRange((range) => {
     const { from, to } = range;
     const sel = state.sliceDoc(from, to);
@@ -101,27 +123,59 @@ function wrapInline(view, marker, placeholder, nodeName?) {
 
     // Case A: marker sits just outside the range (caret was inside an
     // existing **bold** pair, range covers just `bold`) — strip the markers.
+    // For italic the adjacent star runs must be odd on both sides, else the
+    // single `*` seen is half of a `**` and the right move is to wrap.
     if (sel && from >= mLen && to + mLen <= state.doc.length
         && state.sliceDoc(from - mLen, from) === marker
-        && state.sliceDoc(to, to + mLen) === marker) {
+        && state.sliceDoc(to, to + mLen) === marker
+        && (marker !== '*'
+          || (starRunBefore(from) % 2 === 1 && starRunAfter(to) % 2 === 1))) {
       return {
         changes: { from: from - mLen, to: to + mLen, insert: sel },
         range: EditorSelection.range(from - mLen, from - mLen + sel.length),
       };
     }
-    // Case B: range includes the markers (user selected `**bold**`) — strip.
-    if (sel.length >= 2 * mLen && sel.startsWith(marker) && sel.endsWith(marker)) {
-      const inner = sel.slice(mLen, -mLen);
+
+    // Case B: the selection is exactly the wrapped span(s), possibly with
+    // edge whitespace or spanning blank-line chunks. unwrapChunks validates
+    // every chunk (with star parity for italic); a single chunk additionally
+    // needs a syntax node of the right kind exactly covering its core —
+    // string edges alone would mangle `*a* and *b*` into `a* and *b`.
+    const unwrapped = sel ? unwrapChunks(sel, marker) : null;
+    if (unwrapped != null) {
+      const lead = /^\s*/.exec(sel)![0].length;
+      const coreLen = sel.trim().length;
+      if (/\n[ \t]*\n/.test(sel)
+          || isExactInlineSpan(state, from + lead, from + lead + coreLen, nodeName, marker)) {
+        return {
+          changes: { from, to, insert: unwrapped },
+          range: EditorSelection.range(from, from + unwrapped.length),
+        };
+      }
+    }
+
+    // Case C: wrap. With no selection, drop a placeholder and select it.
+    if (!sel) {
       return {
-        changes: { from, to, insert: inner },
-        range: EditorSelection.range(from, from + inner.length),
+        changes: { from, to, insert: marker + placeholder + marker },
+        range: EditorSelection.range(from + mLen, from + mLen + placeholder.length),
       };
     }
-    // Case C: wrap. With no selection, drop a placeholder and select it.
-    const inner = sel || placeholder;
+    // Non-empty: wrap each blank-line chunk with edge whitespace kept
+    // outside the markers (CommonMark refuses both). A single chunk keeps
+    // the old select-the-inner-text behavior for repeat toggles.
+    const wrapped = wrapChunks(sel, marker);
+    if (wrapped === sel) return { range };  // whitespace-only selection: no-op
+    if (!/\n[ \t]*\n/.test(sel)) {
+      const start = from + /^\s*/.exec(sel)![0].length + mLen;
+      return {
+        changes: { from, to, insert: wrapped },
+        range: EditorSelection.range(start, start + sel.trim().length),
+      };
+    }
     return {
-      changes: { from, to, insert: marker + inner + marker },
-      range: EditorSelection.range(from + mLen, from + mLen + inner.length),
+      changes: { from, to, insert: wrapped },
+      range: EditorSelection.range(from, from + wrapped.length),
     };
   });
   view.dispatch(state.update(tr, { userEvent: 'input', scrollIntoView: true }));
@@ -203,9 +257,50 @@ function toggleUnderline(view) {
   const { s, e } = getSel(view);
   const sel = v.slice(s, e);
 
+  // Case 0: bare caret inside a <u>…</u> pair — unwrap it, mirroring the
+  // caret toggle-off bold/italic/strike/code have. Inline HTML has no
+  // container node in the markdown tree, so scan the caret's line for the
+  // nearest enclosing pair instead.
+  // ponytail: line-bounded scan; a <u> pair spanning lines falls through to
+  // the wrap case — extend to a paragraph scan if that ever matters.
+  if (s === e) {
+    const line = view.state.doc.lineAt(s);
+    const before = v.slice(line.from, s);
+    const after = v.slice(s, line.to);
+    const openIdx = before.lastIndexOf(U_OPEN);
+    const closeIdx = after.indexOf(U_CLOSE);
+    const nextOpen = after.indexOf(U_OPEN);
+    if (openIdx !== -1 && closeIdx !== -1
+        && before.lastIndexOf(U_CLOSE) < openIdx
+        && (nextOpen === -1 || nextOpen > closeIdx)) {
+      const openFrom = line.from + openIdx;
+      const closeFrom = s + closeIdx;
+      view.dispatch({
+        changes: [
+          { from: openFrom, to: openFrom + U_OPEN.length, insert: '' },
+          { from: closeFrom, to: closeFrom + U_CLOSE.length, insert: '' },
+        ],
+        selection: EditorSelection.cursor(s - U_OPEN.length),
+      });
+      view.focus();
+      return;
+    }
+    // No enclosing pair — drop a placeholder and select it.
+    edit(view, s, e, U_OPEN + 'underline' + U_CLOSE,
+      s + U_OPEN.length, s + U_OPEN.length + 'underline'.length);
+    return;
+  }
+
+  // Case B: the selection is exactly the wrapped span(s) — strip.
+  // unwrapChunks refuses edges that belong to different spans
+  // (`<u>a</u> x <u>b</u>`), which the old string compare mangled.
+  const un = unwrapChunks(sel, U_OPEN, U_CLOSE);
+  if (un != null) {
+    edit(view, s, e, un, s, s + un.length);
+    return;
+  }
   // Case A: tags sit just outside the selection — strip them.
   if (
-    sel &&
     s >= U_OPEN.length &&
     v.slice(s - U_OPEN.length, s) === U_OPEN &&
     v.slice(e, e + U_CLOSE.length) === U_CLOSE
@@ -213,26 +308,31 @@ function toggleUnderline(view) {
     edit(view, s - U_OPEN.length, e + U_CLOSE.length, sel, s - U_OPEN.length, s - U_OPEN.length + sel.length);
     return;
   }
-  // Case B: selection includes the tags — strip them.
-  if (sel.startsWith(U_OPEN) && sel.endsWith(U_CLOSE) && sel.length >= U_OPEN.length + U_CLOSE.length) {
-    const inner = sel.slice(U_OPEN.length, -U_CLOSE.length);
-    edit(view, s, e, inner, s, s + inner.length);
-    return;
+  // Case C: wrap each blank-line chunk, edge whitespace kept outside the
+  // tags. A single chunk keeps the select-the-inner-text behavior.
+  const wrapped = wrapChunks(sel, U_OPEN, U_CLOSE);
+  if (wrapped === sel) return; // whitespace-only selection: nothing to wrap
+  if (!/\n[ \t]*\n/.test(sel)) {
+    const start = s + /^\s*/.exec(sel)![0].length + U_OPEN.length;
+    edit(view, s, e, wrapped, start, start + sel.trim().length);
+  } else {
+    edit(view, s, e, wrapped, s, s + wrapped.length);
   }
-  // Case C: wrap. With no selection, drop a placeholder and select it.
-  const inner = sel || 'underline';
-  edit(view, s, e, U_OPEN + inner + U_CLOSE, s + U_OPEN.length, s + U_OPEN.length + inner.length);
 }
 
 // ── Line prefix toggles (headings / list / quote / task) ──────────────
 function togglePrefix(view, prefix, exactRe, familyRe = exactRe) {
   const { lineStart, lineEnd, block } = expandToLines(view);
   const lines = block.length === 0 ? [''] : block.split('\n');
-  const allExact = lines.every(l => exactRe.test(l));
+  // Match and toggle after the leading indentation so nested list items and
+  // indented headings toggle in place instead of getting a second marker at
+  // column 0 (`  - item` used to become `-   - item`).
+  const parts = lines.map(splitIndent);
+  const allExact = parts.every(([, rest]) => exactRe.test(rest));
 
   const next = allExact
-    ? lines.map(l => l.replace(exactRe, ''))
-    : lines.map(l => prefix + l.replace(familyRe, ''));
+    ? parts.map(([ind, rest]) => ind + rest.replace(exactRe, ''))
+    : parts.map(([ind, rest]) => ind + prefix + rest.replace(familyRe, ''));
   const result = next.join('\n');
   edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
 }
@@ -256,7 +356,7 @@ async function clipboardUrl() {
 }
 
 async function insertLink(view) {
-  const { s, e } = getSel(view);
+  let { s, e } = getSel(view);
   // No selection: insert with snippet tab-stops so Tab jumps text → url.
   if (s === e) {
     snippet('[${text}](${url})')(view, null, s, e);
@@ -265,8 +365,11 @@ async function insertLink(view) {
   }
   // Text selected: it becomes the label; fill the url from a clipboard URL
   // when one is present, else drop the `url` placeholder selected.
-  const text = getDoc(view).slice(s, e);
   const url = await clipboardUrl();
+  // Re-read the selection: the clipboard read can take a while (permission
+  // prompt) and the doc may have changed under the stale offsets.
+  ({ s, e } = getSel(view));
+  const text = view.state.sliceDoc(s, e);
   const out = `[${text}](${url ?? 'url'})`;
   if (url) {
     const end = s + out.length;  // whole link filled — caret after it
@@ -278,14 +381,16 @@ async function insertLink(view) {
 }
 
 async function insertImage(view) {
-  const { s, e } = getSel(view);
+  let { s, e } = getSel(view);
   if (s === e) {
     snippet('![${alt}](${url})')(view, null, s, e);
     view.focus();
     return;
   }
-  const alt = getDoc(view).slice(s, e);
   const url = await clipboardUrl();
+  // Same stale-offset guard as insertLink.
+  ({ s, e } = getSel(view));
+  const alt = view.state.sliceDoc(s, e);
   const out = `![${alt}](${url ?? 'url'})`;
   if (url) {
     const end = s + out.length;
