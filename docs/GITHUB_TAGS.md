@@ -34,26 +34,14 @@ Release tags are the version prefixed with `v`:
    ```
 
 5. Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds the
-   cross-platform artifacts (`.msi`/`.exe`, `.dmg`, `.AppImage`/`.deb`/`.rpm`,
-   and the Arch `.pkg.tar.zst` packages) and creates a **draft** GitHub release
-   with them attached. The release notes are composed automatically from the
-   version's `CHANGELOG.md` section (with a tagline and install footer), so the
-   changelog entry from step 1 is what ships on the release page.
-6. Review the draft release, then publish it.
-
-## Arch packaging follow-up
-
-The same workflow builds the two Arch packages and, after uploading them, can
-push a commit straight to `main` that syncs the committed PKGBUILDs (version
-and checksums) to the new release — no follow-up to merge, just `git pull`
-afterwards to pick up the sync commit locally.
-
-This auto-sync is gated on the `PKGBUILD_SYNC_APP_ID` secret (the GitHub App
-that's allowed to bypass `main`'s pull-request rule). If that secret isn't
-configured the sync step skips silently and the release still succeeds — but
-the in-repo PKGBUILDs then have to be synced to the new version by hand. The
-full mechanism is documented in
-[`packaging/aur/README.md`](../packaging/aur/README.md).
+   cross-platform artifacts (`.msi`/`.exe`, `.dmg`, `.AppImage`/`.deb`/`.rpm`)
+   and creates a **draft** GitHub release with them attached. The release notes
+   are composed automatically from the version's `CHANGELOG.md` section (with a
+   tagline and install footer), so the changelog entry from step 1 is what
+   ships on the release page.
+6. Review the draft release, then publish it. Publishing triggers
+   `.github/workflows/repo-publish.yml`, which rebuilds the signed apt/dnf
+   repositories from every published release and deploys them to GitHub Pages.
 
 For how changes should be shaped before a release, see the
 [Code Style](CODE_STYLE.md) guide.
