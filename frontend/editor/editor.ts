@@ -527,9 +527,15 @@ function buildView(tab) {
   // buffer, which may have shrunk on discard/reload) so it doesn't drop to
   // offset 0. Reload / draft recovery clear tab.editorState so a stale state
   // can't override newer disk content.
+  //
+  // The parked state is only trusted when its doc still matches tab.raw:
+  // tab.raw tracks every keystroke, so a mismatch means the park is stale
+  // (some path abandoned the live view without re-parking) and restoring it
+  // would silently revert the user's text to an old snapshot. Fall back to
+  // a fresh build from tab.raw — undo history is lost, text never is.
   const restored = tab.editorState;
   let editorState;
-  if (restored) {
+  if (restored && restored.doc.toString() === (tab.raw ?? '')) {
     editorState = restored;
   } else {
     const doc = tab.raw ?? '';
