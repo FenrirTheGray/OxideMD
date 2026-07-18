@@ -11,19 +11,25 @@
 
 import {
   invoke,
-  modKey,
+  modKey, state,
   tabs,
   sidebarTreeEl, tabBarEl,
   previewPane, contentEl,
+  outlineSidebar, sidebarSearchResultsEl,
 } from "../core/state.ts";
 import {
-  loadFile, closeTab, closeOtherTabs, closeAllTabs, handleAnchorClick,
-  createNewFile, dropTabsForDeletedPath, parentDir,
+  loadFile, closeTab, closeOtherTabs, closeAllTabs, closeTabsToRight,
+  handleAnchorClick, createNewFile, dropTabsForDeletedPath,
+  retargetTabsForRenamedPath, parentDir, activeTab, applyRecentFiles,
 } from "./tabs.ts";
+import { isDirty } from "../core/tab-state.ts";
+import { runAction } from "../core/keybindings.ts";
 import { editorModule } from "../editor/lazy.ts";
 import { printActiveTab } from "../features/print.ts";
 import { logError } from "../core/logger.ts";
 import { showErrorModal } from "./error-modal.ts";
+import { showToast } from "./toast.ts";
+import { promptText } from "./confirm.ts";
 
 // ── Menu renderer ────────────────────────────────────────────────────────
 // One menu element exists at a time, lazily attached to <body>. Click-out,
@@ -183,6 +189,38 @@ function selectAllIn(root) {
   sel.addRange(range);
 }
 
+// ── Path helpers ─────────────────────────────────────────────────────────
+
+function baseName(p) {
+  return p.split(/[\\/]/).pop() || p;
+}
+
+// Path relative to the open folder root, or null when no folder is open
+// or the path lives outside it (then the menu omits the entry).
+function relativePath(p) {
+  const root = state.currentFolder?.root;
+  if (!root || !p) return null;
+  if (p.startsWith(root + '/') || p.startsWith(root + '\\')) return p.slice(root.length + 1);
+  return null;
+}
+
+// Shared "Copy Path / Copy Relative Path / Copy Name" tail used by every
+// menu that targets a concrete file or folder on disk.
+function copyPathItems(path) {
+  const items = [{ label: 'Copy Path', action: () => copyText(path) }];
+  const rel = relativePath(path);
+  if (rel && rel !== baseName(path)) {
+    items.push({ label: 'Copy Relative Path', action: () => copyText(rel) });
+  }
+  items.push({ label: 'Copy Name', action: () => copyText(baseName(path)) });
+  return items;
+}
+
+function revealPath(path) {
+  invoke('reveal_path', { path }).catch((e) =>
+    showErrorModal('Reveal failed', 'Could not show the file in the file manager.', e));
+}
+
 // ── Per-context builders ─────────────────────────────────────────────────
 
 // Permanently delete a tree entry after an explicit confirmation. The
@@ -204,6 +242,46 @@ async function deleteTreeEntry(path, isDir) {
   }
 }
 
+// Rename a tree entry in place via the shared text prompt. On success the
+// backend returns the new path; open tabs are retargeted and the watcher
+// refreshes the tree.
+async function renameTreeEntry(path, isDir) {
+  const oldName = baseName(path);
+  const newName = await promptText({
+    title: isDir ? 'Rename folder' : 'Rename file',
+    saveLabel: 'Rename',
+    initial: oldName,
+  });
+  if (!newName || newName === oldName) return;
+  try {
+    const newPath = await invoke('rename_path', { path, newName });
+    retargetTabsForRenamedPath(path, newPath);
+  } catch (e) {
+    showErrorModal('Rename failed', `Could not rename "${oldName}".`, e);
+  }
+}
+
+// Duplicate a file next to itself ("name copy.md") and open the copy.
+async function duplicateTreeEntry(path) {
+  try {
+    const newPath = await invoke('duplicate_path', { path });
+    loadFile(newPath);
+  } catch (e) {
+    showErrorModal('Duplicate failed', `Could not duplicate "${baseName(path)}".`, e);
+  }
+}
+
+// Create a subfolder inside `dir`; the watcher paints it into the tree.
+async function createFolderIn(dir) {
+  const name = await promptText({ title: 'New folder', saveLabel: 'Create', initial: '' });
+  if (!name) return;
+  try {
+    await invoke('create_folder', { dir, name });
+  } catch (e) {
+    showErrorModal('New folder failed', `Could not create "${name}".`, e);
+  }
+}
+
 function buildTreeMenu(nodeEl) {
   const path = nodeEl.dataset.path;
   if (!path) return [];
@@ -214,15 +292,23 @@ function buildTreeMenu(nodeEl) {
     items.push({ separator: true });
     // "New File…" for a file is rooted at its parent directory.
     items.push({ label: 'New File…', action: () => createNewFile(parentDir(path)) });
+    items.push({ label: 'New Folder…', action: () => createFolderIn(parentDir(path)) });
+    items.push({ separator: true });
+    items.push({ label: 'Rename…', action: () => renameTreeEntry(path, false) });
+    items.push({ label: 'Duplicate', action: () => duplicateTreeEntry(path) });
     items.push({ label: 'Delete File…', action: () => deleteTreeEntry(path, false) });
   } else {
-    // Right-clicking a folder offers "New File…" rooted at that folder,
-    // so the save dialog opens inside the directory the user clicked.
+    // Right-clicking a folder roots creation at that folder, so the save
+    // dialog / new subfolder lands inside the directory the user clicked.
     items.push({ label: 'New File…', action: () => createNewFile(path) });
+    items.push({ label: 'New Folder…', action: () => createFolderIn(path) });
+    items.push({ separator: true });
+    items.push({ label: 'Rename…', action: () => renameTreeEntry(path, true) });
     items.push({ label: 'Delete Folder…', action: () => deleteTreeEntry(path, true) });
   }
   items.push({ separator: true });
-  items.push({ label: 'Copy Path', action: () => copyText(path) });
+  items.push({ label: 'Reveal in File Explorer', action: () => revealPath(path) });
+  items.push(...copyPathItems(path));
   return items;
 }
 
@@ -231,18 +317,43 @@ function buildTabMenu(tabEl) {
   if (Number.isNaN(id)) return [];
   const tab = tabs.find(t => t.id === id);
   const multi = tabs.length > 1;
+  const idx = tabs.findIndex(t => t.id === id);
+  const isActive = id === state.activeTabId;
   const items: any[] = [
     { label: 'Close', action: () => closeTab(id), shortcut: `${modKey}+W` },
   ];
   if (multi) {
     items.push({ label: 'Close Others', action: () => closeOtherTabs(id) });
+    if (idx !== -1 && idx < tabs.length - 1) {
+      items.push({ label: 'Close Tabs to the Right', action: () => closeTabsToRight(id) });
+    }
     items.push({ label: 'Close All', action: () => closeAllTabs() });
+  }
+  // Reload/Export run on the active tab (runAction routes to the same
+  // handlers as the shortcuts), so only offer them there.
+  if (isActive && tab?.path) {
+    items.push({ separator: true });
+    items.push({
+      label: 'Reload from Disk',
+      action: () => runAction('reload'),
+      disabled: tab.editing || isDirty(tab),
+      shortcut: accelFromBindings('reload'),
+    });
+    items.push({ label: 'Export as HTML…', action: () => runAction('exportHtml'), shortcut: accelFromBindings('exportHtml') });
   }
   if (tab?.path) {
     items.push({ separator: true });
-    items.push({ label: 'Copy Path', action: () => copyText(tab.path) });
+    items.push({ label: 'Reveal in File Explorer', action: () => revealPath(tab.path) });
+    items.push(...copyPathItems(tab.path));
   }
   return items;
+}
+
+// Display accelerator for a rebindable action id (same idea as the editor
+// module's accelFor, duplicated here to keep this module CM6-free).
+function accelFromBindings(id) {
+  const primary = state.bindings?.[id]?.primary;
+  return primary ? primary.replace('Mod', modKey) : undefined;
 }
 
 // Generic fallback for plain <input type="text"> and small <textarea>s
@@ -260,9 +371,41 @@ function buildInputMenu(input) {
   ];
 }
 
+// Copy an <img> to the clipboard as a PNG bitmap. Local images (the
+// normal case — the renderer stamps their filesystem path on
+// data-oxide-src) come through the backend as base64, because the CSP's
+// connect-src blocks fetch() of asset: URLs. Remote images (opt-in) fall
+// back to fetch. The ImageBitmap + canvas round-trip avoids a tainted
+// canvas and normalizes any source format to the PNG the clipboard
+// API requires.
+async function copyImageBitmap(img) {
+  try {
+    let blob;
+    const localPath = img.dataset.oxideSrc;
+    if (localPath) {
+      const b64 = await invoke('read_image_base64', { path: localPath });
+      blob = new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))]);
+    } else {
+      blob = await (await fetch(img.currentSrc || img.src)).blob();
+    }
+    const bmp = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext('2d').drawImage(bmp, 0, 0);
+    const png: Blob = await new Promise((res, rej) =>
+      canvas.toBlob((b) => b ? res(b) : rej(new Error('PNG encode failed')), 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+  } catch (e) {
+    logError('contextmenu', 'copy image failed', e);
+    showToast('Could not copy image', 'error');
+  }
+}
+
 function buildMarkdownMenu(root, target) {
   const link = target.closest('a[href]');
   const img  = !link ? target.closest('img') : null;
+  const heading = !link && !img ? target.closest('h1,h2,h3,h4,h5,h6') : null;
   // Snapshot the selected text now. Clicking a menu item collapses the
   // window text selection (focus moves to the menu button), so by the
   // time the action runs `document.execCommand('copy')` would copy
@@ -281,6 +424,7 @@ function buildMarkdownMenu(root, target) {
   }
 
   if (img) {
+    items.push({ label: 'Copy Image', action: () => copyImageBitmap(img) });
     // Prefer the original filesystem path (set by the Rust renderer for
     // local images) over the asset:// URL, which isn't useful outside
     // the webview.
@@ -290,10 +434,71 @@ function buildMarkdownMenu(root, target) {
   }
 
   if (hasSelection) items.push({ label: 'Copy', action: () => copyText(selectedText) });
+  // The anchor form the in-app link handler understands ("#slug" scrolls
+  // and survives cross-file fragment links).
+  if (heading?.id) {
+    items.push({ label: 'Copy Link to Heading', action: () => copyText(`#${heading.id}`) });
+  }
   items.push({ label: 'Select All', action: () => selectAllIn(root) });
-  items.push({ separator: true });
-  items.push({ label: 'Print…', action: () => printActiveTab() });
+  // Document-level actions only apply when a document is open — on the
+  // welcome screen (also rendered into #content) they'd print/export the
+  // welcome page itself.
+  const tab = activeTab();
+  if (tab) {
+    items.push({ separator: true });
+    items.push({ label: 'Print…', action: () => printActiveTab(), shortcut: accelFromBindings('print') });
+    if (tab.path) {
+      items.push({ label: 'Export as HTML…', action: () => runAction('exportHtml'), shortcut: accelFromBindings('exportHtml') });
+    }
+  }
   return items;
+}
+
+// Welcome screen's recent-files list. Mirrors the click affordances
+// (open, forget) plus the standard path actions.
+function buildRecentMenu(itemEl) {
+  const path = (itemEl.querySelector('.welcome-recent-link') as HTMLElement)?.dataset.path;
+  if (!path) return [];
+  return [
+    { label: 'Open', action: () => loadFile(path) },
+    {
+      label: 'Remove from Recents',
+      action: () => invoke('forget_recent_file', { path }).then(applyRecentFiles).catch(() => {}),
+    },
+    { separator: true },
+    { label: 'Reveal in File Explorer', action: () => revealPath(path) },
+    ...copyPathItems(path),
+  ];
+}
+
+// Outline sidebar items. The rendered heading order matches the outline's
+// (both come from the same source), so the anchor id is read from the
+// corresponding rendered heading — same index trick the click-to-jump
+// handler in outline.ts relies on.
+function buildOutlineMenu(itemEl) {
+  const text = itemEl.textContent.trim();
+  if (!text) return [];
+  const items = [{ label: 'Copy Heading Text', action: () => copyText(text) }];
+  const index = parseInt(itemEl.dataset.index, 10);
+  const root = activeTab()?.editing ? previewPane : contentEl;
+  const id = Number.isFinite(index)
+    ? root?.querySelectorAll('h1,h2,h3,h4,h5,h6')[index]?.id
+    : null;
+  if (id) items.push({ label: 'Copy Link to Heading', action: () => copyText(`#${id}`) });
+  return items;
+}
+
+// Project-search results: both the per-file group header and each match
+// row carry the file's path.
+function buildSearchResultMenu(el) {
+  const path = el.dataset.path;
+  if (!path) return [];
+  return [
+    { label: 'Open', action: () => loadFile(path) },
+    { separator: true },
+    { label: 'Reveal in File Explorer', action: () => revealPath(path) },
+    ...copyPathItems(path),
+  ];
 }
 
 // ── Global dispatch ──────────────────────────────────────────────────────
@@ -311,11 +516,17 @@ document.addEventListener('contextmenu', (e) => {
 
   let items = [];
 
-  const treeNode = sidebarTreeEl?.contains(e.target as Node) ? (e.target as HTMLElement).closest('.tree-node') : null;
-  const tabEl    = tabBarEl?.contains(e.target as Node)      ? (e.target as HTMLElement).closest('.tab')       : null;
-  const mdEditor = (e.target as HTMLElement).closest('.cm-editor');
+  const target = e.target as HTMLElement;
+  const treeNode = sidebarTreeEl?.contains(e.target as Node) ? target.closest('.tree-node') : null;
+  const tabEl    = tabBarEl?.contains(e.target as Node)      ? target.closest('.tab')       : null;
+  const searchEl = sidebarSearchResultsEl?.contains(e.target as Node)
+    ? target.closest('.search-result-row, .search-group-header')
+    : null;
+  const outlineItem = outlineSidebar?.contains(e.target as Node) ? target.closest('.outline-item') : null;
+  const recentItem  = target.closest('.welcome-recent-item');
+  const mdEditor = target.closest('.cm-editor');
   const otherInput = !mdEditor
-    ? (e.target as HTMLElement).closest('input[type="text"], input[type="search"], input:not([type]), textarea')
+    ? target.closest('input[type="text"], input[type="search"], input:not([type]), textarea')
     : null;
   const inPreview = previewPane?.contains(e.target as Node);
   const inContent = contentEl?.contains(e.target as Node);
@@ -324,6 +535,12 @@ document.addEventListener('contextmenu', (e) => {
     items = buildTreeMenu(treeNode);
   } else if (tabEl) {
     items = buildTabMenu(tabEl);
+  } else if (searchEl) {
+    items = buildSearchResultMenu(searchEl);
+  } else if (outlineItem) {
+    items = buildOutlineMenu(outlineItem);
+  } else if (recentItem) {
+    items = buildRecentMenu(recentItem);
   } else if (mdEditor) {
     // Built by the (lazily-loaded) editor module — a visible .cm-editor
     // means it's loaded. No items means no menu, same as before.

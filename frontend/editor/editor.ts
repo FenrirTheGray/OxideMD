@@ -1409,6 +1409,7 @@ export function buildEditorContextMenu() {
     { separator: true },
     { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: accelFor('bold') },
     { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: accelFor('italic') },
+    { label: 'Strikethrough', action: () => applyFormat(view, 'strike'), shortcut: accelFor('strike') },
     { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: accelFor('underline') },
     { label: 'Code',   action: () => applyFormat(view, 'code'),   shortcut: accelFor('code') },
     { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: accelFor('link') },

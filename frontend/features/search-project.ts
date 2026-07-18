@@ -84,6 +84,7 @@ function renderResults(data, query) {
     const header = document.createElement('div');
     header.className = 'search-group-header';
     header.title = file.path;
+    header.dataset.path = file.path;
     const icon = document.createElement('span');
     icon.className = 'search-group-icon';
     icon.innerHTML = SVG_FILE;
@@ -103,6 +104,7 @@ function renderResults(data, query) {
       row.type = 'button';
       row.className = 'search-result-row';
       row.title = file.path;
+      row.dataset.path = file.path;
       const ln = document.createElement('span');
       ln.className = 'search-result-line';
       ln.textContent = String(m.line_number);

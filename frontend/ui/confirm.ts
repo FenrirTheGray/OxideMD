@@ -27,13 +27,14 @@ let confirmPrimary = 'save';
 // nonsensical). `primary` selects which button gets the initial focus
 // and the Enter accelerator: 'save' for the unsaved-changes prompt,
 // 'discard' for the explicit Discard click, 'cancel' otherwise.
-function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, primary }: any) {
+function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, discardHidden, primary }: any) {
   confirmDialogTitle.textContent = title;
   confirmDialogBody.innerHTML = bodyHtml;
   confirmSaveBtn.textContent = saveLabel ?? 'Save';
   confirmDiscardBtn.textContent = discardLabel ?? 'Discard';
   confirmCancelBtn.hidden = !!cancelHidden;
   confirmSaveBtn.hidden = !!saveHidden;
+  confirmDiscardBtn.hidden = !!discardHidden;
   confirmPrimary = primary || 'save';
 }
 
@@ -72,11 +73,9 @@ export function promptOverwriteChanged(tab) {
     saveLabel: 'Overwrite',
     cancelHidden: false,
     saveHidden: false,
-    discardLabel: 'Discard',
+    discardHidden: true, // two-button shape: Save(=Overwrite) + Cancel
     primary: 'cancel',
   });
-  // Reuse the two-button shape: hide Discard, keep Save(=Overwrite)+Cancel.
-  confirmDiscardBtn.hidden = true;
   return openConfirmDialog();
 }
 
@@ -134,6 +133,35 @@ export function promptRecoverDraft(tab, draft, { conflict = false } = {}) {
     primary: conflict ? 'cancel' : 'save',
   });
   return openConfirmDialog();
+}
+
+// Single-field text prompt (rename / new folder) reusing the shared
+// confirm overlay. Resolves the trimmed input on confirm, null on cancel.
+// The body is static markup — no interpolated content, nothing to escape.
+export function promptText({ title, saveLabel, initial }: { title: string, saveLabel: string, initial?: string }) {
+  setConfirmContents({
+    title,
+    bodyHtml: `<input type="text" id="confirm-text-input" class="confirm-text-input" spellcheck="false" autocomplete="off">`,
+    saveLabel,
+    cancelHidden: false,
+    discardHidden: true,
+    primary: 'save',
+  });
+  const promise = openConfirmDialog();
+  const input = document.getElementById('confirm-text-input') as HTMLInputElement;
+  input.value = initial ?? '';
+  // Runs after openConfirmDialog's own focus rAF (registered later), so
+  // the input wins. Preselect the stem so typing replaces the name but
+  // keeps the extension.
+  requestAnimationFrame(() => {
+    input.focus();
+    const dot = input.value.lastIndexOf('.');
+    input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+  });
+  return promise.then((decision) => {
+    const value = input.value.trim();
+    return decision === 'save' && value ? value : null;
+  });
 }
 
 function formatDraftTimestamp(ts) {
