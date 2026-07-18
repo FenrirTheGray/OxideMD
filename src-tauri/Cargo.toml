@@ -1,6 +1,6 @@
 [package]
 name = "oxidemd"
-version = "4.8.3"
+version = "4.9.0"
 description = "A lightweight, cross-platform Markdown viewer and editor"
 authors = ["Aleksandar Colovic"]
 license = "MIT"
