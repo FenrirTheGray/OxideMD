@@ -4,6 +4,29 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.9.0] - 2026-07-18
+
+### Added
+
+- File and folder management from the sidebar's right-click menu: Rename, Duplicate, New Folder, and Reveal in File Explorer, alongside the existing New File and Delete
+- Copy Relative Path (when a folder is open) and Copy Name on every file-targeting context menu, next to Copy Path
+- Tab context menu: Close Tabs to the Right, Reload from Disk, and Export as HTML
+- Right-click menus for the welcome screen's recent files (Open, Remove from Recents, Reveal, copy actions), outline entries (Copy Heading Text, Copy Link to Heading), and project-search results (Open, Reveal, copy actions)
+- Rendered view: Copy Image now puts the actual bitmap on the clipboard (Copy Image Path remains), headings offer Copy Link to Heading, and Export as HTML sits next to Print
+- Strikethrough in the editor's formatting context menu
+- Smarter Enter in the editor: continues lists, task lists, and blockquotes, and an Enter on an empty item ends the block
+
+### Changed
+
+- The config is now stored as `config.json`; a legacy `config.toml` from 4.8 and earlier is migrated automatically on first launch
+
+### Fixed
+
+- Returning to an editing tab no longer shows a stale (or empty) buffer: the parked editor state could outlive the real text when the tab was left by opening another file into a new tab (sidebar, recents, search) or creating a new file — those paths now snapshot the editor like a tab switch does, and a stale snapshot is discarded in favor of the live buffer on remount
+- Right-clicking the welcome screen no longer offers Print/Export for the welcome page itself
+- Formatting toggles (bold, italic, code, …) are selection-aware again in edge cases where the toggle used to mis-detect existing markers, and keyboard shortcut matching was hardened against near-miss chords
+- Unsaved edits stay protected across the whole edit-mode lifecycle (entering, leaving, and switching tabs can no longer bypass the dirty-buffer prompts)
+
 ## [4.8.3] - 2026-07-02
 
 ### Added
