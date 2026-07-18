@@ -644,6 +644,21 @@ body.resizing-split * {
   color: var(--accent);
   word-break: break-all;
 }
+.confirm-text-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg);
+  font-size: 13px;
+  font-family: var(--font-family);
+}
+.confirm-text-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
 
 #confirm-footer {
   display: flex;

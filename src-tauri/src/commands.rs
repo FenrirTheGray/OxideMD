@@ -200,6 +200,131 @@ pub async fn delete_path(path: String) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Rename a file or directory in place (same parent directory).
+/// `new_name` is a bare filename component typed by the user into the
+/// rename prompt. Returns the new full path so the frontend can retarget
+/// open tabs.
+#[tauri::command]
+pub async fn rename_path(path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !is_safe_filename_component(&new_name) {
+            return Err(format!("\"{new_name}\" is not a valid name"));
+        }
+        let p = PathBuf::from(&path);
+        fs::symlink_metadata(&p).map_err(|e| format!("{path}: {e}"))?;
+        let parent = p.parent().ok_or("path has no parent directory")?;
+        let old_name = p.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+        let target = parent.join(&new_name);
+        // Refuse to clobber an existing entry — except a pure case change
+        // of the same entry, which "exists" on case-insensitive filesystems.
+        if target.exists() && !old_name.eq_ignore_ascii_case(&new_name) {
+            return Err(format!("\"{new_name}\" already exists"));
+        }
+        fs::rename(&p, &target).map_err(|e| format!("{path}: {e}"))?;
+        let canonical = fs::canonicalize(&target).unwrap_or(target);
+        Ok(strip_windows_verbatim(canonical)
+            .to_string_lossy()
+            .into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Copy a file next to itself as "name copy.md", "name copy 2.md", ….
+/// Files only — the tree menu doesn't offer duplicating folders. Returns
+/// the new path so the frontend can open it.
+#[tauri::command]
+pub async fn duplicate_path(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        let meta = fs::symlink_metadata(&p).map_err(|e| format!("{path}: {e}"))?;
+        if meta.is_dir() {
+            return Err("only files can be duplicated".into());
+        }
+        let parent = p.parent().ok_or("path has no parent directory")?;
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("file");
+        let ext = p
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|e| format!(".{e}"))
+            .unwrap_or_default();
+        let mut target = parent.join(format!("{stem} copy{ext}"));
+        let mut n = 2;
+        while target.exists() {
+            if n > 1000 {
+                return Err("could not find a free name for the copy".into());
+            }
+            target = parent.join(format!("{stem} copy {n}{ext}"));
+            n += 1;
+        }
+        fs::copy(&p, &target).map_err(|e| format!("{path}: {e}"))?;
+        let canonical = fs::canonicalize(&target).unwrap_or(target);
+        Ok(strip_windows_verbatim(canonical)
+            .to_string_lossy()
+            .into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Create a subdirectory `name` inside `dir`. The filesystem watcher
+/// refreshes the sidebar tree on its own.
+#[tauri::command]
+pub async fn create_folder(dir: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !is_safe_filename_component(&name) {
+            return Err(format!("\"{name}\" is not a valid name"));
+        }
+        let target = PathBuf::from(&dir).join(&name);
+        if target.exists() {
+            return Err(format!("\"{name}\" already exists"));
+        }
+        fs::create_dir(&target).map_err(|e| e.to_string())?;
+        Ok(target.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Show `path` in the OS file manager: selected in Explorer/Finder;
+/// on Linux there's no portable "select" verb, so open the containing
+/// directory instead. Arguments are passed directly (no shell), so the
+/// path can't be interpreted as anything but a path.
+#[tauri::command]
+pub async fn reveal_path(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        fs::symlink_metadata(&p).map_err(|e| format!("{path}: {e}"))?;
+        #[cfg(target_os = "windows")]
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(&p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(&p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            let dir = if p.is_dir() {
+                p.as_path()
+            } else {
+                p.parent().unwrap_or(p.as_path())
+            };
+            std::process::Command::new("xdg-open")
+                .arg(dir)
+                .spawn()
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[derive(serde::Serialize)]
 pub struct FolderTree {
     pub root: String,
@@ -1578,6 +1703,43 @@ pub async fn get_font_data(filename: String) -> Result<String, String> {
         let dir = fonts_dir().ok_or("Could not determine fonts directory")?;
         let path = dir.join(&filename);
         let bytes = fs::read(&path).map_err(|e| format!("Failed to read font: {e}"))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Raw bytes of a local image as base64, for the context menu's
+/// "Copy Image". The webview can't fetch() asset: URLs (CSP connect-src),
+/// so the bytes come through IPC instead. Exposes nothing the asset
+/// protocol doesn't already serve for rendering. Capped so a stray
+/// multi-GB path can't balloon the IPC message.
+const COPY_IMAGE_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+#[tauri::command]
+pub async fn read_image_base64(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(&path);
+        // Image files only. A path scope can't apply here (documents may
+        // reference images anywhere on disk, same as the asset protocol),
+        // but the extension check keeps this command from doubling as a
+        // generic bytes-reader for non-image files.
+        let ext = p
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase);
+        match ext.as_deref() {
+            Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "avif" | "ico") => {}
+            _ => return Err(format!("{path}: not an image file")),
+        }
+        let meta = fs::metadata(&p).map_err(|e| format!("{path}: {e}"))?;
+        if !meta.is_file() {
+            return Err(format!("{path}: not a file"));
+        }
+        if meta.len() > COPY_IMAGE_MAX_BYTES {
+            return Err("image is too large to copy".into());
+        }
+        let bytes = fs::read(&p).map_err(|e| format!("{path}: {e}"))?;
         Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
     })
     .await

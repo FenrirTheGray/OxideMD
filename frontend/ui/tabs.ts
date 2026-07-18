@@ -252,6 +252,36 @@ export function dropTabsForDeletedPath(deletedPath) {
   }
 }
 
+// Point open tabs at a path's new location after an on-disk rename —
+// the renamed entry itself and, for a folder, everything inside it.
+// Only path/title metadata changes; buffers and edit state are kept.
+// The filesystem watcher refreshes the sidebar tree on its own.
+export function retargetTabsForRenamedPath(oldPath, newPath) {
+  if (!oldPath || !newPath) return;
+  let changed = false;
+  for (const t of tabs) {
+    if (!t.path) continue;
+    if (t.path === oldPath) {
+      t.path = newPath;
+    } else if (t.path.startsWith(oldPath + '/') || t.path.startsWith(oldPath + '\\')) {
+      t.path = newPath + t.path.slice(oldPath.length);
+    } else {
+      continue;
+    }
+    t.title = t.path.split(/[\\/]/).pop() || t.title;
+    changed = true;
+  }
+  if (!changed) return;
+  syncWatcher();
+  renderTabBar();
+  const tab = activeTab();
+  if (tab?.path) {
+    appWindow.setTitle(tab.title);
+    document.title = tab.title;
+    setStatusFilePath(tab.path);
+  }
+}
+
 // Close every tab except `keepId`. Iterates sequentially so each dirty
 // tab gets its own unsaved-changes prompt; if `closeTab` cancels or
 // fails, the tab stays in `tabs` and we bail out of the loop.
@@ -265,6 +295,19 @@ export async function closeOtherTabs(keepId) {
 
 // Close all = close all "other" tabs with no tab kept.
 export const closeAllTabs = () => closeOtherTabs(null);
+
+// Close every tab after `id` in tab-bar order. Same sequential prompt
+// behavior as closeOtherTabs: a cancelled unsaved-changes prompt stops
+// the sweep.
+export async function closeTabsToRight(id) {
+  const idx = tabs.findIndex(t => t.id === id);
+  if (idx === -1) return;
+  const ids = tabs.slice(idx + 1).map(t => t.id);
+  for (const tid of ids) {
+    await closeTab(tid);
+    if (tabs.some(t => t.id === tid)) break;
+  }
+}
 
 export function applyActiveTab() {
   const tab = activeTab();
