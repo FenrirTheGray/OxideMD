@@ -101,6 +101,9 @@ export function openInNewTab(path, title, html, raw = null) {
       return;
     }
   }
+  // Leaving an editing tab for a brand-new tab bypasses switchToTab, so
+  // park its live editor state here or it goes stale.
+  parkActiveEditorState();
   const id = state.nextTabId++;
   tabs.push({
     id, path, title, html,
@@ -117,6 +120,28 @@ export function openInNewTab(path, title, html, raw = null) {
   syncWatcher();
 }
 
+// Snapshot the live editor into the editing tab that owns it, before the
+// view is abandoned for another tab. Every path that moves focus away from
+// an editing tab must call this (tab switch, opening a file into a new tab,
+// creating a new file) — a park skipped here leaves tab.editorState stale,
+// and a stale state restored over a newer tab.raw shows the user an old
+// buffer (the "text disappeared" bug). buildView also guards against stale
+// parks as a backstop, but only this path preserves undo history.
+export function parkActiveEditorState() {
+  const cur = activeTab();
+  if (!cur?.editing) return;
+  const liveValue = editorModule()?.getEditorValue() ?? null;
+  if (liveValue != null) {
+    cur.raw = liveValue;
+    cur.editorScrollTop = editorModule()?.getEditorScrollTop() ?? 0;
+    cur.editorSelection = editorModule()?.getEditorSelectionHead() ?? 0;
+    // Preserve the full CM state (undo history + selection) so returning
+    // to this tab restores it instead of rebuilding from the string.
+    cur.editorState = editorModule()?.getEditorState() ?? undefined;
+  }
+  cur.previewScrollTop = previewPane.scrollTop;
+}
+
 export function switchToTab(id) {
   // Save scroll position of current tab before leaving. When leaving an
   // editor, capture the current buffer value and both pane scroll
@@ -124,20 +149,8 @@ export function switchToTab(id) {
   // jump the scroll state.
   const cur = activeTab();
   if (cur) {
-    if (cur.editing) {
-      const liveValue = editorModule()?.getEditorValue() ?? null;
-      if (liveValue != null) {
-        cur.raw = liveValue;
-        cur.editorScrollTop = editorModule()?.getEditorScrollTop() ?? 0;
-        cur.editorSelection = editorModule()?.getEditorSelectionHead() ?? 0;
-        // Preserve the full CM state (undo history + selection) so returning
-        // to this tab restores it instead of rebuilding from the string.
-        cur.editorState = editorModule()?.getEditorState() ?? undefined;
-      }
-      cur.previewScrollTop = previewPane.scrollTop;
-    } else {
-      cur.scrollTop = contentScroll.scrollTop;
-    }
+    if (cur.editing) parkActiveEditorState();
+    else cur.scrollTop = contentScroll.scrollTop;
   }
 
   state.activeTabId = id;
@@ -773,6 +786,9 @@ export async function openFilePicker() {
 export function createNewFile(dir = null) {
   closeSearch(); // dismiss the inline search bar so it doesn't block new-file
   if (hasActiveOverlay()) return;
+  // Same as openInNewTab: this leaves the current editing tab without
+  // going through switchToTab, so park its live editor state first.
+  parkActiveEditorState();
   const id = state.nextTabId++;
   tabs.push({
     id, path: null, title: 'Untitled',
