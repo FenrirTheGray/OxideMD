@@ -35,7 +35,7 @@ body.theme-dark {
   --bg-danger-hover: rgba(224, 108, 117, 0.1);
 
   --fg: #abb2bf;
-  --fg-dim: #7a8799;
+  --fg-dim: #8b96a8;
   --fg-muted: #8994a5;
   --fg-toolbar: #9da5b4;
 
@@ -103,7 +103,7 @@ body.theme-light {
   --accent-glow: rgba(64, 120, 242, 0.12);
   --danger: #e45649;
 
-  --link: #0184bc;
+  --link: #016d9c;
   --link-hover: #005f8a;
   --quote-border: #a626a4;
   --hr: #d8d8d8;

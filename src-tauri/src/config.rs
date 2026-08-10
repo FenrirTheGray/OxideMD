@@ -105,10 +105,17 @@ impl Default for Config {
             font_size: 16,
             line_height: 1.8,
             reading_width: 800,
+            // These four, plus code_bg_color / note_bg_color below, MUST stay
+            // byte-identical to `THEME_DEFAULTS.dark` in
+            // frontend/settings/palette.ts. That table is what the frontend
+            // compares a stored value against to decide "this is still the
+            // dark default, swap it for the light one on a theme flip" — a
+            // mismatch here reads as a deliberate user pick and silently stops
+            // the swap, which is how a light-theme heading ends up at 1.39:1.
             h1_color: "#c084fc".into(),
             h2_color: "#67e8f9".into(),
             h3_color: "#fbbf24".into(),
-            bullet_color: "#8b5cf6".into(),
+            bullet_color: "#a78bfa".into(),
             code_bg_color: "#1e2127".into(),
             code_accent_color: "#61afef".into(),
             note_bg_color: "#2a2f3a".into(),
