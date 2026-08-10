@@ -1,30 +1,71 @@
 // Palette data + pure helpers, split out of settings.js.
 //
 // Dependency-free on purpose: no imports from state.js or the DOM at module
-// load, so the pure functions (effectivePalette, effectiveBgColor) are
+// load, so the pure functions (effectivePalette, effectiveThemeColor) are
 // unit-testable in Node. The two appliers (applyPaletteToBody, setBodyTheme)
 // touch document.body, but only when called from the browser — never at
 // import — so this module still loads in the test runner.
 
-// Code/note backgrounds are the only colors where the dark defaults
-// produce dark-on-dark text in light mode (text uses --fg, which is
-// dark in light theme). Headings and accents read fine on either
-// background, so they stay theme-agnostic.
-export const BG_DEFAULTS = {
-  dark: { code_bg_color: "#1e2127", note_bg_color: "#2a2f3a" },
-  light: { code_bg_color: "#f0f0f0", note_bg_color: "#eaeef8" },
+// The flat `Config` color fields whose default has to differ per theme,
+// because one value cannot be legible on both backgrounds.
+//
+// Backgrounds are the obvious case (dark code surface under dark text).
+// The headings are the non-obvious one: the dark defaults are light,
+// saturated hues picked against #282c34, and on the light background
+// they collapse — h2 `#67e8f9` measures 1.39:1 on #fafafa, below even
+// the 3:1 large-text floor. Every light value below clears 4.5:1 on
+// #fafafa; palette.test.ts asserts it so a future palette tweak can't
+// quietly regress.
+//
+// The `dark` half MUST stay byte-identical to the corresponding fields in
+// `Config::default()` (src-tauri/src/config.rs) — a stored value only gets
+// swapped when it still equals the other theme's default here, so drift
+// between the two tables reads as a user's custom pick and disables the
+// swap entirely.
+export const THEME_DEFAULTS = {
+  dark: {
+    code_bg_color: "#1e2127",
+    note_bg_color: "#2a2f3a",
+    h1_color: "#c084fc",
+    h2_color: "#67e8f9",
+    h3_color: "#fbbf24",
+    // Lifted from #8b5cf6, which was 3.31:1 on the dark background — the
+    // one dark-theme default that was also failing.
+    bullet_color: "#a78bfa",
+  },
+  light: {
+    code_bg_color: "#f0f0f0",
+    note_bg_color: "#eaeef8",
+    h1_color: "#7e22ce",
+    h2_color: "#0e7490",
+    h3_color: "#8a5304",
+    bullet_color: "#6d28d9",
+  },
 };
 
-// If the saved value matches the *other* theme's default, swap to the
-// resolved theme's default. Custom user picks pass through unchanged.
-// Edge case: a user who deliberately chose the other theme's default
-// hex sees it auto-swap on theme flip — accepted to avoid carrying a
-// "this is custom" flag through the data model.
-export function effectiveBgColor(savedValue, field, resolved) {
+// Defaults this table used to ship. `save_config_cmd` persists the whole
+// struct, so every install that has ever opened Settings has the old value
+// on disk — and a retired default matches neither theme's current entry,
+// which would read as a deliberate user pick and leave the swap dead for
+// exactly the users the fix was for. Treated as "still a default", so it
+// snaps to the resolved theme's current value.
+const RETIRED_DEFAULTS = {
+  // Was the dark default until the 2026-08 contrast pass; 3.31:1 on #282c34.
+  bullet_color: ["#8b5cf6"],
+};
+
+// If the saved value matches the *other* theme's default (or a retired
+// default from either), swap to the resolved theme's default. Custom user
+// picks pass through unchanged. Edge case: a user who deliberately chose
+// the other theme's default hex sees it auto-swap on theme flip — accepted
+// to avoid carrying a "this is custom" flag through the data model.
+export function effectiveThemeColor(savedValue, field, resolved) {
   const other = resolved === "dark" ? "light" : "dark";
   const lower = (savedValue || "").toLowerCase();
-  if (lower === BG_DEFAULTS[other][field].toLowerCase()) {
-    return BG_DEFAULTS[resolved][field];
+  if (!lower) return savedValue;
+  const stale = (RETIRED_DEFAULTS[field] || []).some((h) => h.toLowerCase() === lower);
+  if (stale || lower === THEME_DEFAULTS[other][field].toLowerCase()) {
+    return THEME_DEFAULTS[resolved][field];
   }
   return savedValue;
 }
@@ -109,7 +150,7 @@ export const DEFAULT_PALETTE = {
     "bg-settings-hd": "#31363f",
     "bg-settings-ft": "#21252b",
     fg: "#abb2bf",
-    "fg-dim": "#7a8799",
+    "fg-dim": "#8b96a8",
     "fg-muted": "#8994a5",
     "fg-toolbar": "#9da5b4",
     border: "#3b4048",
@@ -147,7 +188,7 @@ export const DEFAULT_PALETTE = {
     "accent-2": "#0184bc",
     danger: "#e45649",
     "quote-border": "#a626a4",
-    link: "#0184bc",
+    link: "#016d9c",
     "link-hover": "#005f8a",
     "mark-current": "#4078f2",
     "mark-current-fg": "#ffffff",

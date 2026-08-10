@@ -32,11 +32,15 @@ export function showToast(message: any, kind = 'success', opts: any = {}) {
   // than throw into whatever called us.
   if (!container) return;
 
-  // Build the toast card. `role="status"` so assistive tech announces
-  // it; the container itself is `aria-live="polite"` as a backstop.
+  // Build the toast card. Errors get `role="alert"` (implicitly assertive)
+  // so a failure interrupts whatever the screen reader is saying instead of
+  // queueing behind it and auto-dismissing unheard; successes stay
+  // `role="status"` (polite). The container's `aria-live="polite"` is a
+  // backstop for the polite case.
+  const isError = kind === 'error';
   const toast = document.createElement('div');
-  toast.className = `toast ${kind === 'error' ? 'error' : 'success'}`;
-  toast.setAttribute('role', 'status');
+  toast.className = `toast ${isError ? 'error' : 'success'}`;
+  toast.setAttribute('role', isError ? 'alert' : 'status');
   toast.textContent = message;
   container.appendChild(toast);
 

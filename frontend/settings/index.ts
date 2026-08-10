@@ -36,8 +36,8 @@ import { renderShortcutsUI } from "../ui/shortcuts-display.ts";
 import { updateToolbarLayout } from "../ui/window-size.ts";
 import { logWarn } from "../core/logger.ts";
 import {
-  BG_DEFAULTS,
-  effectiveBgColor,
+  THEME_DEFAULTS,
+  effectiveThemeColor,
   BASE_PALETTE_TOKENS,
   DEFAULT_PALETTE,
   effectivePalette,
@@ -123,18 +123,23 @@ export function applyConfig(cfg) {
   document.body.style.setProperty("--font-size", `${cfg.font_size}px`);
   document.body.style.setProperty("--content-line-height", cfg.line_height);
   document.body.style.setProperty("--reading-width", `${cfg.reading_width}px`);
-  document.body.style.setProperty("--h1-color", cfg.h1_color);
-  document.body.style.setProperty("--h2-color", cfg.h2_color);
-  document.body.style.setProperty("--h3-color", cfg.h3_color);
-  document.body.style.setProperty("--bullet-color", cfg.bullet_color);
+  // Headings go through effectiveThemeColor for the same reason the
+  // backgrounds below do: the stored default is picked for one theme and
+  // is illegible on the other (see THEME_DEFAULTS).
+  for (const field of ["h1_color", "h2_color", "h3_color", "bullet_color"]) {
+    document.body.style.setProperty(
+      `--${field.replace("_", "-")}`, // h1_color → --h1-color
+      effectiveThemeColor(cfg[field], field, resolved),
+    );
+  }
   document.body.style.setProperty(
     "--code-bg",
-    effectiveBgColor(cfg.code_bg_color, "code_bg_color", resolved),
+    effectiveThemeColor(cfg.code_bg_color, "code_bg_color", resolved),
   );
   document.body.style.setProperty("--code-accent", cfg.code_accent_color);
   document.body.style.setProperty(
     "--note-bg",
-    effectiveBgColor(cfg.note_bg_color, "note_bg_color", resolved),
+    effectiveThemeColor(cfg.note_bg_color, "note_bg_color", resolved),
   );
   document.body.style.setProperty("--note-accent", cfg.note_accent_color);
   document.body.style.setProperty("--sidebar-width", `${cfg.sidebar_width}px`);
@@ -343,13 +348,13 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
     const colors = {
       theme: mode,
       ...DEFAULT_PALETTE[mode],
-      h1_color: defaults.h1_color,
-      h2_color: defaults.h2_color,
-      h3_color: defaults.h3_color,
-      bullet_color: defaults.bullet_color,
-      code_bg_color: BG_DEFAULTS[mode].code_bg_color,
+      h1_color: THEME_DEFAULTS[mode].h1_color,
+      h2_color: THEME_DEFAULTS[mode].h2_color,
+      h3_color: THEME_DEFAULTS[mode].h3_color,
+      bullet_color: THEME_DEFAULTS[mode].bullet_color,
+      code_bg_color: THEME_DEFAULTS[mode].code_bg_color,
       code_accent_color: defaults.code_accent_color,
-      note_bg_color: BG_DEFAULTS[mode].note_bg_color,
+      note_bg_color: THEME_DEFAULTS[mode].note_bg_color,
       note_accent_color: defaults.note_accent_color,
     };
     applyThemeToControls(colors);
@@ -585,18 +590,28 @@ export function openSettings(tabName) {
     state.config.line_height;
   (document.getElementById("setting-reading-width") as HTMLInputElement).value =
     state.config.reading_width;
-  (document.getElementById("setting-h1") as HTMLInputElement).value = state.config.h1_color;
-  (document.getElementById("setting-h2") as HTMLInputElement).value = state.config.h2_color;
-  (document.getElementById("setting-h3") as HTMLInputElement).value = state.config.h3_color;
-  (document.getElementById("setting-bullet") as HTMLInputElement).value = state.config.bullet_color;
-  (document.getElementById("setting-code-bg") as HTMLInputElement).value = effectiveBgColor(
+  // Same effectiveThemeColor pass the appliers use, so the swatch shows the
+  // color actually on screen rather than the stored other-theme default.
+  for (const [id, field] of [
+    ["setting-h1", "h1_color"],
+    ["setting-h2", "h2_color"],
+    ["setting-h3", "h3_color"],
+    ["setting-bullet", "bullet_color"],
+  ]) {
+    (document.getElementById(id) as HTMLInputElement).value = effectiveThemeColor(
+      state.config[field],
+      field,
+      resolved,
+    );
+  }
+  (document.getElementById("setting-code-bg") as HTMLInputElement).value = effectiveThemeColor(
     state.config.code_bg_color,
     "code_bg_color",
     resolved,
   );
   (document.getElementById("setting-code-accent") as HTMLInputElement).value =
     state.config.code_accent_color;
-  (document.getElementById("setting-note-bg") as HTMLInputElement).value = effectiveBgColor(
+  (document.getElementById("setting-note-bg") as HTMLInputElement).value = effectiveThemeColor(
     state.config.note_bg_color,
     "note_bg_color",
     resolved,
@@ -927,7 +942,7 @@ async function importThemeFromDialog() {
 // settings change.
 function applyThemeToControls(colors) {
   // Apply under the populating flag so the theme select's change handler
-  // (which rewrites the bg-color inputs via effectiveBgColor) early-returns
+  // (which rewrites the bg-color inputs via effectiveThemeColor) early-returns
   // and doesn't clobber the incoming background values.
   populatingSettings = true;
   if (
@@ -1217,21 +1232,26 @@ async function resetSettings() {
       defaults.editor_format_on_save ? "true" : "false";
   } else if (activeTabName === "colors") {
     (document.getElementById("setting-theme") as HTMLInputElement).value = defaults.theme;
-    (document.getElementById("setting-h1") as HTMLInputElement).value = defaults.h1_color;
-    (document.getElementById("setting-h2") as HTMLInputElement).value = defaults.h2_color;
-    (document.getElementById("setting-h3") as HTMLInputElement).value = defaults.h3_color;
-    (document.getElementById("setting-bullet") as HTMLInputElement).value = defaults.bullet_color;
-    // Bg defaults follow the currently-selected theme so Reset under
-    // Light leaves readable light backgrounds rather than dark-on-dark.
+    // Heading and bg defaults both follow the currently-selected theme, so
+    // Reset under Light leaves readable colors rather than dark-theme hues
+    // that vanish against the light background.
     const resolved = resolvedTheme(
       (document.getElementById("setting-theme") as HTMLInputElement).value,
     );
+    (document.getElementById("setting-h1") as HTMLInputElement).value =
+      THEME_DEFAULTS[resolved].h1_color;
+    (document.getElementById("setting-h2") as HTMLInputElement).value =
+      THEME_DEFAULTS[resolved].h2_color;
+    (document.getElementById("setting-h3") as HTMLInputElement).value =
+      THEME_DEFAULTS[resolved].h3_color;
+    (document.getElementById("setting-bullet") as HTMLInputElement).value =
+      THEME_DEFAULTS[resolved].bullet_color;
     (document.getElementById("setting-code-bg") as HTMLInputElement).value =
-      BG_DEFAULTS[resolved].code_bg_color;
+      THEME_DEFAULTS[resolved].code_bg_color;
     (document.getElementById("setting-code-accent") as HTMLInputElement).value =
       defaults.code_accent_color;
     (document.getElementById("setting-note-bg") as HTMLInputElement).value =
-      BG_DEFAULTS[resolved].note_bg_color;
+      THEME_DEFAULTS[resolved].note_bg_color;
     (document.getElementById("setting-note-accent") as HTMLInputElement).value =
       defaults.note_accent_color;
     updatePreviewColors();
