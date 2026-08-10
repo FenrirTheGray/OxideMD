@@ -4,6 +4,26 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.10.0] - 2026-08-10
+
+### Added
+
+- **Format document** (`Alt+Shift+F`) runs the same tidier as format-on-save on demand, so you can align tables and normalize whitespace without turning the save-time formatter on
+- The number values in Settings — font size, line height, and reading width — are now editable: click one and type. Values still snap to their step, accept a decimal comma, and select on focus so the unit suffix never has to be deleted
+
+### Changed
+
+- Markdown tables no longer squeeze short cells to pay for a long prose column, so a status cell like `Pass ✅` stays on one line. Tables that outgrow the reading width scroll horizontally instead of being clipped
+- Scrolling now tracks the pointer exactly rather than animating each step. Free-spinning wheels (Logitech G502 and similar) emit scroll deltas faster than that animation could retire them, which left the page lagging behind the wheel and rubber-banding at the top and bottom of a document
+
+### Fixed
+
+- Light theme was unusable for headings: the heading, bullet, and link colors were a single set chosen against the dark background, and on the light background they fell as low as 1.4:1 contrast — far below the 4.5:1 minimum. Each now has its own light-theme value, and a saved color that is still a built-in default follows the theme when you switch
+- The bullet color failed contrast in the dark theme too, and is now lighter
+- Links in rendered documents carry a persistent underline, so they are no longer distinguished from body text by color alone
+- Dim text in the settings panel and tooltips was below the contrast minimum in the dark theme
+- Error notifications now interrupt screen readers instead of queueing politely behind whatever is being read
+
 ## [4.9.0] - 2026-07-18
 
 ### Added
