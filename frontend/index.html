@@ -735,10 +735,9 @@
           <div class="settings-row">
             <label>Font size</label>
             <div class="custom-number" id="setting-size"
-                 data-min="8" data-max="48" data-step="1" data-suffix=" px"
-                 aria-label="Font size in pixels">
+                 data-min="8" data-max="48" data-step="1" data-suffix=" px">
               <button class="custom-number-btn decrement" aria-label="Decrease font size">&#x2212;</button>
-              <span class="custom-number-value"></span>
+              <input class="custom-number-value" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Font size in pixels">
               <button class="custom-number-btn increment" aria-label="Increase font size">&#x2B;</button>
             </div>
           </div>
@@ -746,10 +745,9 @@
           <div class="settings-row">
             <label>Line height</label>
             <div class="custom-number" id="setting-line-height"
-                 data-min="1.0" data-max="2.4" data-step="0.1" data-decimals="1"
-                 aria-label="Line height">
+                 data-min="1.0" data-max="2.4" data-step="0.1" data-decimals="1">
               <button class="custom-number-btn decrement" aria-label="Decrease line height">&#x2212;</button>
-              <span class="custom-number-value"></span>
+              <input class="custom-number-value" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Line height">
               <button class="custom-number-btn increment" aria-label="Increase line height">&#x2B;</button>
             </div>
           </div>
@@ -757,10 +755,9 @@
           <div class="settings-row">
             <label>Reading width</label>
             <div class="custom-number" id="setting-reading-width"
-                 data-min="480" data-max="1400" data-step="20" data-suffix=" px"
-                 aria-label="Reading width in pixels">
+                 data-min="480" data-max="1400" data-step="20" data-suffix=" px">
               <button class="custom-number-btn decrement" aria-label="Decrease reading width">&#x2212;</button>
-              <span class="custom-number-value"></span>
+              <input class="custom-number-value" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Reading width in pixels">
               <button class="custom-number-btn increment" aria-label="Increase reading width">&#x2B;</button>
             </div>
           </div>
@@ -831,7 +828,7 @@
 
           <div class="settings-row">
             <label>Format on save<span class="settings-info-icon" tabindex="0"
-                   aria-label="When on, every save aligns Markdown table columns (VS Code style), normalizes line endings to LF, trims trailing whitespace (preserving the two-space hard-break) and collapses to a single trailing newline. Edits are placed in the undo history so Ctrl+Z reverts them. Off by default to keep saves byte-for-byte.">
+                   aria-label="When on, every save aligns Markdown table columns (VS Code style), normalizes line endings to LF, trims trailing whitespace (preserving the two-space hard-break) and collapses to a single trailing newline. Edits are placed in the undo history so Ctrl+Z reverts them. Off by default to keep saves byte-for-byte — with it off you can still run the same tidier on demand with Format document (Alt+Shift+F).">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="12" y1="11" x2="12" y2="16"/>
