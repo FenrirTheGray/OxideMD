@@ -45,6 +45,24 @@ pub fn warm_highlighter() {
 /// files pick up a change without a restart.
 pub static PRESERVE_LINE_BREAKS: AtomicBool = AtomicBool::new(false);
 
+/// Whether a table cell's text is short enough that it should never wrap.
+///
+/// Auto table layout distributes a width shortfall across every column in
+/// proportion to its content, so a narrow "Status" column holding `Pass ✅`
+/// gets squeezed and breaks after `Pass` even though there is nothing to
+/// gain. CSS can't select cells by content length, so the decision is made
+/// here and carried as a `nowrap` class. Cell-level rather than
+/// column-level: no lookahead needed, and one long cell in an otherwise
+/// short column simply wraps on its own.
+///
+/// Counted in `char`s, not bytes — `✅️` alone is six bytes.
+///
+/// ponytail: plain length heuristic, no config knob. Promote it to a
+/// setting only if someone reports a table it gets wrong.
+fn is_short_cell(text: &str) -> bool {
+    text.trim().chars().count() <= 16
+}
+
 pub fn render(source: &str, base_dir: Option<&Path>) -> String {
     render_with(
         source,
@@ -103,6 +121,14 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let mut table_alignments: Vec<Alignment> = Vec::new();
     let mut col_index: usize = 0;
     let mut in_table_head = false;
+    // Table-cell state. `cell_start` is the offset into `html` where the
+    // cell's inline content begins (split_off at cell end, same trick as
+    // headings below); `cell_text_buf` collects the cell's plain text so
+    // the width heuristic measures what the reader sees, not the markup.
+    let mut cell_start: usize = 0;
+    let mut cell_style: &str = "";
+    let mut cell_text_buf = String::new();
+    let mut in_table_cell = false;
     // Heading state:
     //   `heading_start` is the offset into `html` where the heading's
     //   inline content begins. When the heading ends we `split_off` at
@@ -317,13 +343,19 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             // ── Tables ──────────────────────────────────────────────────────
             Event::Start(Tag::Table(alignments)) => {
                 table_alignments = alignments;
+                // The wrapper is the horizontal scroller. Auto table layout
+                // squeezes columns to fit the reading width, which is what
+                // broke short cells; `nowrap` below stops that, so a table
+                // can now legitimately exceed its container. #content-scroll
+                // is overflow-x:hidden, so without this the overflow would
+                // be clipped rather than reachable.
                 html.push_str(&format!(
-                    "<table{}>",
+                    "<div class=\"table-wrap\"><table{}>",
                     data_line(block_depth, line_of(range.start))
                 ));
             }
             Event::End(TagEnd::Table) => {
-                html.push_str("</table>\n");
+                html.push_str("</table></div>\n");
                 table_alignments.clear();
             }
             Event::Start(Tag::TableHead) => {
@@ -345,24 +377,32 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     .get(col_index)
                     .copied()
                     .unwrap_or(Alignment::None);
-                let style = match align {
+                cell_style = match align {
                     Alignment::Left => " style=\"text-align:left\"",
                     Alignment::Center => " style=\"text-align:center\"",
                     Alignment::Right => " style=\"text-align:right\"",
                     Alignment::None => "",
                 };
-                if in_table_head {
-                    html.push_str(&format!("<th{}>", style));
-                } else {
-                    html.push_str(&format!("<td{}>", style));
-                }
+                // Same split_off idiom as headings/footnotes: the open tag
+                // can't be written yet because the `nowrap` class depends on
+                // the cell's text, which only arrives as inner events.
+                cell_start = html.len();
+                cell_text_buf.clear();
+                in_table_cell = true;
             }
             Event::End(TagEnd::TableCell) => {
-                if in_table_head {
-                    html.push_str("</th>");
-                } else {
-                    html.push_str("</td>");
-                }
+                in_table_cell = false;
+                let inner = html.split_off(cell_start);
+                let tag = if in_table_head { "th" } else { "td" };
+                html.push_str(&format!(
+                    "<{tag}{}{}>{inner}</{tag}>",
+                    cell_style,
+                    if is_short_cell(&cell_text_buf) {
+                        " class=\"nowrap\""
+                    } else {
+                        ""
+                    },
+                ));
                 col_index += 1;
             }
 
@@ -440,6 +480,9 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     if current_heading.is_some() {
                         heading_slug_buf.push_str(&text);
                     }
+                    if in_table_cell {
+                        cell_text_buf.push_str(&text);
+                    }
                 }
             }
 
@@ -447,6 +490,9 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 html.push_str(&format!("<code>{}</code>", html_escape(&code)));
                 if current_heading.is_some() {
                     heading_slug_buf.push_str(&code);
+                }
+                if in_table_cell {
+                    cell_text_buf.push_str(&code);
                 }
             }
 
@@ -774,6 +820,25 @@ mod tests {
         assert!(out.contains("<thead>"));
         assert!(out.contains("style=\"text-align:left\""));
         assert!(out.contains("style=\"text-align:right\""));
+        // The wrapper is what scrolls when a table outgrows the reading width.
+        assert!(out.contains("<div class=\"table-wrap\"><table"));
+        assert!(out.contains("</table></div>"));
+    }
+
+    #[test]
+    fn render_table_marks_short_cells_nowrap() {
+        let md = "| Status | Notes |\n| --- | --- |\n\
+                  | Pass ✅️ | A comment long enough to be worth wrapping |\n";
+        let out = render(md, None);
+        // The short status cell keeps its content on one line…
+        assert!(out.contains(">Pass ✅️</td>"));
+        assert!(out.contains("<td class=\"nowrap\">Pass ✅️</td>"));
+        // …while the long prose cell is left free to wrap.
+        assert!(out.contains("<td>A comment long enough to be worth wrapping</td>"));
+        // Inline code counts toward the cell's text, not its markup length:
+        // `<code>` tags alone would push this past the threshold.
+        let coded = render("| a |\n| --- |\n| `{{l.insamount}}` |\n", None);
+        assert!(coded.contains("<td class=\"nowrap\"><code>{{l.insamount}}</code></td>"));
     }
 
     #[test]

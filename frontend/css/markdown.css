@@ -225,15 +225,38 @@
 }
 
 /* ── Tables ───────────────────────────────────────────────────────── */
+/* The scroller lives on the wrapper, not the table: `display: block` on a
+   <table> makes it shrink-wrap inside a full-width bordered box, which
+   looks broken for the common narrow table. The wrapper carries the
+   margin so the scrollbar sits against the table's bottom edge.
+
+   The border/radius/shadow ride on the wrapper too: a scroll container
+   clips its content, so chrome left on the table would have its corners
+   and shadow cut off. On the wrapper the frame also stays put while a
+   wide table scrolls inside it. */
+.md-rendered .table-wrap {
+  overflow-x: auto;
+  margin: 1.3em 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Short cells (marked by the renderer — see is_short_cell in markdown.rs)
+   keep their content on one line. Auto table layout would otherwise steal
+   width from them to pay for a long prose column, breaking "Pass ✅" in
+   two. Long cells still wrap normally; if the result no longer fits, the
+   wrapper above scrolls rather than clipping. */
+.md-rendered th.nowrap,
+.md-rendered td.nowrap {
+  white-space: nowrap;
+}
+
 .md-rendered table {
   border-collapse: collapse;
   width: 100%;
-  margin: 1.3em 0;
+  margin: 0;
   font-size: 13.5px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
 }
 
 .md-rendered thead {
@@ -285,10 +308,19 @@
 }
 
 /* ── Links ────────────────────────────────────────────────────────── */
+/* Links carry a persistent underline, not just a color. `--link` differs
+   from body text by only 2.71:1 in light theme (1.11:1 in dark), under the
+   3:1 WCAG asks before color may identify a link on its own — so without
+   the rule there is no perceivable cue at rest. The border thickens rather
+   than appears on hover, so the hover affordance survives. */
 .md-rendered a {
   color: var(--link);
   text-decoration: none;
+  /* Plain declaration first so a webview without color-mix() still gets an
+     underline on hover (which only sets border-bottom-color) instead of
+     dropping the border entirely. */
   border-bottom: 1px solid transparent;
+  border-bottom-color: color-mix(in srgb, currentColor 45%, transparent);
   transition:
     color var(--dur-sm) var(--ease),
     border-color var(--dur-sm) var(--ease);
