@@ -183,6 +183,7 @@ export const ACTIONS = [
   { id: 'image',  category: 'Format', label: 'Image',         defaultAccel: 'Mod+Shift+M', context: 'editor' },
   { id: 'indent', category: 'Format', label: 'Indent',        defaultAccel: 'Tab',         context: 'editor' },
   { id: 'outdent',category: 'Format', label: 'Outdent',       defaultAccel: 'Shift+Tab',   context: 'editor' },
+  { id: 'formatDoc', category: 'Format', label: 'Format document', defaultAccel: 'Alt+Shift+F', context: 'editor' },
 ];
 
 const ACTION_BY_ID = new Map(ACTIONS.map(a => [a.id, a]));

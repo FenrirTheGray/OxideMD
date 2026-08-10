@@ -979,6 +979,24 @@ function replaceEditorBuffer(next) {
   if (splice) editorView.dispatch({ changes: splice, scrollIntoView: true });
 }
 
+// Run the tidier over the active tab's buffer. Shared by format-on-save
+// and the manual Format document action, so both leave the tab in the same
+// state: tab.raw updated and the editor spliced (which keeps the edit in
+// undo history and marks the tab dirty).
+function formatActiveBuffer() {
+  const tab = activeTab();
+  if (!tab) return;
+  const formatted = formatMarkdownBuffer(tab.raw ?? '');
+  if (formatted === (tab.raw ?? '')) return;
+  tab.raw = formatted;
+  replaceEditorBuffer(formatted);
+}
+
+registerHandler('formatDoc', (e) => {
+  e?.preventDefault();
+  if (document.body.classList.contains('editing')) formatActiveBuffer();
+});
+
 // Save-as for an untitled tab: prompt for a destination, write the live
 // buffer, then adopt the returned path so subsequent saves go in-place.
 // A cancelled dialog leaves the tab untitled and unsaved (returns false so
@@ -1039,13 +1057,7 @@ export async function saveActiveFile({ skipFormat = false } = {}) {
   // changed anything so the user sees the saved form and the dirty
   // tracking stays consistent. Applied before either save path writes.
   // `skipFormat` (the Save-without-formatting action) bypasses it one-off.
-  if (!skipFormat && state.config?.editor_format_on_save) {
-    const formatted = formatMarkdownBuffer(tab.raw ?? '');
-    if (formatted !== (tab.raw ?? '')) {
-      tab.raw = formatted;
-      replaceEditorBuffer(formatted);
-    }
-  }
+  if (!skipFormat && state.config?.editor_format_on_save) formatActiveBuffer();
 
   // Untitled tabs have no path yet — route to the save-as flow.
   if (!tab.path) return saveUntitledTab(tab);
