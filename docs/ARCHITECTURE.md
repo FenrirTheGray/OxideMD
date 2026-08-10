@@ -144,8 +144,9 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   `APP_ORGANIZATION` / `APP_NAME` identifier triple and the `project_dirs()`
   helper, and recent-files maintenance.
 - **`markdown.rs`** — pulldown-cmark source → HTML string: heading slugs/ids,
-  footnotes, local-image resolution, raw-HTML escaping, and the soft-break
-  atomic.
+  footnotes, local-image resolution, raw-HTML escaping, the soft-break
+  atomic, and the table-cell width heuristic (`is_short_cell`) described
+  under [Rendering](#rendering).
 - **`highlight.rs`** — syntect-based syntax highlighting for fenced code blocks.
 - **`watcher.rs`** — a single recursive `notify` watcher behind a mutex, with a
   per-path leading-edge coalesce; emits `fs-changed`.
@@ -197,7 +198,8 @@ co-located `*.test.ts`).
   strings); a single copy replacing the duplicates those modules each carried.
 - **`md-table.ts`** — `formatMarkdownBuffer` and its table-alignment /
   grapheme-width helpers, split out of `editor.ts`; powers the opt-in
-  format-on-save.
+  format-on-save and the manual `formatDoc` action, both routed through
+  `formatActiveBuffer()` in `editor.ts` so they behave identically.
 - **`timing.ts`** — `debounce`, the shared trailing-edge timing helper used
   across the UI modules.
 
@@ -389,3 +391,24 @@ are emitted as `data-oxide-src` attributes; the frontend rewrites them to
 area. In read mode the HTML comes from `open_file` / `save_file`; in edit mode
 the live preview pane re-renders on a debounce by calling `render_preview` with
 the current editor buffer.
+
+Tables get two extra affordances, both decided in Rust because CSS can't
+select an element by how much text it holds:
+
+- Every table is wrapped in a `<div class="table-wrap">`, which is the
+  horizontal scroller. The scroller can't be the `<table>` itself —
+  `display: block` on a table makes it shrink-wrap inside a full-width
+  frame — and it can't be `#content-scroll`, which is `overflow-x: hidden`.
+  The border, radius, and shadow ride on the wrapper so a scroll container
+  doesn't clip them.
+- Cells whose plain text is short (`is_short_cell`, ≤ 16 chars) are emitted
+  with `class="nowrap"`. Auto table layout pays for a long prose column by
+  squeezing every other column, which used to break a status cell like
+  `Pass ✅` across two lines even though the table had room. Marking short
+  cells makes the shortfall come out of the columns that can absorb it.
+  The decision is per-cell, so a single long value in an otherwise short
+  column just wraps itself.
+
+Both are undone under `@media print` (and in the `export_html` template's
+print block): paper has no horizontal scrollbar, so a table too wide for
+the page would otherwise lose its right-hand columns.

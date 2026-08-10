@@ -1181,9 +1181,11 @@ const EXPORT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
   code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 0.9em; background: #f3f3f3; padding: 1px 5px; border-radius: 4px; }
   pre code { background: none; padding: 0; }
   blockquote { border-left: 4px solid #d8d8d8; margin: 1em 0; padding: 0.4em 1em; color: #555; background: #fafafa; }
-  table { border-collapse: collapse; width: 100%; margin: 1.2em 0; }
+  .table-wrap { overflow-x: auto; margin: 1.2em 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0; }
   th, td { border: 1px solid #e1e4e8; padding: 8px 14px; text-align: left; }
   th { background: #f6f8fa; }
+  th.nowrap, td.nowrap { white-space: nowrap; }
   img { max-width: 100%; height: auto; }
   hr { border: 0; border-top: 1px solid #e0e0e0; margin: 2em 0; }
   .codeblock { position: relative; }
@@ -1193,6 +1195,10 @@ const EXPORT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
     body { max-width: none; margin: 0; padding: 0; color: #000; }
     a { color: #000; text-decoration: underline; }
     pre, blockquote, table { page-break-inside: avoid; }
+    /* No horizontal scrollbar on paper — let wide tables wrap instead of
+       losing their right-hand columns. */
+    .table-wrap { overflow-x: visible; }
+    th.nowrap, td.nowrap { white-space: normal; }
   }
 </style>
 </head>

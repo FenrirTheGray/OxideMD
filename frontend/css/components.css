@@ -390,6 +390,17 @@
     break-inside: avoid;
   }
 
+  /* Paper has no horizontal scrollbar: a table too wide for the page would
+     simply lose its right-hand columns. Give both the on-screen nowrap and
+     the scroll wrapper back their wrapping behavior so the PDF fits. */
+  #print-root .table-wrap {
+    overflow-x: visible;
+  }
+  #print-root th.nowrap,
+  #print-root td.nowrap {
+    white-space: normal;
+  }
+
   /* Carried from the pre-3.2.0 branch: #print-root holds the rendered
      Markdown, so its code blocks carry the copy button + language label
      chrome — hide both so neither prints into the PDF. */
