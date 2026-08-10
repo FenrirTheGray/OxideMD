@@ -285,6 +285,37 @@ pub fn run() {
                         use gtk::prelude::*;
 
                         let wv = webview.inner();
+
+                        // ── Free-spinning wheels vs. WebKit's smooth scrolling ──
+                        //
+                        // WebKitGTK ships `enable-smooth-scrolling` ON, which
+                        // animates every scroll delta rather than applying it.
+                        // A free-spin wheel (Logitech G502 and friends) emits
+                        // deltas far faster than that animation retires them,
+                        // so the rendered position falls behind the user's hand
+                        // and then coasts to catch up. It reads as "scrolling
+                        // slows to a crawl", and as rubber-banding at the ends
+                        // where the backlog runs into the scroll clamp.
+                        //
+                        // Measured on this machine, webkit2gtk 2.52.5, native
+                        // Wayland — 400 events at ~500/s, then input stopped:
+                        //   smooth ON : position was 12,687px of 38,648px when
+                        //               input stopped, then coasted 25,961px
+                        //               over a further 204ms
+                        //   smooth OFF: 38,648px at input stop, coasted 0px
+                        //
+                        // Frame rate is a steady 60fps either way — this is a
+                        // position/input desync, not a rendering cost, which is
+                        // why it survives every frame-time investigation.
+                        {
+                            // Fully qualified: `gtk::prelude::WidgetExt` also
+                            // has a `settings()`, and both are in scope here.
+                            use webkit2gtk::{SettingsExt, WebViewExt};
+                            if let Some(settings) = WebViewExt::settings(&wv) {
+                                settings.set_enable_smooth_scrolling(false);
+                            }
+                        }
+
                         let wv_widget: &gtk::Widget = wv.as_ref();
                         if let Some(toplevel) = wv_widget.toplevel() {
                             if let Ok(gtk_window) = toplevel.downcast::<gtk::Window>() {

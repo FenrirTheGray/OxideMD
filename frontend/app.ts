@@ -609,14 +609,65 @@ listen('move-tab-right', () => runAction('moveTabRight'));
 document.addEventListener('dragover', (e) => e.preventDefault());
 document.addEventListener('drop', (e) => e.preventDefault());
 
-// Ctrl/Cmd + wheel → zoom the active tab. Must be non-passive so
-// preventDefault suppresses the webview's default page-zoom behavior.
-window.addEventListener('wheel', (e) => {
+// ── Ctrl/Cmd + wheel → zoom ────────────────────────────────────────────────
+//
+// This listener has to be non-passive: `preventDefault()` is the only way to
+// stop the webview applying its own page zoom on top of ours. A non-passive
+// `wheel` listener on `window` marks the whole page as a main-thread wheel
+// region, so the engine may have to round-trip every wheel event through JS
+// before the compositor is allowed to move the scroller. Hence the gate:
+// it is armed only while a modifier is actually held, so ordinary scrolling
+// runs with no wheel listener registered at all.
+//
+// Measured, so nobody has to re-derive it — same page, 40 events, median of 3:
+//
+//   Chromium (= WebView2, the Windows target)
+//     no listener 972ms | always attached 1339ms | gated 927ms   → 1.38x win
+//
+//   webkit2gtk 2.52.5 (= the Linux target), 80 injected wheel events
+//     always attached  med 9-10ms | gated  med 9-10ms            → NO effect
+//     positive control, 25ms of work in a non-passive handler:
+//                      med 775ms, 3/80 scroll updates            → harness is
+//                                                                  very sensitive
+//
+// So on WebKitGTK, merely *registering* a non-passive wheel listener costs
+// nothing — only a handler that does real work does. The gate is kept for
+// WebView2, where the win is real, and because it is strictly less work on
+// every engine. It is NOT a fix for slow scrolling on Linux; that lives in
+// the compositing path (see the WEBKIT_DISABLE_DMABUF_RENDERER note in
+// lib.rs), not here. Don't cite this block as the cause of a Linux scroll
+// report.
+//
+// ponytail: keydown is what arms it, so focusing the window with the
+// modifier ALREADY physically held leaves the first wheel gesture
+// un-gated — it scrolls instead of zooming. Any keypress re-arms it.
+// Accepted over polling modifier state on every pointer event.
+const onWheelZoom = (e) => {
   if (!hasMod(e)) return;
   if (state.activeTabId === null) return;
   e.preventDefault();
   if (e.deltaY < 0) zoomIn(); else if (e.deltaY > 0) zoomOut();
-}, { passive: false });
+};
+let wheelZoomArmed = false;
+const armWheelZoom = () => {
+  if (wheelZoomArmed) return;
+  window.addEventListener('wheel', onWheelZoom, { passive: false });
+  wheelZoomArmed = true;
+};
+const disarmWheelZoom = () => {
+  if (!wheelZoomArmed) return;
+  window.removeEventListener('wheel', onWheelZoom);
+  wheelZoomArmed = false;
+};
+// Auto-repeat makes this fire repeatedly while held; arming is idempotent.
+window.addEventListener('keydown', (e) => { if (hasMod(e)) armWheelZoom(); });
+// Releasing Ctrl reports ctrlKey === false on its own keyup. Releasing a
+// *different* key (Ctrl+Shift → Shift up) keeps hasMod true, so it stays armed.
+window.addEventListener('keyup', (e) => { if (!hasMod(e)) disarmWheelZoom(); });
+// Losing focus never delivers the matching keyup, so disarm defensively —
+// otherwise alt-tabbing away mid-zoom leaves the page main-thread-scrolling
+// for the rest of the session, silently reintroducing the bug.
+window.addEventListener('blur', disarmWheelZoom);
 
 // ── Start ──────────────────────────────────────────────────────────────────
 init();
