@@ -399,14 +399,27 @@
   border-radius: 7px;
   overflow: hidden;
 }
+/* An <input>, so the value can be typed as well as stepped. Stripped back
+   to look exactly like the text it replaced: the pill around it already
+   supplies the background and border. `min-width: 0` is what lets a flex
+   input shrink — otherwise its intrinsic `size` width blows the pill out. */
 .custom-number-value {
   flex: 1;
+  min-width: 0;
   text-align: center;
   color: var(--fg);
   font-size: 12.5px;
   font-family: var(--font-family);
   padding: 6px 0;
-  user-select: none;
+  background: none;
+  border: none;
+  border-radius: 6px;
+}
+/* Inset like `.custom-number-btn` — the parent pill is `overflow: hidden`,
+   so an outset ring would be clipped to a sliver. */
+.custom-number-value:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
 }
 .custom-number-btn {
   background: none;

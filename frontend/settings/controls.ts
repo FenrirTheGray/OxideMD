@@ -155,7 +155,7 @@ document.querySelectorAll(".segmented").forEach((el) => {
 // ── Custom number inputs ───────────────────────────────────────────────────
 document.querySelectorAll(".custom-number").forEach((el) => {
   const num = el as HTMLElement;
-  const display = num.querySelector(".custom-number-value") as HTMLElement;
+  const display = num.querySelector(".custom-number-value") as HTMLInputElement;
   const min = parseFloat(num.dataset.min ?? "8");
   const max = parseFloat(num.dataset.max ?? "48");
   const step = parseFloat(num.dataset.step ?? "1");
@@ -180,7 +180,7 @@ document.querySelectorAll(".custom-number").forEach((el) => {
       );
       const snapped = quantize(clamped);
       num.dataset.value = String(snapped);
-      display.textContent = format(snapped);
+      display.value = format(snapped);
     },
   });
 
@@ -189,6 +189,24 @@ document.querySelectorAll(".custom-number").forEach((el) => {
   });
   (num.querySelector(".increment") as HTMLElement).addEventListener("click", () => {
     (num as any).value = (num as any).value + step;
+  });
+
+  // The value is a live text field, not a label: click it and type. Select
+  // the whole thing on focus so the first keystroke replaces it — the
+  // displayed text carries the suffix (" px"), which nobody should have to
+  // backspace over first.
+  display.addEventListener("focus", () => display.select());
+
+  // `change` fires on blur and on Enter, so it covers both ways of
+  // committing. Round-tripping through the `value` setter reformats the
+  // field, which is also what snaps a typed 17 back to the step grid.
+  // Anything unparseable re-renders the value that was already there
+  // rather than letting the setter clamp a NaN down to `min`.
+  display.addEventListener("change", () => {
+    // A decimal comma is what a "1,5" line height means; parseFloat would
+    // read it as 1.
+    const parsed = parseFloat(display.value.replace(",", "."));
+    (num as any).value = Number.isFinite(parsed) ? parsed : (num as any).value;
   });
 });
 
