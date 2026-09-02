@@ -1,0 +1,28 @@
+# Maintainer: Aleksandar Colovic <aleksandar.c.dev@gmail.com>
+#
+# Repackages the released .deb (same binary, same desktop entry and icons).
+# packaging/repo/build-repo.sh builds this for every published release and
+# publishes the result as a pacman repo on GitHub Pages; the committed
+# pkgver/sha256sums are only a template for that, and for a local `makepkg -si`.
+pkgname=oxidemd-bin
+pkgver=4.10.0
+pkgrel=1
+pkgdesc="A lightweight, cross-platform Markdown viewer and editor"
+arch=('x86_64')
+url="https://github.com/FenrirTheGray/OxideMD"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3')
+provides=('oxidemd')
+conflicts=('oxidemd')
+options=('!strip' '!debug')
+install=oxidemd-bin.install
+source=("$url/releases/download/v$pkgver/OxideMD_${pkgver}_amd64.deb")
+sha256sums=('SKIP')
+
+package() {
+  # makepkg runs this with -e but not pipefail, so a missing data.tar member
+  # would otherwise produce an empty package that installs cleanly.
+  set -o pipefail
+  bsdtar -xOf "OxideMD_${pkgver}_amd64.deb" 'data.tar.*' | bsdtar -xf - -C "$pkgdir"
+  test -x "$pkgdir/usr/bin/oxidemd"
+}

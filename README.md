@@ -101,7 +101,7 @@ Prebuilt installers are attached to every [release](https://github.com/FenrirThe
 | macOS                | `.dmg` (Apple Silicon and Intel)                        |
 | Linux - Debian Based | `.deb`, `.AppImage` (Debian / Ubuntu)                   |
 | Linux - RHEL Based   | `.rpm`, `.AppImage` (Fedora / RHEL)                     |
-| Linux - Arch Based   | `.pkg.tar.zst` (Arch / Omarchy / EndeavourOS / Manjaro) |
+| Linux - Arch Based   | `.pkg.tar.zst` (Arch / Omarchy), published only in the [pacman repo](https://fenrirthegray.github.io/OxideMD/), not as a release asset |
 
 ## Updating
 
@@ -119,10 +119,10 @@ Prebuilt installers are attached to every [release](https://github.com/FenrirThe
 > - MacOS (`.dmg`)
 > - Linux (`.AppImage` )
 >
-> Other packages (`.deb`, `.rpm` and `.pkg.tar.zst`) require manual download and installation.
+> Other packages (`.deb`, `.rpm` and `.pkg.tar.zst`) update through your package manager once the repo is added (see below). The `.deb` and `.rpm` can also be downloaded by hand.
 
 ### Automatic Updates - Through Package Managers
-Automatic updates are supported for `.deb` and `.rpm` packages through their respective package managers.
+Automatic updates are supported for `.deb`, `.rpm` and Arch `.pkg.tar.zst` packages through their respective package managers.
 One-time setup commands required for this app to be added to them can be found on the [install page](https://fenrirthegray.github.io/OxideMD/).
 
 ## Keyboard shortcuts
@@ -192,7 +192,7 @@ Produce installers with:
 cargo tauri build        # outputs to src-tauri/target/release/bundle/
 ```
 
-> On Arch-based systems, building the AppImage needs `NO_STRIP=true cargo tauri build` — the bundled `linuxdeploy` can't strip Arch's modern `.relr.dyn` ELF sections. The `.deb` and `.rpm` targets are unaffected. For a native Arch package, see [`packaging/aur/`](packaging/aur/README.md).
+> On Arch-based systems, building the AppImage needs `NO_STRIP=true cargo tauri build` — the bundled `linuxdeploy` can't strip Arch's modern `.relr.dyn` ELF sections. The `.deb` and `.rpm` targets are unaffected. For a native Arch package, run `makepkg -si` in [`packaging/arch/`](packaging/arch/PKGBUILD); it repackages the released `.deb`.
 
 ## Documentation
 

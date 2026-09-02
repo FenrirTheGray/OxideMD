@@ -40,7 +40,7 @@ Release tags are the version prefixed with `v`:
    tagline and install footer), so the changelog entry from step 1 is what
    ships on the release page.
 6. Review the draft release, then publish it. Publishing triggers
-   `.github/workflows/repo-publish.yml`, which rebuilds the signed apt/dnf
+   `.github/workflows/repo-publish.yml`, which rebuilds the signed apt/dnf/pacman
    repositories from every published release and deploys them to GitHub Pages.
 
 For how changes should be shaped before a release, see the
