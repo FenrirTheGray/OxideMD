@@ -355,8 +355,8 @@ releases page.
 
 ### Version-mismatch detection
 
-Linux RPM/DEB upgrades don't kill the running process (`dpkg`/`dnf` just swap
-files on disk), and AppImage / Windows-portable / macOS drag-replace have the
+Linux RPM/DEB/pacman upgrades don't kill the running process (`dpkg`/`dnf`/`pacman`
+just swap files on disk), and AppImage / Windows-portable / macOS drag-replace have the
 same problem. With `tauri-plugin-single-instance` active, the user's "relaunch"
 then just refocuses the stale in-memory process. Two mechanisms guard against
 this:
@@ -364,7 +364,9 @@ this:
 - **Post-install scriptlet** — `src-tauri/scripts/post-install.sh` runs
   `pkill -x oxidemd` after the package manager writes the new binary, so the
   next launch is guaranteed to be the new process. Wired into RPM and DEB via
-  `bundle.linux.{deb,rpm}.postInstallScript` in `tauri.conf.json`.
+  `bundle.linux.{deb,rpm}.postInstallScript` in `tauri.conf.json`; the Arch
+  package does the same from `post_upgrade()` in
+  `packaging/arch/oxidemd-bin.install`.
 - **Version stamp** — every launch writes `env!("CARGO_PKG_VERSION")` to
   `<data_dir>/.running_version` *before* the single-instance plugin can bounce
   it. When a freshly launched second instance triggers the callback in the
