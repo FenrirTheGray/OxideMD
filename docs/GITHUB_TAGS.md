@@ -25,6 +25,8 @@ Release tags are the version prefixed with `v`:
    - `src-tauri/Cargo.toml`
    - `src-tauri/Cargo.lock` (the `oxidemd` package entry — runs automatically on the
      next `cargo` build, or edit it to match)
+   - `packaging/arch/PKGBUILD` (`pkgver`, so a local `makepkg` fetches the
+     matching `.deb`; the publish workflow overrides it per release anyway)
 3. Commit the bump (see the [Commit Style Guide](COMMIT_STYLE.md)).
 4. Tag the release and push the tag:
 
