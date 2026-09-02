@@ -1,6 +1,6 @@
-name: Publish APT/DNF repos
+name: Publish APT/DNF/pacman repos
 
-# Rebuilds the signed APT + DNF repositories from every published release and
+# Rebuilds the signed APT + DNF + pacman repositories from every published release and
 # deploys them to GitHub Pages. Runs when a release is published (i.e. after
 # you review and publish the draft the Release workflow creates), so the public
 # repos only ever contain releases you've signed off on. workflow_dispatch lets
@@ -33,7 +33,7 @@ jobs:
       - name: Install repo tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y reprepro createrepo-c rpm gnupg
+          sudo apt-get install -y reprepro createrepo-c rpm gnupg makepkg pacman-package-manager fakeroot zstd libarchive-tools
 
       - name: Import GPG signing key
         env:
@@ -92,7 +92,7 @@ jobs:
           done
           ls -la incoming || true
 
-      - name: Build APT + DNF repositories
+      - name: Build APT + DNF + pacman repositories
         run: bash packaging/repo/build-repo.sh "$PWD/incoming" "$PWD/public"
 
       - name: Configure Pages

@@ -1,0 +1,6 @@
+# Same reason as src-tauri/scripts/post-install.sh: pacman doesn't stop running
+# processes, and the single-instance plugin would keep refocusing the old
+# binary until the user quits it.
+post_upgrade() {
+  pkill -x oxidemd 2>/dev/null || true
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds signed APT + DNF repositories from a directory of release
+# Builds signed APT + DNF + pacman repositories from a directory of release
 # .deb/.rpm packages, laid out ready to publish to GitHub Pages.
 #
 # The build is intentionally rebuilt-from-scratch every run: the caller
@@ -97,8 +97,45 @@ else
   echo "No .rpm packages found; skipping DNF repo."
 fi
 
+# ---- Pacman repository (makepkg + repo-add) ----
+# Every .deb is repackaged through packaging/arch/PKGBUILD. Ubuntu's makepkg
+# and pacman-package-manager packages provide makepkg/repo-add, so this runs on
+# the same runner as the apt/dnf halves. --nodeps because the build host has no
+# pacman database to check the (runtime-only) depends against; CARCH/PKGEXT are
+# forced because Ubuntu's makepkg.conf defaults to .pkg.tar.gz, which the
+# repo-add glob below would miss.
+if (( ${#debs[@]} )); then
+  mkdir -p "$OUTPUT/arch"
+  for deb in "${debs[@]}"; do
+    ver="$(dpkg-deb -f "$deb" Version)"
+    sum="$(sha256sum "$deb" | cut -d' ' -f1)"
+    pkg_build="$(mktemp -d)"
+    cp "$SCRIPT_DIR/../arch/PKGBUILD" "$SCRIPT_DIR/../arch/oxidemd-bin.install" "$deb" "$pkg_build/"
+    sed -i -e "s/^pkgver=.*/pkgver=$ver/" -e "s/^sha256sums=.*/sha256sums=('$sum')/" "$pkg_build/PKGBUILD"
+    grep -q "^pkgver=$ver\$" "$pkg_build/PKGBUILD" && grep -q "^sha256sums=('$sum')\$" "$pkg_build/PKGBUILD"
+    ( cd "$pkg_build" && CARCH=x86_64 PKGEXT=.pkg.tar.zst PKGDEST="$OUTPUT/arch" PACKAGER="Aleksandar Colovic <aleksandar.c.dev@gmail.com>" \
+        makepkg --nodeps --ignorearch --sign --key "$GPG_KEY_ID" )
+  done
+  # The glob is in name order, not version order, and repo-add keeps the last
+  # entry it sees per pkgname; --prevent-downgrade keeps the newest instead.
+  repo-add --prevent-downgrade --sign --key "$GPG_KEY_ID" \
+    "$OUTPUT/arch/oxidemd.db.tar.gz" "$OUTPUT"/arch/*.pkg.tar.zst
+  # repo-add only warns when signing fails, and pacman's default SigLevel
+  # accepts an unsigned database, so a missing .sig would go unnoticed.
+  test -f "$OUTPUT/arch/oxidemd.db.tar.gz.sig"
+  # Replace repo-add's symlinks (oxidemd.db -> oxidemd.db.tar.gz) with real
+  # files so the tree works from any static host.
+  for link in "$OUTPUT"/arch/*; do
+    [[ -L $link ]] && cp --remove-destination "$(readlink -f "$link")" "$link"
+  done
+  echo "Pacman repo built."
+else
+  echo "No .deb packages found; skipping pacman repo."
+fi
+
 # ---- Landing page with copy-paste install instructions ----
-sed -e "s/__APT_PKG__/$apt_pkg/g" -e "s/__DNF_PKG__/$dnf_pkg/g" \
+cp "$SCRIPT_DIR/../../src-tauri/icons/128x128.png" "$OUTPUT/icon.png"
+sed -e "s/__APT_PKG__/$apt_pkg/g" -e "s/__DNF_PKG__/$dnf_pkg/g" -e "s/__GPG_KEY_ID__/$GPG_KEY_ID/g" \
   "$SCRIPT_DIR/index.html" > "$OUTPUT/index.html"
 
 echo "Repository tree built at: $OUTPUT"

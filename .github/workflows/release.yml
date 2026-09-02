@@ -82,7 +82,7 @@ jobs:
               echo ""
               echo "---"
               echo ""
-              echo "**Install:** add the apt/dnf repo from the [install page](https://fenrirthegray.github.io/OxideMD/) for automatic updates, or download the installer for your platform below. See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for full history."
+              echo "**Install:** add the apt/dnf/pacman repo from the [install page](https://fenrirthegray.github.io/OxideMD/) for automatic updates, or download the installer for your platform below. See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md) for full history."
             fi
             echo "NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
