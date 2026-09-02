@@ -3,47 +3,382 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>OxideMD — Linux package repositories</title>
+    <title>Install OxideMD on Linux</title>
+    <meta
+      name="description"
+      content="Signed apt, dnf and pacman repositories for OxideMD, a native Markdown viewer and editor."
+    />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#282c34" />
+    <link rel="icon" href="icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
     <style>
-      :root { color-scheme: light dark; }
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      /* Colours follow OxideMD's Atom One Dark palette (frontend/css/theme.css)
+         so the install page and the app read as one product; --fg-bright is
+         the one addition, for headings and commands. */
+      :root {
+        --bg: #282c34;
+        --bg-panel: #21252b;
+        --bg-code: #1e2127;
+        --bg-raised: #2c313c;
+        --fg: #abb2bf;
+        --fg-dim: #8b96a8;
+        --fg-bright: #d7dae0;
+        --border: #3b4048;
+        --blue: #61afef;
+        --violet: #c678dd;
+        --cyan: #56b6c2;
+        --cyan-hover: #80cad1;
+        --green: #98c379;
+        --sans: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+        font-size: 16px;
         line-height: 1.6;
-        max-width: 760px;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        /* The icon's navy-to-violet wash, faint, top of page only. */
+        background:
+          radial-gradient(60rem 28rem at 50% -8rem, rgba(198, 120, 221, 0.13), transparent 70%),
+          var(--bg);
+      }
+
+      a {
+        color: var(--cyan);
+        text-decoration: none;
+        text-underline-offset: 0.2em;
+      }
+      a:hover {
+        color: var(--cyan-hover);
+        text-decoration: underline;
+      }
+      :focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+
+      .top,
+      main,
+      footer {
+        width: 100%;
+        max-width: 44rem;
         margin: 0 auto;
-        padding: 2.5rem 1.25rem 4rem;
+        padding: 0 1.25rem;
       }
-      h1 { font-size: 1.9rem; margin-bottom: 0.25rem; }
-      h2 { margin-top: 2.5rem; }
-      .sub { opacity: 0.7; margin-top: 0; }
-      pre {
-        background: rgba(127, 127, 127, 0.14);
-        border-radius: 8px;
-        padding: 1rem 1.1rem;
-        overflow-x: auto;
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding-top: 1.5rem;
+        padding-bottom: 1.5rem;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        color: var(--fg-bright);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .brand:hover {
+        color: var(--fg-bright);
+        text-decoration: none;
+      }
+      .brand img {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: block;
+      }
+      .top nav {
+        display: flex;
+        gap: 1.25rem;
+      }
+      .top nav a {
+        color: var(--fg-dim);
+        padding: 0.5rem 0;
+      }
+      .top nav a:hover {
+        color: var(--fg-bright);
+      }
+
+      main {
+        flex: 1;
+        padding-top: 2.5rem;
+        padding-bottom: 3rem;
+      }
+
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: clamp(2rem, 5vw, 2.75rem);
+        line-height: 1.1;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--fg-bright);
+      }
+      .lede {
+        margin: 0 0 2.5rem;
+        max-width: 36rem;
+        font-size: 1.0625rem;
+        color: var(--fg-dim);
+      }
+      .lede strong {
+        color: var(--fg);
+        font-weight: 500;
+      }
+
+      h2 {
+        margin: 2.75rem 0 0.5rem;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--fg-bright);
+      }
+      p {
+        margin: 0 0 0.75rem;
+      }
+      code {
+        font-family: var(--mono);
+        font-size: 0.9em;
+      }
+      p code {
+        background: var(--bg-code);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 0.1em 0.4em;
+        color: var(--fg-bright);
+      }
+
+      /* ---- The terminal: the one place this page spends its boldness ---- */
+      .term {
+        position: relative;
+      }
+      .term::before {
+        content: "";
+        position: absolute;
+        inset: -2.5rem -3rem;
+        background: radial-gradient(closest-side, rgba(198, 120, 221, 0.22), transparent);
+        filter: blur(28px);
+        pointer-events: none;
+        z-index: -1;
+      }
+      .tabs {
+        display: flex;
+        gap: 0.25rem;
+        padding: 0 0.5rem;
+      }
+      .tabs button {
+        appearance: none;
+        background: none;
+        border: 1px solid transparent;
+        border-bottom: 0;
+        border-radius: 10px 10px 0 0;
+        color: var(--fg-dim);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 500;
+        padding: 0.7rem 1rem;
+        transition: color 150ms ease, background-color 150ms ease;
+      }
+      .tabs button:hover {
+        color: var(--fg-bright);
+      }
+      .tabs button[aria-selected="true"] {
+        background: var(--bg-panel);
+        border-color: var(--border);
+        color: var(--fg-bright);
+        position: relative;
+        top: 1px;
+      }
+      .panel {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.6);
+      }
+      .panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.6rem 0.75rem 0.6rem 1.1rem;
+        border-bottom: 1px solid var(--border);
+        color: var(--fg-dim);
+        font-size: 0.9rem;
+      }
+      .panel-head .pm {
+        font-family: var(--mono);
+      }
+      .copy {
+        appearance: none;
+        background: var(--bg-raised);
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        color: var(--fg);
+        cursor: pointer;
+        font: inherit;
         font-size: 0.875rem;
+        font-weight: 500;
+        min-height: 2.25rem;
+        padding: 0.3rem 0.8rem;
+        transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
       }
-      code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-      .note {
-        border-left: 3px solid #d08; padding: 0.4rem 0 0.4rem 1rem;
-        opacity: 0.85; font-size: 0.95rem;
+      .copy:hover {
+        border-color: var(--blue);
+        color: var(--fg-bright);
       }
-      a { color: #c63; }
-      footer { margin-top: 3rem; opacity: 0.6; font-size: 0.85rem; }
+      .copy.done {
+        border-color: var(--green);
+        color: var(--green);
+      }
+      .panel pre {
+        margin: 0;
+        padding: 1.1rem 1.25rem 1.25rem;
+        overflow-x: auto;
+        background: var(--bg-code);
+        font-family: var(--mono);
+        font-size: 0.875rem;
+        line-height: 1.65;
+        color: var(--fg-bright);
+        tab-size: 2;
+      }
+      .panel pre code {
+        font-size: inherit;
+      }
+      /* Without JavaScript every panel shows, stacked, so nothing is lost. */
+      body:not(.js) .tabs {
+        display: none;
+      }
+      body:not(.js) .panel + .panel {
+        margin-top: 1rem;
+      }
+      body.js .panel-head .distro {
+        display: none;
+      }
+      .panel-head .distro {
+        color: var(--fg-bright);
+        font-weight: 600;
+      }
+
+      .after {
+        margin-top: 1.25rem;
+        color: var(--fg-dim);
+      }
+
+      .fpr {
+        display: block;
+        margin: 0.25rem 0 0.75rem;
+        padding: 0.7rem 0.9rem;
+        background: var(--bg-code);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
+        word-break: break-all;
+        color: var(--fg-bright);
+      }
+
+      footer {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        border-top: 1px solid var(--border);
+        color: var(--fg-dim);
+        font-size: 0.9rem;
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      @media (max-width: 520px) {
+        .tabs {
+          padding: 0;
+        }
+        .tabs button {
+          padding: 0.65rem 0.7rem;
+          font-size: 0.9rem;
+        }
+        .term::before {
+          inset: -1.5rem -1rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
     </style>
   </head>
   <body>
-    <h1>OxideMD for Linux</h1>
-    <p class="sub">A lightweight, cross-platform Markdown viewer and editor.</p>
+    <header class="top">
+      <a class="brand" href="https://github.com/FenrirTheGray/OxideMD">
+        <img src="icon.png" alt="" width="28" height="28" />
+        OxideMD
+      </a>
+      <nav aria-label="Project links">
+        <a href="https://github.com/FenrirTheGray/OxideMD/releases">Releases</a>
+        <a href="https://github.com/FenrirTheGray/OxideMD">Source</a>
+      </nav>
+    </header>
 
-    <p>
-      Signed APT and DNF repositories for <strong>x86-64 (amd64)</strong>. Once
-      added, OxideMD updates with the rest of your system through your package
-      manager.
-    </p>
+    <main>
+      <h1>Install OxideMD on Linux</h1>
+      <p class="lede">
+        A native Markdown viewer and editor that draws into your system's own
+        webview instead of bundling a browser. <strong>Add the signed repository
+        once</strong> and updates arrive with the rest of your system.
+      </p>
 
-    <h2>Debian / Ubuntu (apt)</h2>
-    <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+      <section class="term" aria-labelledby="pick">
+        <h2 id="pick" class="visually-hidden">Choose your distribution</h2>
+        <div class="tabs" role="tablist" aria-label="Distribution">
+          <button role="tab" type="button" id="tab-apt" aria-controls="panel-apt" aria-selected="true" data-id="apt">
+            Debian / Ubuntu
+          </button>
+          <button role="tab" type="button" id="tab-dnf" aria-controls="panel-dnf" aria-selected="false" tabindex="-1" data-id="dnf">
+            Fedora / RHEL
+          </button>
+          <button role="tab" type="button" id="tab-arch" aria-controls="panel-arch" aria-selected="false" tabindex="-1" data-id="arch">
+            Arch / Omarchy
+          </button>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-apt" aria-labelledby="tab-apt" tabindex="0">
+          <div class="panel-head">
+            <span><span class="distro">Debian / Ubuntu</span> <span class="pm">apt</span></span>
+            <button class="copy" type="button" aria-label="Copy the apt commands">Copy</button>
+          </div>
+          <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://fenrirthegray.github.io/OxideMD/oxidemd.gpg \
   | sudo tee /etc/apt/keyrings/oxidemd.gpg > /dev/null
 
@@ -58,9 +393,14 @@ EOF
 
 sudo apt update
 sudo apt install __APT_PKG__</code></pre>
+        </div>
 
-    <h2>Fedora / RHEL (dnf)</h2>
-    <pre><code>sudo tee /etc/yum.repos.d/oxidemd.repo > /dev/null <<'EOF'
+        <div class="panel" role="tabpanel" id="panel-dnf" aria-labelledby="tab-dnf" tabindex="0">
+          <div class="panel-head">
+            <span><span class="distro">Fedora / RHEL</span> <span class="pm">dnf</span></span>
+            <button class="copy" type="button" aria-label="Copy the dnf commands">Copy</button>
+          </div>
+          <pre><code>sudo tee /etc/yum.repos.d/oxidemd.repo > /dev/null <<'EOF'
 [oxidemd]
 name=OxideMD
 baseurl=https://fenrirthegray.github.io/OxideMD/rpm
@@ -70,15 +410,114 @@ gpgkey=https://fenrirthegray.github.io/OxideMD/oxidemd.asc
 EOF
 
 sudo dnf install __DNF_PKG__</code></pre>
+        </div>
 
-    <p class="note">
-      Only x86-64 builds are published. ARM (aarch64) is not yet available
-      through these repositories.
-    </p>
+        <div class="panel" role="tabpanel" id="panel-arch" aria-labelledby="tab-arch" tabindex="0">
+          <div class="panel-head">
+            <span><span class="distro">Arch / Omarchy</span> <span class="pm">pacman</span></span>
+            <button class="copy" type="button" aria-label="Copy the pacman commands">Copy</button>
+          </div>
+          <pre><code>curl -fsSL https://fenrirthegray.github.io/OxideMD/oxidemd.asc -o /tmp/oxidemd.asc
+sudo pacman-key --add /tmp/oxidemd.asc
+sudo pacman-key --lsign-key __GPG_KEY_ID__
+
+grep -q '^\[oxidemd\]' /etc/pacman.conf || sudo tee -a /etc/pacman.conf > /dev/null <<'EOF'
+
+[oxidemd]
+Server = https://fenrirthegray.github.io/OxideMD/arch
+EOF
+
+sudo pacman -Syu oxidemd-bin</code></pre>
+        </div>
+      </section>
+
+      <p class="after">
+        Then open any Markdown file from your file manager, or run
+        <code>oxidemd notes.md</code> from a terminal.
+      </p>
+
+      <h2>Check the signing key</h2>
+      <p>
+        Every package and every repository index is signed with one key. Before
+        trusting it, compare its fingerprint with this one:
+      </p>
+      <code class="fpr">__GPG_KEY_ID__</code>
+      <p>
+        The key is published as <a href="oxidemd.asc">oxidemd.asc</a> for dnf and
+        pacman, and as <a href="oxidemd.gpg">oxidemd.gpg</a> for apt.
+      </p>
+
+      <h2>Other ways to install</h2>
+      <p>
+        These repositories publish x86-64 builds only. An AppImage, plus the
+        Windows and macOS installers, are attached to every
+        <a href="https://github.com/FenrirTheGray/OxideMD/releases">release</a>.
+      </p>
+    </main>
 
     <footer>
-      Source &amp; releases:
-      <a href="https://github.com/FenrirTheGray/OxideMD">github.com/FenrirTheGray/OxideMD</a>
+      OxideMD is open source under the MIT license.
+      <a href="https://github.com/FenrirTheGray/OxideMD">Read the code on GitHub.</a>
     </footer>
+
+    <script>
+      (function () {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('[role="tab"]')).filter(function (t) {
+          return document.getElementById(t.getAttribute("aria-controls"));
+        });
+        var panels = tabs.map(function (t) {
+          return document.getElementById(t.getAttribute("aria-controls"));
+        });
+        if (!tabs.length) return;
+        document.body.classList.add("js");
+
+        function select(i, focus) {
+          tabs.forEach(function (t, j) {
+            var on = i === j;
+            t.setAttribute("aria-selected", on ? "true" : "false");
+            t.tabIndex = on ? 0 : -1;
+            panels[j].hidden = !on;
+          });
+          if (focus) tabs[i].focus();
+          try {
+            history.replaceState(null, "", "#" + tabs[i].dataset.id);
+          } catch (e) {
+            /* file:// preview in Chrome refuses replaceState; the tab still switches */
+          }
+        }
+
+        tabs.forEach(function (t, i) {
+          t.addEventListener("click", function () { select(i); });
+          t.addEventListener("keydown", function (e) {
+            var step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            select((i + step + tabs.length) % tabs.length, true);
+          });
+        });
+
+        Array.prototype.forEach.call(document.querySelectorAll(".copy"), function (btn) {
+          btn.addEventListener("click", function () {
+            var text = btn.closest(".panel").querySelector("pre").textContent;
+            function show(label, ok) {
+              btn.textContent = label;
+              btn.classList.toggle("done", ok);
+              setTimeout(function () {
+                btn.textContent = "Copy";
+                btn.classList.remove("done");
+              }, 1600);
+            }
+            navigator.clipboard.writeText(text).then(
+              function () { show("Copied", true); },
+              function () { show("Copy failed", false); }
+            );
+          });
+        });
+
+        var wanted = location.hash.slice(1);
+        var start = tabs.findIndex(function (t) { return t.dataset.id === wanted; });
+        select(start < 0 ? 0 : start);
+      })();
+    </script>
   </body>
 </html>
