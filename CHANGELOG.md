@@ -4,6 +4,16 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.11.0] - 2026-09-03
+
+### Added
+
+- A signed pacman repository for Arch / Omarchy, published next to the apt and dnf repos on the [install page](https://fenrirthegray.github.io/OxideMD/). `oxidemd-bin` repackages the released `.deb` and updates through `pacman -Syu`
+
+### Changed
+
+- The Linux install page is redesigned around one terminal block with a distribution picker and a copy button, in the app's own Atom One Dark colours. `#arch`, `#dnf` and `#apt` in the URL open that tab directly, and without JavaScript all three sets of commands still show
+
 ## [4.10.0] - 2026-08-10
 
 ### Added

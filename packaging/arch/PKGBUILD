@@ -5,7 +5,7 @@
 # publishes the result as a pacman repo on GitHub Pages; the committed
 # pkgver/sha256sums are only a template for that, and for a local `makepkg -si`.
 pkgname=oxidemd-bin
-pkgver=4.10.0
+pkgver=4.11.0
 pkgrel=1
 pkgdesc="A lightweight, cross-platform Markdown viewer and editor"
 arch=('x86_64')
