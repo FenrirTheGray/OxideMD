@@ -62,8 +62,12 @@ export function isPreviewVisible() {
 // ── Image hydration ───────────────────────────────────────────────────────
 // Promote the renderer's image placeholders to live sources for a freshly
 // mounted container. Two kinds need work:
-//   • Local images arrive as `<img data-oxide-src="/abs/path">`; the webview
-//     can't load a raw filesystem path, so rewrite it to an asset:// URL.
+//   • Local images arrive as `<img data-oxide-src="/abs/path"
+//     data-oxide-v="<mtime>">`; the webview can't load a raw filesystem
+//     path, so rewrite it to an asset:// URL. The mtime rides along as a
+//     query string (the asset protocol ignores it) so a reload after the
+//     image changed on disk isn't served the cached bitmap, while an
+//     untouched file maps to the same URL every time.
 //   • Remote images (http(s)/protocol-relative) arrive as inert
 //     `<img class="md-remote-image" data-oxide-remote-src="https://…">` with
 //     NO live `src` — so an untrusted document can't phone home to an
@@ -75,7 +79,8 @@ export function isPreviewVisible() {
 export function hydrateImages(root) {
   if (!root) return;
   for (const img of root.querySelectorAll('img[data-oxide-src]')) {
-    img.src = convertFileSrc(img.dataset.oxideSrc);
+    const v = img.dataset.oxideV;
+    img.src = convertFileSrc(img.dataset.oxideSrc) + (v ? `?v=${v}` : '');
   }
   if (state.config?.load_remote_images) {
     for (const img of root.querySelectorAll('img[data-oxide-remote-src]')) {

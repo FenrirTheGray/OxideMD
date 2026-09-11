@@ -447,18 +447,30 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     // CSS key off — so an untrusted doc can't phone home on
                     // render. The frontend promotes them to `src` only when
                     // the user has opted into remote images.
-                    let (attr, value, class) = match resolve_image(&src, base_dir) {
-                        ResolvedImage::AssetPath(p) => ("data-oxide-src", p, ""),
-                        ResolvedImage::Passthrough(u) => ("src", u, ""),
-                        ResolvedImage::RemoteGated(u) => {
-                            ("data-oxide-remote-src", u, " class=\"md-remote-image\"")
+                    // Local images also carry their mtime: the frontend
+                    // appends it to the asset URL so a reload after the file
+                    // changed on disk gets past the webview's image cache,
+                    // while an untouched file keeps the same URL (the edit
+                    // preview relies on that to leave its <img> in place).
+                    let (attr, value, class, version) = match resolve_image(&src, base_dir) {
+                        ResolvedImage::AssetPath(p) => {
+                            let v = image_version(&p);
+                            ("data-oxide-src", p, "", v)
                         }
+                        ResolvedImage::Passthrough(u) => ("src", u, "", String::new()),
+                        ResolvedImage::RemoteGated(u) => (
+                            "data-oxide-remote-src",
+                            u,
+                            " class=\"md-remote-image\"",
+                            String::new(),
+                        ),
                     };
                     html.push_str(&format!(
-                        "<img{} {}=\"{}\" alt=\"{}\" title=\"{}\" loading=\"lazy\">",
+                        "<img{} {}=\"{}\"{} alt=\"{}\" title=\"{}\" loading=\"lazy\">",
                         class,
                         attr,
                         html_escape_attr(&value),
+                        version,
                         html_escape(&image_alt_buf),
                         html_escape_attr(&title)
                     ));
@@ -619,6 +631,17 @@ fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
     let canonical = std::fs::canonicalize(&path).unwrap_or(path);
     let stripped = crate::commands::strip_windows_verbatim(canonical);
     ResolvedImage::AssetPath(stripped.to_string_lossy().into_owned())
+}
+
+/// ` data-oxide-v="<mtime ms>"` for a resolved local image, or empty when
+/// the mtime can't be read (the URL then just never changes, as before).
+fn image_version(path: &str) -> String {
+    std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| format!(" data-oxide-v=\"{}\"", d.as_millis()))
+        .unwrap_or_default()
 }
 
 /// True when a link `href` uses a scheme that can execute script or
@@ -1115,6 +1138,24 @@ mod tests {
         );
         assert!(!out.contains("src=\"pic.png\""));
         assert!(out.contains("alt=\"alt\""));
+
+        // The version attribute is the file's mtime, so a rewritten image
+        // yields a different value (the frontend uses it to bust the
+        // webview's cache on reload) while an untouched one stays stable.
+        let version = |html: &str| {
+            let i = html.find("data-oxide-v=\"").expect("data-oxide-v missing") + 14;
+            html[i..html[i..].find('"').unwrap() + i].to_string()
+        };
+        let v1 = version(&out);
+        assert_eq!(v1, version(&render("![alt](pic.png)", Some(&dir))));
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::options()
+            .write(true)
+            .open(&img)
+            .unwrap()
+            .set_modified(later)
+            .unwrap();
+        assert_ne!(v1, version(&render("![alt](pic.png)", Some(&dir))));
 
         std::fs::remove_dir_all(&dir).ok();
     }

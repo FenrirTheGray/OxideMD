@@ -872,8 +872,8 @@ function patchPreviewDom(container: HTMLElement, html: string) {
   const tpl = document.createElement('template');
   tpl.innerHTML = html;
   // Hydrate before morphing so old (already-hydrated) and new <img> nodes
-  // compare equal — convertFileSrc is deterministic, so an unchanged image
-  // is left in place with its decoded bitmap intact.
+  // compare equal — the URL is a pure function of path + mtime, so an
+  // unchanged image is left in place with its decoded bitmap intact.
   hydrateImages(tpl.content);
   Idiomorph.morph(container, tpl.content, { morphStyle: 'innerHTML' });
 }

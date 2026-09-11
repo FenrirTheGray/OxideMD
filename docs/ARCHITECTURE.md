@@ -393,9 +393,13 @@ is "Reset settings" in the Settings dialog.
 `markdown.rs::render` turns Markdown source into an HTML **string** on the Rust
 side using pulldown-cmark, with fenced code blocks highlighted by `highlight.rs`
 (syntect). Raw HTML in the source is escaped, not executed. Local image paths
-are emitted as `data-oxide-src` attributes; the frontend rewrites them to
-`asset://` URLs via `convertFileSrc` when it mounts the HTML into the content
-area. In read mode the HTML comes from `open_file` / `save_file`; in edit mode
+are emitted as `data-oxide-src` attributes alongside the file's mtime in
+`data-oxide-v`; the frontend rewrites them to `asset://` URLs via
+`convertFileSrc` when it mounts the HTML into the content area, with the mtime
+appended as a query string (the asset protocol ignores it). The URL is thus a
+pure function of path + mtime: a reload after the image changed on disk gets
+past the webview's cache, while the edit-mode preview can still match an
+unchanged `<img>` across re-renders and keep its decoded bitmap. In read mode the HTML comes from `open_file` / `save_file`; in edit mode
 the live preview pane re-renders on a debounce by calling `render_preview` with
 the current editor buffer.
 
