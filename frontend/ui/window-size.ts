@@ -10,14 +10,14 @@
 // the window pinned above the screen with un-grabbable edges.
 //
 // On resize we toggle `.compact-auto` on #toolbar-buttons to hide the
-// text labels when the toolbar would otherwise crowd the tab area.
+// text labels when the toolbar would otherwise overflow the window.
 // The user's `toolbar_compact` setting uses `.compact` — the two
 // classes compose, so the auto behavior survives the user toggling
 // their preference and vice versa.
 
 import { appWindow } from "../core/state.ts";
 import { logError } from "../core/logger.ts";
-import { updateTabOverflow } from "./tabs.ts";
+import { syncCollapseButton } from "./folder.ts";
 
 const { LogicalSize } = window.__TAURI__.window;
 
@@ -93,14 +93,17 @@ requestAnimationFrame(() => requestAnimationFrame(async () => {
 // it on entering narrow (so it doesn't suddenly cover the document) and
 // clear the collapse on leaving (so it re-docks). Only the *edge* is
 // acted on, so dragging within narrow mode never fights the user's open
-// drawer. The collapse class is inert in the wide layout.
+// drawer. In the wide layout the same class is the collapsed rail.
 let wasNarrow = null;
 export function updateNarrow() {
   const isNarrow = window.innerWidth <= NARROW_BP;
   document.body.classList.toggle('narrow', isNarrow);
   if (isNarrow !== wasNarrow) {
     wasNarrow = isNarrow;
-    if (sidebarEl) sidebarEl.classList.toggle('collapsed', isNarrow);
+    if (sidebarEl) {
+      sidebarEl.classList.toggle('collapsed', isNarrow);
+      syncCollapseButton();
+    }
   }
 }
 
@@ -137,12 +140,11 @@ let naturalToolbarWidth = 0;
 // flicker labels (stage 1) or buttons (stage 2) in and out.
 const COMPACT_HYSTERESIS = 24;
 const OVERFLOW_HYSTERESIS = 24;
-// Tab-strip width to protect before stage 1 (drop labels) and before
-// stage 2 (start overflowing buttons). Stage 2's reserve is smaller — we
-// only banish buttons to the menu once even icon-only ones would starve
-// the active tab.
-const TAB_AREA_RESERVE = 200;
-const OVERFLOW_RESERVE = 120;
+// Breathing room kept between the logo and the button cluster before
+// stage 1 (drop labels) and before stage 2 (overflow buttons). The tabs
+// live in the content island, so the toolbar only has to fit itself.
+const LABEL_RESERVE = 48;
+const OVERFLOW_RESERVE = 16;
 
 // Pull every relocated button back into the toolbar, in natural order,
 // ahead of the trailing "⋯" trigger.
@@ -192,13 +194,13 @@ export function updateToolbarLayout() {
     const trigger = wasAutoCompact
       ? naturalToolbarWidth + COMPACT_HYSTERESIS
       : naturalToolbarWidth;
-    if (trigger > base - TAB_AREA_RESERVE) {
+    if (trigger > base - LABEL_RESERVE) {
       toolbarButtons.classList.add('compact-auto');
     }
   }
 
   // Stage 2 — overflow the cluster into the menu until it fits while
-  // leaving OVERFLOW_RESERVE px for the tab strip. The "⋯" trigger's own
+  // leaving OVERFLOW_RESERVE px of breathing room. The "⋯" trigger's own
   // width is included by revealing it before we measure.
   const budget =
     base - OVERFLOW_RESERVE - (wasOverflowing ? OVERFLOW_HYSTERESIS : 0);
@@ -217,10 +219,6 @@ export function updateToolbarLayout() {
   } else {
     closeMoreMenu();
   }
-
-  // The cluster width changed, so the tab strip's overflow state may have
-  // too (e.g. a single tab that no longer needs scroll arrows).
-  updateTabOverflow();
 }
 
 // ── Overflow menu open/close ─────────────────────────────────────────

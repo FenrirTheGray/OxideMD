@@ -8,6 +8,11 @@
     "Inter", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-size: 16px;
 
+  /* Islands layout: the frame (--bg-toolbar) is the canvas; sidebar,
+     content and outline float on it as rounded, gapped islands (--bg). */
+  --island-gap: 8px;
+  --island-radius: 10px;
+
   /* Motion tokens (prefers-reduced-motion override at bottom) */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out: cubic-bezier(0, 0, 0.2, 1);

@@ -2,7 +2,7 @@ import {
   invoke, appWindow,
   tabs, state,
   ZOOM_MIN, ZOOM_MAX, ZOOM_STEP, ZOOM_DEFAULT,
-  tabBarEl, tabScrollLeftEl, tabScrollRightEl, contentEl, contentScroll,
+  tabBarEl, tabPrevEl, tabNextEl, contentEl, contentScroll,
   editorPane, previewPane,
   btnReload, btnSearch, btnOutline, btnPreview, btnZoomIn, btnZoomOut, zoomLabel,
   btnModeToggle, btnSave, btnDiscard, btnPrint, editToolbar,
@@ -17,7 +17,7 @@ import { promptUnsavedChanges, promptRecoverDraft } from "./confirm.ts";
 import { updateCounts, clearCounts } from "./counts.ts";
 import {
   activeTab, isDirty, isPreviewVisible,
-  renderContent, setLoading, clearStatus, applyZoom,
+  renderContent, setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
 // Re-export the seam primitives that other modules still import from
 // tabs.js (settings.js, folder.js, print.js, app.js) so their imports
@@ -79,6 +79,7 @@ export function syncToolbar() {
   (btnSave as HTMLButtonElement).disabled = !dirty;
   if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
   editToolbar.hidden = !editing;
+  updateSaveStatus();
 }
 
 // Single choke point for the chrome that derives from the active tab + edit
@@ -436,6 +437,9 @@ export function resetZoom() {
 
 export function renderTabBar() {
   tabBarEl.innerHTML = '';
+  // The strip is part of the content island; show it the moment a tab
+  // exists and hide it again on the welcome screen.
+  tabBarEl.parentElement.hidden = tabs.length === 0;
 
   if (tabs.length === 0) return;
 
@@ -478,6 +482,11 @@ export function renderTabBar() {
   // Scroll active tab into view
   const activeEl = tabBarEl.querySelector('.tab.active');
   if (activeEl) activeEl.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+
+  // Prev/next arrows: no wrap-around, so each is disabled at its end.
+  const idx = tabs.findIndex(t => t.id === state.activeTabId);
+  (tabPrevEl as HTMLButtonElement).disabled = idx <= 0;
+  (tabNextEl as HTMLButtonElement).disabled = idx < 0 || idx >= tabs.length - 1;
 
   // Title each freshly-built close button with the live closeTab binding.
   refreshTabCloseTitles();
@@ -522,59 +531,28 @@ tabBarEl.addEventListener('keydown', (e) => {
   (nextTab as HTMLElement).focus();
 });
 
+// Fade the clipped edge of the strip when tabs overflow it. The arrows
+// beside the strip switch tabs (renderTabBar scrolls the active one into
+// view), so overflow only drives the mask.
 export function updateTabOverflow() {
-  const hasOverflow = tabBarEl.scrollWidth > tabBarEl.clientWidth;
-  if (!hasOverflow) {
-    tabBarEl.classList.remove('has-overflow-left', 'has-overflow-right');
-    tabScrollLeftEl.hidden = true;
-    tabScrollRightEl.hidden = true;
-    return;
-  }
-  const scrollLeft = tabBarEl.scrollLeft;
   const maxScroll = tabBarEl.scrollWidth - tabBarEl.clientWidth;
-  const canScrollLeft  = scrollLeft > 2;
-  const canScrollRight = scrollLeft < maxScroll - 2;
-  tabBarEl.classList.toggle('has-overflow-left', canScrollLeft);
-  tabBarEl.classList.toggle('has-overflow-right', canScrollRight);
-  // Keep both buttons mounted whenever tabs overflow; disable the one at
-  // its scroll edge instead of hiding it so the control strip doesn't
-  // shift as the user scrolls.
-  tabScrollLeftEl.hidden   = false;
-  tabScrollRightEl.hidden  = false;
-  (tabScrollLeftEl as HTMLButtonElement).disabled  = !canScrollLeft;
-  (tabScrollRightEl as HTMLButtonElement).disabled = !canScrollRight;
+  tabBarEl.classList.toggle('has-overflow-left', maxScroll > 0 && tabBarEl.scrollLeft > 2);
+  tabBarEl.classList.toggle('has-overflow-right', maxScroll > 0 && tabBarEl.scrollLeft < maxScroll - 2);
 }
 
-function scrollTabsBy(direction) {
-  // Advance by exactly one tab: find the first tab whose edge is clipped
-  // by the viewport on the target side and scroll it into view against
-  // that edge. Tab widths vary (min 84, max 210), so work from live rects.
-  const tabs = Array.from(tabBarEl.querySelectorAll('.tab'));
-  if (!tabs.length) return;
-  const area = tabBarEl.getBoundingClientRect();
-
-  if (direction > 0) {
-    const next = tabs.find(t => t.getBoundingClientRect().right > area.right + 1);
-    if (!next) return;
-    const delta = next.getBoundingClientRect().right - area.right;
-    tabBarEl.scrollBy({ left: delta, behavior: 'smooth' });
-  } else {
-    let prev = null;
-    for (const t of tabs) {
-      if (t.getBoundingClientRect().left < area.left - 1) prev = t;
-      else break;
-    }
-    if (!prev) return;
-    const delta = prev.getBoundingClientRect().left - area.left;
-    tabBarEl.scrollBy({ left: delta, behavior: 'smooth' });
-  }
+// Activate the tab `direction` steps from the active one, wrapping around.
+export function switchTabBy(direction) {
+  if (tabs.length < 2) return;
+  const idx = tabs.findIndex(t => t.id === state.activeTabId);
+  const next = (idx + direction + tabs.length) % tabs.length;
+  switchToTab(tabs[next].id);
 }
 
-tabScrollLeftEl.addEventListener('click', () => scrollTabsBy(-1));
-tabScrollRightEl.addEventListener('click', () => scrollTabsBy(1));
+tabPrevEl.addEventListener('click', () => switchTabBy(-1));
+tabNextEl.addEventListener('click', () => switchTabBy(1));
 
 tabBarEl.addEventListener('scroll', updateTabOverflow);
-window.addEventListener('resize', updateTabOverflow);
+new ResizeObserver(updateTabOverflow).observe(tabBarEl);
 
 export async function loadFile(path) {
   setLoading();

@@ -26,42 +26,54 @@
   flex-shrink: 0;
 }
 
-/* ── Edit mode: split editor + live preview ──────────────────────────
-   While editing, #content is hidden and #editor-split takes over the
-   scroll area. Each pane scrolls independently, so the wrapper itself
-   must not scroll — otherwise the whole split would drift as one. */
-body.editing #content {
+/* ── Edit mode: two inner islands inside the main content island ──────
+   While editing, the read-mode scroll area is swapped for #content-row:
+   the editor island (formatting toolbar + CodeMirror) and the preview
+   island sit on the main island's surface, raised one step (--bg-elevated)
+   and separated by the drag gap. Each scrolls independently. Visibility
+   is driven entirely by body.editing and the split-mode classes. */
+body.editing #content-scroll {
   display: none;
 }
-body.editing #content-scroll {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Visibility is entirely driven by body.editing — no per-tab juggling
-   of the `hidden` attribute is needed. */
-#editor-split {
-  /* Fraction of width given to the editor pane; the divider sets this. */
+#content-row {
+  /* Fraction of the row given to the editor island; the divider sets this. */
   --editor-frac: 50%;
   display: none;
-  flex-direction: row;
   flex: 1;
   min-height: 0;
-  width: 100%;
+  min-width: 0;
+  flex-direction: row;
+  padding: var(--island-gap);
 }
-body.editing #editor-split {
+body.editing #content-row {
   display: flex;
+}
+
+#editor-island {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-radius: var(--island-radius);
+}
+/* Only while both islands are shown; below 640px layout.css collapses
+   the row to a single island and the fraction must not apply. */
+@media (min-width: 641px) {
+  #content-row:not(.split-mode-editor):not(.split-mode-preview) #editor-island {
+    flex: 0 0 var(--editor-frac);
+  }
 }
 
 #editor-pane {
-  flex: 0 0 var(--editor-frac);
+  flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
 }
 /* Affordance while image files are dragged over the editor — see the
    onDragDropEvent handler. Inset outline so it reads over the CodeMirror
@@ -80,7 +92,8 @@ body.editing #editor-split {
   padding: clamp(16px, 3vw, 28px) clamp(16px, 4vw, 32px);
   cursor: text;
   user-select: text;
-  background: var(--bg);
+  background: var(--bg-elevated);
+  border-radius: var(--island-radius);
 }
 
 /* ── Search-result reveal highlight ──────────────────────────────────
@@ -124,79 +137,33 @@ body.editing #editor-split {
   color: var(--mark-current-fg);
 }
 
-/* Split-mode classes set on #editor-split by editor.js. The default (no
-   class) is the resizable split layout above. These hide one pane and
-   the divider so the remaining pane fills the row. */
-#editor-split.split-mode-editor #preview-pane,
-#editor-split.split-mode-editor #split-divider {
+/* Active line / selection-match / bracket colors live in oxideCmTheme
+   (editor.ts) next to the selection color, so they mount after CM6's base
+   theme and beat its light/dark defaults. */
+
+/* Split-mode classes set on #content-row by editor.ts. The default (no
+   class) is the resizable two-island layout above. Editor-only hides the
+   preview island; preview-only hides the editor island. The tab strip is
+   its own island above the content, so it stays in every mode. */
+#content-row.split-mode-editor #preview-pane,
+#content-row.split-mode-editor #split-divider,
+#content-row.split-mode-preview #editor-island,
+#content-row.split-mode-preview #split-divider {
   display: none;
-}
-#editor-split.split-mode-editor #editor-pane {
-  flex: 1 1 auto;
-}
-#editor-split.split-mode-preview #editor-pane,
-#editor-split.split-mode-preview #split-divider {
-  display: none;
-}
-#editor-split.split-mode-preview #preview-pane {
-  flex: 1 1 auto;
 }
 
-/* Drag handle between the two panes. The hit area is a bit wider than
-   the visible line so a slight miss still grabs it (no-precision-required). */
+/* The gap between the two islands doubles as the drag handle; the shared
+   .island-divider look lives in layout.css next to the sidebar divider. */
 #split-divider {
-  flex: 0 0 6px;
+  flex: 0 0 var(--island-gap);
   align-self: stretch;
-  background: var(--border);
-  border-left: 1px solid transparent;
-  border-right: 1px solid transparent;
-  cursor: col-resize;
-  transition: background var(--dur-sm) var(--ease);
-  user-select: none;
   /* Claim the touch gesture so a touch-drag resizes the divider instead of
      being pre-empted by the browser's scroll/pan. */
   touch-action: none;
 }
-#split-divider:hover,
-#split-divider.dragging,
-#split-divider:focus-visible {
-  background: var(--accent);
-  outline: none;
-}
 
-/* Editor and preview share the same webkit scrollbar treatment as the
-   main content scroll. */
-#editor-pane::-webkit-scrollbar,
-#preview-pane::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-}
-#editor-pane::-webkit-scrollbar-track,
-#preview-pane::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-#editor-pane::-webkit-scrollbar-thumb,
-#preview-pane::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-hover);
-  background-clip: padding-box;
-  border: 3px solid transparent;
-  border-radius: 999px;
-  min-height: 40px;
-  transition: background-color var(--dur-sm) var(--ease);
-}
-#editor-pane:hover::-webkit-scrollbar-thumb,
-#preview-pane:hover::-webkit-scrollbar-thumb {
-  background-color: var(--fg-muted);
-}
-#editor-pane::-webkit-scrollbar-thumb:hover,
-#preview-pane::-webkit-scrollbar-thumb:hover {
-  background-color: var(--fg-toolbar);
-}
-#editor-pane::-webkit-scrollbar-thumb:active,
-#preview-pane::-webkit-scrollbar-thumb:active {
-  background-color: var(--accent);
-}
+/* Scrollbar styling for the editor and preview lives with the read-view
+   rules in layout.css (one shared island-pill treatment). */
 
 /* While dragging the divider, freeze text selection everywhere so the
    cursor doesn't accidentally select page text as it moves. */
@@ -213,7 +180,7 @@ body.resizing-split * {
   flex: 1;
   height: 100%;
   min-width: 0;
-  background: var(--bg);
+  background: transparent;
   color: var(--fg);
   border: none;
   outline: none;
@@ -408,17 +375,17 @@ body.resizing-split * {
 /* Shown only while a tab is in edit mode. Visibility is driven by the
    `hidden` attribute on the element (set/cleared in syncToolbar) —
    display:grid by default, display:none when [hidden] is present.
-   Three-column grid keeps the formatting cluster visually centered
-   while anchoring the primary Save CTA at the right edge. */
+   The button strip centers itself while it fits the island and scrolls
+   horizontally once it doesn't (the editor island is only half the row
+   in split mode); Save/Discard stay pinned at the right edge. */
 #edit-toolbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
   align-items: center;
   padding: 4px 12px;
   min-height: 38px;
   flex-shrink: 0;
-  background: var(--bg-toolbar);
-  border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
 #edit-toolbar[hidden] {
@@ -426,15 +393,24 @@ body.resizing-split * {
 }
 
 #edit-toolbar .fmt-content {
-  grid-column: 2;
+  grid-column: 1;
+  justify-self: center;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
 }
+#edit-toolbar .fmt-content::-webkit-scrollbar {
+  display: none;
+}
+/* One rhythm everywhere: 30px squares, 4px apart, dividers with the same
+   4px on either side, and Save/Discard on the same 30px height. */
 #edit-toolbar .fmt-group {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
   flex-shrink: 0;
 }
 #edit-toolbar .fmt-divider {
@@ -442,20 +418,20 @@ body.resizing-split * {
   width: 1px;
   height: 18px;
   background: var(--border);
-  margin: 0 6px;
+  margin: 0 4px;
   flex-shrink: 0;
 }
 
 #edit-toolbar .fmt-btn {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 7px;
   color: var(--fg-toolbar);
   cursor: pointer;
   flex-shrink: 0;
@@ -481,8 +457,8 @@ body.resizing-split * {
   cursor: default;
 }
 #edit-toolbar .fmt-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 /* Save is the sole primary CTA while editing. Solid accent fill (the
@@ -491,20 +467,20 @@ body.resizing-split * {
    beside it as a quieter secondary — same height and a resting border to
    match the other UI buttons, transparent fill, hover fills it in. */
 #edit-toolbar .edit-actions {
-  grid-column: 3;
+  grid-column: 2;
   justify-self: end;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 #edit-toolbar #btn-discard,
 #edit-toolbar #btn-save {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 30px;
   padding: 0 14px;
-  border-radius: 6px;
+  border-radius: 7px;
   font-family: var(--font-family);
   font-size: 11.5px;
   font-weight: 500;
@@ -519,20 +495,18 @@ body.resizing-split * {
 }
 #edit-toolbar #btn-discard svg,
 #edit-toolbar #btn-save svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
 /* Save matches the standard top-bar buttons (#toolbar-buttons button):
    surface fill + border at rest, accent on hover — no special accent CTA
-   fill. Height stays 28px so it aligns with Discard beside it. */
+   fill. Same height and padding as Discard beside it. */
 #edit-toolbar #btn-save {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg-toolbar);
-  border-radius: 7px;
-  padding: 0 24px;
 }
 /* Hover/active match the other (non-save) buttons — the standard
    bg-btn-hover + accent treatment — instead of a brightness filter on the

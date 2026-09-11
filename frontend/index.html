@@ -25,7 +25,7 @@
     <div class="resize-handle resize-se" data-resize="SouthEast"></div>
   </div>
 
-  <!-- ── Toolbar (draggable title bar + tabs + actions) ────────────── -->
+  <!-- ── Toolbar (draggable title bar + actions) ─────────────────────── -->
   <div id="toolbar" role="toolbar" aria-label="Application toolbar" data-tauri-drag-region>
 
     <button id="btn-logo" type="button" aria-label="Keyboard shortcuts"
@@ -34,16 +34,7 @@
       <img src="icon.png" alt="" draggable="false">
     </button>
 
-    <!-- Tabs -->
-    <button id="tab-scroll-left" class="tab-scroll-btn" title="Scroll tabs left" aria-label="Scroll tabs left" aria-controls="tab-area" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>
-    <div id="tab-area" role="tablist" aria-label="Open files" data-tauri-drag-region></div>
-    <button id="tab-scroll-right" class="tab-scroll-btn" title="Scroll tabs right" aria-label="Scroll tabs right" aria-controls="tab-area" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-
-    <!-- Action buttons -->
+    <!-- Action buttons (tabs live in the content island, see #tab-strip) -->
     <div id="toolbar-buttons" data-tauri-drag-region>
       <button id="btn-new" title="New file (Ctrl+N)" aria-label="Create new file">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -185,6 +176,9 @@
       <div id="sidebar-header">
         <span id="sidebar-folder-name" title=""></span>
         <div class="sidebar-header-actions">
+          <button id="sidebar-collapse" class="sidebar-header-btn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+          </button>
           <button id="sidebar-filter-toggle" class="sidebar-header-btn" title="Filter files by name" aria-label="Filter files by name" aria-pressed="false">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5"/></svg>
           </button>
@@ -225,12 +219,31 @@
       </div>
     </aside>
 
-    <div id="sidebar-divider" role="separator" aria-orientation="vertical"
+    <div id="sidebar-divider" class="island-divider" role="separator" aria-orientation="vertical"
          aria-label="Resize sidebar" aria-valuemin="180" aria-valuemax="480"
          aria-valuenow="240" tabindex="0"></div>
 
-    <!-- Editor toolbar + content stacked in one column so the toolbar
-         spans only the editor/preview width — never the tree or outline. -->
+    <!-- Tab strip island + main content island, stacked in one column so
+         both share the content width (between the tree and the outline).
+         The main island holds the search bar on top, then either the
+         rendered document (read mode, #content-scroll) or, in edit mode,
+         #content-row holding two inner islands — the editor (formatting
+         toolbar + CodeMirror) and the live preview — with a drag gap
+         between them. editor.ts sets --editor-frac and the split-mode
+         classes on the row. -->
+    <div id="content-stack">
+  <!-- ── Tab strip (its own island above the content, JetBrains-style) ─
+       Hidden while no tab is open so the welcome screen is clean. -->
+  <div id="tab-strip" hidden>
+    <button id="tab-prev" class="tab-nav-btn" title="Previous tab" aria-label="Previous tab" aria-controls="tab-area" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div id="tab-area" role="tablist" aria-label="Open files"></div>
+    <button id="tab-next" class="tab-nav-btn" title="Next tab" aria-label="Next tab" aria-controls="tab-area" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
     <div id="content-column">
   <!-- ── Search bar (read mode; lives in the content column so it's only
        as wide as the reading pane and never spans the sidebar) ───────── -->
@@ -271,12 +284,15 @@
     </div>
   </div>
 
-  <!-- ── Edit formatting toolbar (shown only in edit mode) ──────────── -->
+  <!-- ── Edit mode: editor island + preview island ──────────────────── -->
+  <div id="content-row">
+  <div id="editor-island">
+  <!-- Edit formatting toolbar -->
   <div id="edit-toolbar" role="toolbar" aria-label="Formatting" hidden>
     <div class="fmt-content">
     <div class="fmt-group" role="group" aria-label="Text">
       <button type="button" class="fmt-btn" data-format="bold" title="Bold" aria-label="Bold">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7z"/>
           <path d="M7 12h7a3.5 3.5 0 0 1 0 7H7z"/>
         </svg>
@@ -286,12 +302,6 @@
           <line x1="19" y1="4" x2="10" y2="4"/>
           <line x1="14" y1="20" x2="5" y2="20"/>
           <line x1="15" y1="4" x2="9" y2="20"/>
-        </svg>
-      </button>
-      <button type="button" class="fmt-btn" data-format="underline" title="Underline" aria-label="Underline">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M7 4v6a5 5 0 0 0 10 0V4"/>
-          <line x1="5" y1="20" x2="19" y2="20"/>
         </svg>
       </button>
       <button type="button" class="fmt-btn" data-format="strike" title="Strikethrough" aria-label="Strikethrough">
@@ -435,17 +445,17 @@
     </div>
   </div>
 
-    <!-- Content area -->
+  <!-- CodeMirror mounts here. -->
+  <div id="editor-pane"></div>
+  </div><!-- /#editor-island -->
+
+  <!-- The gap before the preview island is the resize handle. -->
+  <div id="split-divider" class="island-divider" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview" aria-controls="editor-island" aria-valuemin="15" aria-valuemax="85" aria-valuenow="50" tabindex="0"></div>
+  <div id="preview-pane" class="md-rendered"></div>
+  </div><!-- /#content-row -->
+
+    <!-- Read mode: the rendered document (or the welcome screen) -->
     <div id="content-scroll">
-      <!-- Split editor/preview layout (shown only in edit mode). The
-           textarea is mounted into #editor-pane; the live preview into
-           #preview-pane. Panes scroll independently; the divider can
-           be dragged to rebalance their widths. -->
-      <div id="editor-split">
-        <div id="editor-pane"></div>
-        <div id="split-divider" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview" aria-controls="editor-pane" aria-valuemin="15" aria-valuemax="85" aria-valuenow="50" tabindex="0"></div>
-        <div id="preview-pane" class="md-rendered"></div>
-      </div>
       <main id="content" class="md-rendered">
       <div id="welcome">
         <div class="welcome-wordmark">
@@ -520,6 +530,7 @@
     </main>
     </div><!-- /#content-scroll -->
     </div><!-- /#content-column -->
+    </div><!-- /#content-stack -->
 
     <!-- Document outline sidebar (docked right; toggled by btn-outline in
          read mode). Filled live by outline.js — lists the active document's
@@ -549,6 +560,11 @@
         <span class="status-sep" aria-hidden="true"></span>
       </span>
       <span id="file-path" title="" aria-label="Current file path"></span>
+      <!-- Saved / unsaved state of the active document (tab-state.ts). -->
+      <span id="status-saved" class="hidden" aria-live="polite">
+        <span class="status-saved-dot" aria-hidden="true"></span>
+        <span id="status-saved-text"></span>
+      </span>
       <span id="status-counts" aria-live="off"></span>
     </div>
 
@@ -973,9 +989,9 @@
             </label>
 
             <label class="color-card" for="setting-bg-toolbar">
-              <input type="color" id="setting-bg-toolbar" class="color-swatch" aria-label="Toolbar and tabs background">
+              <input type="color" id="setting-bg-toolbar" class="color-swatch" aria-label="Window frame background">
               <div class="color-info">
-                <span class="color-name">Toolbar &amp; tabs</span>
+                <span class="color-name">Window frame</span>
                 <span class="color-hex" id="setting-bg-toolbar-hex"></span>
               </div>
             </label>

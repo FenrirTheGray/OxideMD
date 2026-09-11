@@ -13,7 +13,7 @@ import {
   shortcutsPopover, contentEl,
   btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnPrint,
   btnModeToggle, btnSave,
-  btnZoomOut, btnZoomIn, zoomLabel, sidebarCloseBtn, tabBarEl,
+  btnZoomOut, btnZoomIn, zoomLabel, sidebarCloseBtn, tabBarEl, tabPrevEl, tabNextEl,
 } from "../core/state.ts";
 
 // Welcome screen ordering (curated; not every action belongs here). Static
@@ -45,6 +45,8 @@ const TOOLBAR_LABELS = {
   zoomReset:    'Reset zoom',
   closeFolder:  'Close folder',
   closeTab:     'Close',
+  prevTab:      'Previous tab',
+  nextTab:      'Next tab',
 };
 
 // Edit-toolbar format buttons. Each `data-format` here has a matching
@@ -154,6 +156,8 @@ function renderToolbarTooltips() {
     [btnZoomIn,       'zoomIn'],
     [zoomLabel,       'zoomReset'],
     [sidebarCloseBtn, 'closeFolder'],
+    [tabPrevEl,       'prevTab'],
+    [tabNextEl,       'nextTab'],
   ];
   for (const [el, id] of map) {
     if (!el) continue;

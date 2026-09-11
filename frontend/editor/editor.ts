@@ -18,7 +18,7 @@ import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.
 import { syncWatcher } from "../ui/folder.ts";
 import {
   activeTab, isDirty, renderContent, hydrateImages,
-  setLoading, clearStatus, applyZoom,
+  setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
 import { updateCounts, updateCountsFrom, countWords } from "../ui/counts.ts";
@@ -32,21 +32,29 @@ import { logError } from "../core/logger.ts";
 import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
+import { liveTableAlign } from "./table-align.ts";
 import { diffSplice } from "./md-transform.ts";
 import { debounce } from "../lib/timing.ts";
 
-import { EditorView, keymap, lineNumbers, Decoration, ViewPlugin } from '@codemirror/view';
+import {
+  EditorView, keymap, lineNumbers, Decoration, ViewPlugin,
+  drawSelection, dropCursor, highlightActiveLine, highlightSpecialChars, rectangularSelection,
+} from '@codemirror/view';
 import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder, Compartment } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
-import { markdown } from '@codemirror/lang-markdown';
-import { syntaxHighlighting, HighlightStyle, syntaxTree } from '@codemirror/language';
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { syntaxHighlighting, HighlightStyle, syntaxTree, bracketMatching, indentOnInput } from '@codemirror/language';
 import { tags, Tag, styleTags } from '@lezer/highlight';
 import {
   search, SearchQuery, setSearchQuery, getSearchQuery,
   findNext, findPrevious, replaceNext, replaceAll,
+  highlightSelectionMatches, selectNextOccurrence,
 } from '@codemirror/search';
 import { Idiomorph } from 'idiomorph';
-import { nextSnippetField, prevSnippetField, clearSnippet, hasNextSnippetField, hasPrevSnippetField } from '@codemirror/autocomplete';
+import {
+  nextSnippetField, prevSnippetField, clearSnippet, hasNextSnippetField, hasPrevSnippetField,
+  closeBrackets, closeBracketsKeymap,
+} from '@codemirror/autocomplete';
 
 // Module-level handle to the current EditorView. The CM6 scroller
 // (view.scrollDOM) is the actual scrolling element, not editor-pane.
@@ -79,7 +87,7 @@ export function getEditorState() {
 }
 
 // ── Split layout (per-tab) ─────────────────────────────────────────────
-// Tabs carry `editorSplit` (0–100, the editor pane's % width) and
+// Tabs carry `editorSplit` (0–100, the editor island's % width) and
 // `splitMode` ('split' | 'editor' | 'preview'). Both are restored every
 // time we mount an editor, so switching tabs preserves the layout the
 // user set on each.
@@ -317,9 +325,11 @@ const oxideCmTheme = EditorView.theme({
     height: '100%',
     flex: '1',
     minWidth: '0',
-    background: 'var(--bg)',
+    background: 'transparent', // the editor island paints the surface
     color: 'var(--fg)',
-    fontFamily: '"Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, ui-monospace, monospace',
+    // Always monospace: aligned Markdown tables are a fixed-width trick,
+    // so the reading font (Settings → Reading) stays a preview concern.
+    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, ui-monospace, monospace',
     // Inherit the size from #editor-pane, which applyZoom() drives with the
     // same `calc(var(--font-size) * zoom)` it gives the preview — so the
     // editor scales with Ctrl+/− and matches the preview's text size.
@@ -329,7 +339,7 @@ const oxideCmTheme = EditorView.theme({
   '.cm-scroller': {
     overflow: 'auto',
     fontFamily: 'inherit',
-    lineHeight: '1.7',
+    lineHeight: 'var(--content-line-height, 1.7)',
   },
   '.cm-content': {
     padding: '28px 0',
@@ -339,14 +349,29 @@ const oxideCmTheme = EditorView.theme({
     padding: '0 32px',
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
+  // drawSelection paints the selection into .cm-selectionLayer. CM6's base
+  // theme targets it with a 4-class selector, so ours must be at least as
+  // specific or the stock lavender wins.
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground, ::selection': {
     background: 'var(--accent-glow)',
+  },
+  // Translucent so the drawn selection underneath still shows through.
+  '.cm-activeLine': { backgroundColor: 'rgba(128, 128, 128, 0.09)' },
+  '.cm-selectionMatch': { backgroundColor: 'var(--mark)', borderRadius: '2px' },
+  '&.cm-focused .cm-matchingBracket': {
+    backgroundColor: 'var(--accent-glow)',
+    outline: '1px solid var(--border-focus)',
+    borderRadius: '2px',
+  },
+  '&.cm-focused .cm-nonmatchingBracket': {
+    backgroundColor: 'var(--bg-danger-hover)',
+    outline: '1px solid var(--danger)',
   },
   // Line-number gutter (only mounted when editor_line_numbers is on).
   // CM6's stock gutter is a light-mode grey — repaint it with the app's
   // tokens so it reads correctly against the dark editor.
   '.cm-gutters': {
-    background: 'var(--bg)',
+    background: 'transparent',
     color: 'var(--fg-dim)',
     border: 'none',
   },
@@ -462,6 +487,7 @@ function buildView(tab) {
     if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;
     const tabEl = document.querySelector(`.tab[data-tab-id="${cur.id}"]`);
     if (tabEl) tabEl.classList.toggle('dirty', dirty);
+    updateSaveStatus();
     // An edit dismisses any lingering search-hit reveal so the sticky
     // highlight doesn't re-apply on every keystroke's preview re-render.
     pendingPreviewReveal = null;
@@ -503,9 +529,32 @@ function buildView(tab) {
       { key: 'Tab', run: nextSnippetField, shift: prevSnippetField },
       { key: 'Escape', run: clearSnippet },
     ])),
-    keymap.of([...defaultKeymap, ...historyKeymap]),
+    keymap.of([
+      ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap,
+      { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
+    ]),
     markdown({ extensions: [oxideMarkdownExt] }),
+    liveTableAlign,
     syntaxHighlighting(oxideHighlightStyle),
+    // VS Code-style editing surface, all from packages already installed.
+    // drawSelection swaps the native contenteditable selection (which
+    // WebKitGTK repaints slowly across long wrapped documents) for CM6's
+    // own layer — and is what makes multiple cursors visible at all.
+    // Mouse gestures follow VS Code: Alt+click adds a cursor, Shift+Alt+
+    // drag selects a column, Mod+D grabs the next occurrence.
+    drawSelection(),
+    dropCursor(),
+    highlightSpecialChars(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    bracketMatching(),
+    closeBrackets(),
+    // Prose auto-closes brackets, quotes and backticks — not apostrophes.
+    markdownLanguage.data.of({ closeBrackets: { brackets: ['(', '[', '{', '"', '`'] } }),
+    indentOnInput(),
+    EditorState.allowMultipleSelections.of(true),
+    EditorView.clickAddsSelectionRange.of((e) => e.altKey && !e.shiftKey),
+    rectangularSelection({ eventFilter: (e) => e.altKey && e.shiftKey && e.button === 0 }),
     revealHighlightField,
     countField,
     // These three are wrapped in Compartments so a Settings change can
@@ -588,6 +637,7 @@ function installPasteHandler(view) {
       view.dispatch({
         changes: { from: sel.from, to: sel.to, insert: insertion },
         selection: { anchor: sel.from + insertion.length },
+        userEvent: 'input.paste',
       });
     } catch (err) {
       showErrorModal('Image paste failed', 'Could not save the pasted image to disk.', err);
@@ -689,6 +739,7 @@ export async function dropImagesIntoEditor(paths, x, y) {
   editorView.dispatch({
     changes: { from: pos, to: pos, insert: insertion },
     selection: { anchor: pos + insertion.length },
+    userEvent: 'input.drop',
   });
   editorView.focus();
   return true;
@@ -1125,6 +1176,7 @@ export async function discardActiveFile() {
   if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = true;
   const tabEl = document.querySelector(`.tab[data-tab-id="${tab.id}"]`);
   if (tabEl) tabEl.classList.remove('dirty');
+  updateSaveStatus();
   updateCounts(restored);
   schedulePreviewRender(0);
 }
@@ -1164,7 +1216,7 @@ function formatActiveEditor(action) {
 // keys 1:1, so the action id can be passed straight through. New format
 // actions only need a row in the ACTIONS registry to gain a shortcut.
 const EDITOR_FORMAT_ACTIONS = [
-  'bold', 'italic', 'underline', 'strike', 'code',
+  'bold', 'italic', 'strike', 'code',
   'h1', 'h2', 'h3',
   'ul', 'ol', 'task',
   'link', 'image',
@@ -1376,6 +1428,7 @@ async function cmCut(view, sel) {
   view.dispatch({
     changes: { from: sel.start, to: sel.end, insert: '' },
     selection: EditorSelection.cursor(sel.start),
+    userEvent: 'delete.cut',
   });
   view.focus();
 }
@@ -1389,6 +1442,7 @@ async function cmPaste(view, sel) {
   view.dispatch({
     changes: { from: sel.start, to: sel.end, insert: text },
     selection: EditorSelection.cursor(sel.start + text.length),
+    userEvent: 'input.paste',
   });
   view.focus();
 }
@@ -1401,8 +1455,8 @@ function cmSelectAll(view) {
 
 // Display accelerator for a rebindable action id, sourced from the live
 // keybindings so the menu label follows a user's rebind instead of a
-// hardcoded string (fixes stale Underline / missing Code labels). Returns
-// undefined when the action is unbound, so the menu simply omits the hint.
+// hardcoded string. Returns undefined when the action is unbound, so the
+// menu simply omits the hint.
 function accelFor(id) {
   const primary = state.bindings?.[id]?.primary;
   return primary ? primary.replace('Mod', modKey) : undefined;
@@ -1428,7 +1482,6 @@ export function buildEditorContextMenu() {
     { label: 'Bold',   action: () => applyFormat(view, 'bold'),   shortcut: accelFor('bold') },
     { label: 'Italic', action: () => applyFormat(view, 'italic'), shortcut: accelFor('italic') },
     { label: 'Strikethrough', action: () => applyFormat(view, 'strike'), shortcut: accelFor('strike') },
-    { label: 'Underline', action: () => applyFormat(view, 'underline'), shortcut: accelFor('underline') },
     { label: 'Code',   action: () => applyFormat(view, 'code'),   shortcut: accelFor('code') },
     { label: 'Link',   action: () => applyFormat(view, 'link'),   shortcut: accelFor('link') },
   ];
@@ -1565,8 +1618,12 @@ if (previewPane) {
 if (splitDivider && editorSplit) {
   let draggingId = null;
   function fracFromPointer(clientX) {
+    // #content-row is padded by the island gap; the islands' % widths
+    // resolve against the content box, so measure against that.
     const rect = editorSplit.getBoundingClientRect();
-    return ((clientX - rect.left) / rect.width) * 100;
+    const cs = getComputedStyle(editorSplit);
+    const padL = parseFloat(cs.paddingLeft), padR = parseFloat(cs.paddingRight);
+    return ((clientX - rect.left - padL) / (rect.width - padL - padR)) * 100;
   }
   splitDivider.addEventListener('pointerdown', (e) => {
     e.preventDefault();

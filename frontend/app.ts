@@ -32,7 +32,7 @@ import {
 import { openFolder, closeFolder, expandAllFolders, collapseAllFolders, setTreeFilter, clearTreeFilter, toggleFilterMode, closeFilterMode, handleFsChange, toggleSidebarDrawer, collapseSidebarDrawer } from "./ui/folder.ts";
 import { openProjectSearch } from "./features/search-project.ts";
 import {
-  switchToTab, closeTab,
+  switchToTab, switchTabBy, closeTab,
   zoomIn, zoomOut, resetZoom,
   renderTabBar,
   loadFile, reloadFile, handleAnchorClick, openFilePicker, createNewFile,
@@ -455,13 +455,6 @@ function shiftActiveTab(direction) {
   const target = (idx + direction + tabs.length) % tabs.length;
   [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
   renderTabBar();
-}
-
-function switchTabBy(direction) {
-  if (tabs.length < 2) return;
-  const idx = tabs.findIndex(t => t.id === state.activeTabId);
-  const next = (idx + direction + tabs.length) % tabs.length;
-  switchToTab(tabs[next].id);
 }
 
 registerHandler('newFile',     (e) => { e?.preventDefault(); createNewFile(); });

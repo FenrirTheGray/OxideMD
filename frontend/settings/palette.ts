@@ -81,7 +81,7 @@ const BASE_PALETTE_GROUPS = [
     name: "Backgrounds",
     tokens: [
       ["bg", "Page background"],
-      ["bg-toolbar", "Toolbar & tabs"],
+      ["bg-toolbar", "Window frame"],
       ["bg-elevated", "Panels & popovers"],
       ["bg-code", "Code block surface"],
       ["bg-table-hd", "Table header"],

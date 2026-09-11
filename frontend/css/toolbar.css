@@ -1,4 +1,6 @@
 /* ── Toolbar ──────────────────────────────────────────────────────── */
+/* Sits directly on the frame canvas — no border, the gap to the islands
+   below is the separator. The empty middle is the window drag handle. */
 #toolbar {
   display: flex;
   align-items: stretch;
@@ -6,9 +8,6 @@
   flex-shrink: 0;
   height: 44px;
   -webkit-app-region: drag;
-  /* Inset (not border) so the active tab can paint over it and flow
-     seamlessly into #content-scroll below — matches Windows Notepad. */
-  box-shadow: inset 0 -1px 0 var(--border);
 }
 
 /* ── Toolbar overflow menu ────────────────────────────────────────────
@@ -89,7 +88,7 @@
   gap: 8px;
   padding: 6px 8px;
   flex-shrink: 0;
-  border-left: 1px solid var(--border-subtle);
+  margin-left: auto;
 }
 #toolbar-buttons > button {
   -webkit-app-region: no-drag;
@@ -586,7 +585,7 @@ body.editing #search-bar .search-replace-row { display: grid; }
 #zoom-controls {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
   flex-shrink: 0;
 }
 #zoom-controls.hidden {
@@ -597,13 +596,15 @@ body.editing #search-bar .search-replace-row { display: grid; }
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 24px;
+  min-width: 24px;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);
   cursor: pointer;
-  padding: 5px;
-  border-radius: 5px;
-  font-size: 13px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-size: 11px;
   font-family: var(--font-family);
   line-height: 1;
   transition:
@@ -629,16 +630,17 @@ body.editing #search-bar .search-replace-row { display: grid; }
 }
 
 #zoom-label {
-  min-width: 40px;
+  min-width: 44px;
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: var(--fg-toolbar);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  padding: 3px 5px;
+  padding: 0 6px;
+  background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   transition:
     color var(--dur-sm) var(--ease),
     background var(--dur-sm) var(--ease),
