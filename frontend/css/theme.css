@@ -12,6 +12,9 @@
      content and outline float on it as rounded, gapped islands (--bg). */
   --island-gap: 8px;
   --island-radius: 10px;
+  /* Sidebar rows (tree, outline, search results): pill inset + radius. */
+  --row-inset: 6px;
+  --row-radius: 7px;
 
   /* Motion tokens (prefers-reduced-motion override at bottom) */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
