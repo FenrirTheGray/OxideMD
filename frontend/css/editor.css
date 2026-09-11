@@ -76,8 +76,9 @@ body.preview-first #content-row {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* Never a scroll container: .cm-scroller scrolls. `auto` here gave
+     WebView2 a second, native scrollbar when .cm-editor overflowed. */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -168,9 +169,6 @@ body.preview-first #content-row {
   touch-action: none;
 }
 
-/* Scrollbar styling for the editor and preview lives with the read-view
-   rules in layout.css (one shared island-pill treatment). */
-
 /* While dragging the divider, freeze text selection everywhere so the
    cursor doesn't accidentally select page text as it moves. */
 body.resizing-split,
@@ -186,6 +184,9 @@ body.resizing-split * {
   flex: 1;
   height: 100%;
   min-width: 0;
+  /* Flex items default to min-height: auto (= content height); without
+     this Chromium lets the editor outgrow the pane. */
+  min-height: 0;
   background: transparent;
   color: var(--fg);
   border: none;
