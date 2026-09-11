@@ -259,7 +259,8 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 - **`counts.ts`** — the status-bar line/word/char counts. O(doc) over the
   source text; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
 - **`confirm.ts`** — the shared confirm dialog (unsaved changes, draft
-  recovery, settings reset/close prompts), a native `<dialog>` wired to a
+  recovery, settings reset/close prompts, destructive deletes), a native
+  `<dialog>` wired to a
   resolve-on-click promise. Like the settings and error modals it uses
   `showModal()` for the focus trap and inert background, with a `cancel`
   handler that routes Escape through the app's close path instead of the

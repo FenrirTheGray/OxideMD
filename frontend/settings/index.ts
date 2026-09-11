@@ -21,7 +21,9 @@ import {
   applyRecentFiles,
 } from "../ui/tabs.ts";
 import { editorModule } from "../editor/lazy.ts";
-import { promptResetSettings, promptDiscardSettings } from "../ui/confirm.ts";
+import { promptResetSettings, promptDiscardSettings, promptDelete } from "../ui/confirm.ts";
+import { showErrorModal } from "../ui/error-modal.ts";
+import { escapeHtml } from "../lib/escape.ts";
 import { closeSearch } from "../features/search.ts";
 import {
   ACTIONS,
@@ -46,7 +48,7 @@ import {
 } from "./palette.ts";
 import { checkForUpdates, hideUpdateStatus } from "./updates.ts";
 import { wireCustomSelect } from "./controls.ts";
-import { fontSelect, rebuildFontDropdown } from "./fonts.ts";
+import { fontSelect, rebuildFontDropdown, fontFamilyCss } from "./fonts.ts";
 
 // ── Settings tab structure & placement convention ──────────────────────────
 // The Settings modal has six tabs. When adding a new setting row, decide
@@ -110,16 +112,8 @@ export function applyConfig(cfg) {
   if (cfg.font_family.startsWith("custom:")) {
     const filename = cfg.font_family.slice(7);
     if (state.activeFontFilename !== filename) loadCustomFont(filename);
-    document.body.style.setProperty(
-      "--font-family",
-      '"OxideMD-Custom", sans-serif',
-    );
-  } else {
-    document.body.style.setProperty(
-      "--font-family",
-      `"${cfg.font_family}", sans-serif`,
-    );
   }
+  document.body.style.setProperty("--font-family", fontFamilyCss(cfg.font_family));
   document.body.style.setProperty("--font-size", `${cfg.font_size}px`);
   document.body.style.setProperty("--content-line-height", cfg.line_height);
   document.body.style.setProperty("--reading-width", `${cfg.reading_width}px`);
@@ -186,34 +180,78 @@ function setCustomThemeSelection(value, label) {
   customThemeTrigger.textContent = value
     ? label || value
     : CUSTOM_THEME_PLACEHOLDER;
+  markSelectedThemeOption();
 }
-function clearCustomThemeSelection() {
-  setCustomThemeSelection("", "");
+// Keeps `.selected` on the row matching dataset.value — the accent color in
+// the list, and where wireCustomSelect's keyboard focus starts on open.
+function markSelectedThemeOption() {
+  const current = (customThemeSelect as HTMLElement).dataset.value || "";
+  customThemeOptionsContainer
+    .querySelectorAll(".custom-select-option")
+    .forEach((o) =>
+      o.classList.toggle("selected", (o as HTMLElement).dataset.value === current),
+    );
 }
-// Resolves state.config.custom_theme into a trigger label. Called twice
-// from openSettings — once from the cached themes list and once after
-// list_custom_themes resolves — so the label upgrades from the raw
-// filename to the saved display name as soon as the list is in.
-function applyStoredCustomThemeSelection() {
-  const ct = state.config?.custom_theme || "";
-  if (!ct) {
-    clearCustomThemeSelection();
-    return;
-  }
-  if (ct === CUSTOM_THEME_DEFAULT_VALUE) {
-    setCustomThemeSelection(CUSTOM_THEME_DEFAULT_VALUE, "Atom One Dark");
-    return;
-  }
-  if (ct === CUSTOM_THEME_DEFAULT_LIGHT_VALUE) {
-    setCustomThemeSelection(CUSTOM_THEME_DEFAULT_LIGHT_VALUE, "Atom One Light");
-    return;
-  }
-  const match = findThemeByFilename(ct);
-  // Missing reference (theme uninstalled, bundle slug renamed in an
-  // update, etc.) — fall back to the placeholder rather than leaking
-  // the raw sentinel/filename into the trigger.
-  if (match) setCustomThemeSelection(ct, match.name);
-  else clearCustomThemeSelection();
+// The label is derived from the colors actually in the controls, not from
+// a stored pointer: a fresh install *is* Atom One Dark without anyone ever
+// picking it, and editing a color back to a theme's value is that theme
+// again. config.custom_theme only breaks ties between identical sets.
+//
+// THEME_COLOR_FIELDS maps each color-config field name (as persisted in
+// config.json and used in the exported JSON) to the id of the Colors-tab
+// control that holds it. It is also the authoritative whitelist for theme
+// import validation — any key not listed here is silently ignored.
+const THEME_COLOR_FIELDS = {
+  h1_color: "setting-h1",
+  h2_color: "setting-h2",
+  h3_color: "setting-h3",
+  bullet_color: "setting-bullet",
+  code_bg_color: "setting-code-bg",
+  code_accent_color: "setting-code-accent",
+  note_bg_color: "setting-note-bg",
+  note_accent_color: "setting-note-accent",
+};
+let defaultConfig = null;
+function atomThemeColors(mode) {
+  return {
+    theme: mode,
+    ...DEFAULT_PALETTE[mode],
+    ...THEME_DEFAULTS[mode],
+    code_accent_color: defaultConfig.code_accent_color,
+    note_accent_color: defaultConfig.note_accent_color,
+  };
+}
+const THEME_MATCH_KEYS = new Set(["theme", ...Object.keys(THEME_COLOR_FIELDS), ...BASE_PALETTE_TOKENS]);
+function normHex(v) {
+  const x = String(v).trim().toLowerCase();
+  return x.length === 4 ? `#${x[1]}${x[1]}${x[2]}${x[2]}${x[3]}${x[3]}` : x;
+}
+function controlColor(key) {
+  const id = key === "theme" ? "setting-theme" : THEME_COLOR_FIELDS[key] || `setting-${key}`;
+  return normHex((document.getElementById(id) as HTMLInputElement).value);
+}
+function themeMatchesControls(colors) {
+  return Object.entries(colors).every(
+    ([k, v]) => !THEME_MATCH_KEYS.has(k) || normHex(v) === controlColor(k),
+  );
+}
+// Degrade the theme list rather than the whole dialog when a fetch fails,
+// but leave a trace so the missing rows are explainable.
+function fallback(cmd, value) {
+  return (e) => { logWarn("settings", `${cmd} failed`, e); return value; };
+}
+function syncThemeSelectionFromColors() {
+  const atoms = defaultConfig
+    ? [
+        { ...ATOM_ONE_DARK, colors: atomThemeColors("dark") },
+        { ...ATOM_ONE_LIGHT, colors: atomThemeColors("light") },
+      ]
+    : [];
+  const matches = [...atoms, ...state.builtinThemes, ...state.customThemes]
+    .filter((t) => themeMatchesControls(t.colors));
+  const stored = state.config?.custom_theme;
+  const pick = matches.find((t) => t.filename === stored) || matches[0];
+  setCustomThemeSelection(pick?.filename || "", pick?.name || "");
 }
 
 // Trigger click + keyboard nav over the dynamic option list. Captured so
@@ -308,6 +346,7 @@ function rebuildCustomThemeDropdown() {
   } else {
     for (const t of imported) appendThemeOption(t);
   }
+  markSelectedThemeOption();
 }
 
 // Event delegation for custom theme dropdown clicks
@@ -318,16 +357,34 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
     const opt = removeBtn.closest(".custom-select-option");
     const label = opt.querySelector(".custom-font-label");
     const themeName = label ? label.textContent : "this theme";
-    if (
-      !confirm(`Remove "${themeName}"? The saved theme file will be deleted.`)
-    )
-      return;
+    const ok = await promptDelete({
+      title: "Remove theme",
+      bodyHtml: `Remove <span class="confirm-file-name">${escapeHtml(themeName)}</span>? The saved theme file will be deleted.`,
+      actionLabel: "Remove",
+    });
+    if (!ok) return;
     const filename = (opt as HTMLElement).dataset.value;
-    await invoke("delete_custom_theme", { filename });
-    state.customThemes = await invoke("list_custom_themes");
-    if ((customThemeSelect as HTMLElement).dataset.value === filename)
-      clearCustomThemeSelection();
+    try {
+      await invoke("delete_custom_theme", { filename });
+      state.customThemes = await invoke("list_custom_themes");
+      // A saved reference to the deleted file would make the dialog look
+      // dirty on every open; drop it now. Config is swapped only once the
+      // save lands so memory never runs ahead of disk.
+      if (state.config.custom_theme === filename) {
+        const next = { ...state.config, custom_theme: "" };
+        await invoke("save_config_cmd", { config: next });
+        state.config = next;
+      }
+    } catch (e) {
+      showErrorModal("Remove failed", `Could not remove "${themeName}".`, e);
+    }
     rebuildCustomThemeDropdown();
+    syncThemeSelectionFromColors();
+    // Async + routed through the confirm overlay, so the dialog's delegated
+    // click dirty-check never ran against the post-removal state.
+    refreshSaveButtonState();
+    // The remove button just got rebuilt away from under focus.
+    (customThemeTrigger as HTMLElement).focus();
     return;
   }
 
@@ -344,26 +401,20 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
   ) {
     const mode =
       (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_VALUE ? "dark" : "light";
-    const defaults = await invoke("get_default_config");
-    const colors = {
-      theme: mode,
-      ...DEFAULT_PALETTE[mode],
-      h1_color: THEME_DEFAULTS[mode].h1_color,
-      h2_color: THEME_DEFAULTS[mode].h2_color,
-      h3_color: THEME_DEFAULTS[mode].h3_color,
-      bullet_color: THEME_DEFAULTS[mode].bullet_color,
-      code_bg_color: THEME_DEFAULTS[mode].code_bg_color,
-      code_accent_color: defaults.code_accent_color,
-      note_bg_color: THEME_DEFAULTS[mode].note_bg_color,
-      note_accent_color: defaults.note_accent_color,
-    };
-    applyThemeToControls(colors);
+    try {
+      defaultConfig ??= await invoke("get_default_config");
+    } catch (e) {
+      showErrorModal("Theme failed", "Could not load the built-in theme.", e);
+      return;
+    }
+    applyThemeToControls(atomThemeColors(mode));
     const pretty =
       (opt as HTMLElement).dataset.value === CUSTOM_THEME_DEFAULT_VALUE
         ? ATOM_ONE_DARK.name
         : ATOM_ONE_LIGHT.name;
     setCustomThemeSelection((opt as HTMLElement).dataset.value, pretty);
     customThemeCtl.close();
+    (customThemeTrigger as HTMLElement).focus();
     // This path awaited get_default_config before applying, so the dialog's
     // delegated click dirty-check already ran against the pre-apply state.
     // Recompute explicitly or Save stays stale until the next interaction.
@@ -381,6 +432,9 @@ customThemeOptionsContainer.addEventListener("click", async (e) => {
     setCustomThemeSelection(theme.filename, theme.name);
   }
   customThemeCtl.close();
+  // Clicking a non-focusable option drops focus to <body>; put it back so
+  // the next Escape closes nothing instead of the whole Settings dialog.
+  (customThemeTrigger as HTMLElement).focus();
 });
 
 // ── Shortcuts panel ────────────────────────────────────────────────────────
@@ -675,18 +729,22 @@ export function openSettings(tabName) {
   // both lists in the background (mirrors rebuildFontDropdown's
   // eager-then-lazy pattern). openSettings stays synchronous. Builtins
   // are static so they cache for the full session after the first fetch.
-  applyStoredCustomThemeSelection();
+  syncThemeSelectionFromColors();
   rebuildCustomThemeDropdown();
   const builtinPromise = state.builtinThemes.length
     ? Promise.resolve(state.builtinThemes)
-    : invoke("list_builtin_themes").catch(() => []);
+    : invoke("list_builtin_themes").catch(fallback("list_builtin_themes", []));
   Promise.all([
     builtinPromise,
-    invoke("list_custom_themes").catch(() => []),
-  ]).then(([builtins, customs]) => {
+    invoke("list_custom_themes").catch(fallback("list_custom_themes", [])),
+    // Without the defaults the Atom rows drop out of theme matching and a
+    // fresh install shows the placeholder instead of "Atom One Dark".
+    defaultConfig || invoke("get_default_config").catch(fallback("get_default_config", null)),
+  ]).then(([builtins, customs, defaults]) => {
     state.builtinThemes = builtins;
     state.customThemes = customs;
-    applyStoredCustomThemeSelection();
+    defaultConfig = defaults;
+    syncThemeSelectionFromColors();
     rebuildCustomThemeDropdown();
     // Async refresh may have re-applied the same selection — keep
     // Save disabled if so, enable only when something actually drifted.
@@ -781,20 +839,6 @@ function collectPaletteFromInputs(resolved) {
 }
 
 // ── Custom theme import/export ─────────────────────────────────────────────
-// Maps each color-config field name (as persisted in config.json and used
-// in the exported JSON) to the id of the Colors-tab control that holds it.
-// This is the authoritative whitelist for import validation — any key not
-// listed here is silently ignored.
-const THEME_COLOR_FIELDS = {
-  h1_color: "setting-h1",
-  h2_color: "setting-h2",
-  h3_color: "setting-h3",
-  bullet_color: "setting-bullet",
-  code_bg_color: "setting-code-bg",
-  code_accent_color: "setting-code-accent",
-  note_bg_color: "setting-note-bg",
-  note_accent_color: "setting-note-accent",
-};
 const THEME_VALID_THEMES = ["dark", "light", "system"];
 // #rgb or #rrggbb — the only shapes <input type="color"> accepts.
 const THEME_HEX_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -1168,7 +1212,8 @@ async function saveSettings() {
     // Settings between each tweak.
     refreshSaveButtonState();
   } catch (e) {
-    alert("Failed to save settings: " + e);
+    // Native alert() is shimmed by Tauri's dialog plugin and never shows.
+    showErrorModal("Save failed", "Could not save settings.", e);
   } finally {
     clearStatus();
   }
@@ -1263,7 +1308,7 @@ async function resetSettings() {
     }
     updatePaletteHexLabels();
     applyPaletteToBody(DEFAULT_PALETTE[resolved]);
-    clearCustomThemeSelection();
+    syncThemeSelectionFromColors();
   } else if (activeTabName === "shortcuts") {
     // Drop every override so every action falls back to its registry
     // default. Still a pending change until the user hits Save.
@@ -1343,9 +1388,9 @@ document.getElementById("settings-tabs").addEventListener("keydown", (e) => {
   (next as HTMLElement).focus();
 });
 
-// Live preview updates. The trigger label tracks the *last applied*
-// saved theme, so any manual color edit makes that label stale — clear
-// it so the dropdown falls back to the placeholder.
+// Live preview updates. Every edit re-derives the theme label from the
+// colors, so a stray tweak drops to the placeholder and undoing it by hand
+// brings the theme name back.
 [
   "setting-h1",
   "setting-h2",
@@ -1358,7 +1403,7 @@ document.getElementById("settings-tabs").addEventListener("keydown", (e) => {
 ].forEach((id) => {
   const el = document.getElementById(id);
   el.addEventListener("input", updatePreviewColors);
-  el.addEventListener("input", clearCustomThemeSelection);
+  el.addEventListener("input", syncThemeSelectionFromColors);
 });
 
 // Interface-palette swatches apply live to <body> as you drag them —
@@ -1369,7 +1414,7 @@ for (const key of BASE_PALETTE_TOKENS) {
     document.body.style.setProperty(`--${key}`, (e.target as HTMLInputElement).value);
     const hex = document.getElementById(`setting-${key}-hex`);
     if (hex) hex.textContent = (e.target as HTMLInputElement).value.toLowerCase();
-    clearCustomThemeSelection();
+    syncThemeSelectionFromColors();
   });
 }
 

@@ -1,4 +1,5 @@
-// Shared confirm dialog (unsaved-changes, draft-recovery, settings).
+// Shared confirm dialog (unsaved-changes, draft-recovery, settings,
+// destructive deletes).
 //
 // One overlay, three buttons (cancel / discard / save) wired to a
 // resolve-on-click promise. `setConfirmContents` rewrites the title and
@@ -95,6 +96,23 @@ export function promptResetSettings(tabLabel) {
     primary: 'cancel',
   });
   return openConfirmDialog();
+}
+
+// Generic destructive confirm (remove a font / theme, delete a tree entry).
+// Two buttons: Cancel is primary so a stray Enter is safe; the action
+// button is relabelled. Resolves true to proceed. Replaces native
+// `confirm()`, which Tauri's dialog plugin shims into an async call — the
+// return value is a Promise, so `!confirm()` was always false.
+export function promptDelete({ title, bodyHtml, actionLabel = 'Delete' }: { title: string, bodyHtml: string, actionLabel?: string }) {
+  setConfirmContents({
+    title,
+    bodyHtml,
+    discardLabel: actionLabel,
+    cancelHidden: false,
+    saveHidden: true,
+    primary: 'cancel',
+  });
+  return openConfirmDialog().then((decision) => decision === 'discard');
 }
 
 // Confirm before closing Settings with unsaved changes. Reuses the shared

@@ -42,7 +42,10 @@ export function wireCustomSelect(sel: HTMLElement) {
     if (!list.length) return;
     const clamped = Math.min(list.length - 1, Math.max(0, i));
     list.forEach((o, n) => o.classList.toggle("focused", n === clamped));
-    list[clamped].scrollIntoView({ block: "nearest" });
+    // "nearest" would leave the section header above the first option
+    // scrolled out of view; snap the list to the top instead.
+    if (clamped === 0) list[0].parentElement!.scrollTop = 0;
+    else list[clamped].scrollIntoView({ block: "nearest" });
   }
 
   trigger.addEventListener("click", () => (isOpen() ? close() : open()));
