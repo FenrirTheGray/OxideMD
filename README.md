@@ -56,7 +56,7 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
   - Footnotes
 - In-document search with highlighting, match navigation, and a case-sensitivity toggle
 - Print to PDF through the OS print dialog — light-on-white for legibility, or matched to your theme
-- Adjustable reading width (480–1400 px) and line height
+- Adjustable reading width (480–2400 px) and line height
 - Configurable "preserve line breaks" mode
 
 ### Editing
