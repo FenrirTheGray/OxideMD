@@ -10,7 +10,9 @@
 body {
   font-family: var(--font-family);
   font-size: var(--font-size);
-  background: var(--bg);
+  /* The frame the islands float on (toolbar, #main-container and the
+     status island's margins all show it). */
+  background: var(--bg-toolbar);
   color: var(--fg);
   display: flex;
   flex-direction: column;
@@ -137,9 +139,14 @@ body.fullscreen .resize-handle {
 }
 
 /* ── Window controls ──────────────────────────────────────────────── */
+/* Same pills as #toolbar-buttons (border, radius, hover, focus ring)
+   so the caption buttons read as part of the toolbar, not a native
+   strip. Sized square to the toolbar buttons' height. */
 #window-controls {
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 0;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
@@ -148,43 +155,44 @@ body.fullscreen .resize-handle {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 100%;
-  background: transparent;
-  border: none;
-  border-left: 1px solid var(--bg);
-  color: var(--fg-muted);
+  /* Same vertical padding + icon size as #toolbar-buttons, so the
+     pills come out the same height; horizontal padding makes it square. */
+  padding: 5px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--fg-toolbar);
   cursor: pointer;
   transition:
     background var(--dur-sm) var(--ease),
-    color var(--dur-sm) var(--ease);
-}
-
-#window-controls button:first-child {
-  border-left-color: var(--border-subtle);
+    color var(--dur-sm) var(--ease),
+    transform var(--dur-xs) var(--ease);
 }
 
 #window-controls button svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
 #window-controls button:hover {
   background: var(--bg-btn-hover);
-  color: var(--fg);
+  color: var(--accent);
+}
+#window-controls button:active {
+  transform: scale(0.96);
+  background: var(--accent-glow);
 }
 #window-controls button:focus-visible {
-  outline: none;
-  background: var(--bg-btn-hover);
-  color: var(--fg);
-  box-shadow: inset 0 0 0 2px var(--border-focus);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
 }
 
 #window-controls #btn-winclose:hover,
 #window-controls #btn-winclose:focus-visible {
-  background: #c42b1c;
-  color: #fff;
+  background: var(--bg-danger-hover);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* ── Accessibility: reduced motion ────────────────────────────────── */
