@@ -306,6 +306,17 @@
     background var(--dur-sm) var(--ease);
 }
 
+/* Mid-drag: the tab lifts off the strip; everything else keeps a grab
+   cursor so the drag reads as one gesture wherever the pointer wanders. */
+.tab.dragging {
+  opacity: 0.6;
+  box-shadow: var(--shadow-md);
+}
+body.dragging-tab,
+body.dragging-tab * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
 .tab:hover {
   color: var(--accent);
   background: var(--bg-btn-hover);
