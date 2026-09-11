@@ -478,23 +478,6 @@ body.editing #search-bar .search-replace-row { display: grid; }
   overflow-x: hidden;
   padding: 4px 0;
   font-size: 13px;
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-hover) transparent;
-}
-#sidebar-search-results::-webkit-scrollbar {
-  width: 10px;
-}
-#sidebar-search-results::-webkit-scrollbar-track {
-  background: transparent;
-}
-#sidebar-search-results::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-hover);
-  background-clip: padding-box;
-  border: 2px solid transparent;
-  border-radius: 999px;
-}
-#sidebar-search-results:hover::-webkit-scrollbar-thumb {
-  background-color: var(--fg-muted);
 }
 
 .search-group {
