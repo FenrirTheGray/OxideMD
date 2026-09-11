@@ -114,7 +114,7 @@ impl Default for Config {
             // the swap, which is how a light-theme heading ends up at 1.39:1.
             h1_color: "#c084fc".into(),
             h2_color: "#67e8f9".into(),
-            h3_color: "#fbbf24".into(),
+            h3_color: "#98c379".into(),
             bullet_color: "#a78bfa".into(),
             code_bg_color: "#1e2127".into(),
             code_accent_color: "#61afef".into(),
