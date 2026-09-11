@@ -160,9 +160,8 @@ systemDarkMQ.addEventListener("change", () => {
 // state.customThemes, with a remove (×) button per saved theme and an
 // "Import theme…" action row. Unlike the other selects this one has no
 // persisted "selected" value — config stores the raw color fields, not a
-// theme reference — so the trigger always shows a static placeholder and
-// the select exposes no .value property.
-const CUSTOM_THEME_PLACEHOLDER = "Select a theme…";
+// theme reference — so the label is derived from the colors (see
+// syncThemeSelectionFromColors) and the select exposes no .value property.
 const CUSTOM_THEME_DEFAULT_VALUE = "__default__";
 const CUSTOM_THEME_DEFAULT_LIGHT_VALUE = "__default_light__";
 const customThemeSelect = document.getElementById("setting-custom-theme");
@@ -172,16 +171,15 @@ const customThemeTrigger = customThemeSelect.querySelector(
 const customThemeOptionsContainer = customThemeSelect.querySelector(
   ".custom-select-options",
 );
-customThemeTrigger.textContent = CUSTOM_THEME_PLACEHOLDER;
 
 // Tracks which saved theme (or Default) the dropdown should label. Empty
-// = no selection (custom edits, or never picked). Value persists to
-// config.custom_theme on Save so the label survives a restart.
+// = no selection (colors match no theme), shown as "Custom" — the same
+// label whether the edits happened this session or before a restart.
+// Value persists to config.custom_theme on Save so the label survives a
+// restart.
 function setCustomThemeSelection(value, label) {
   (customThemeSelect as HTMLElement).dataset.value = value || "";
-  customThemeTrigger.textContent = value
-    ? label || value
-    : CUSTOM_THEME_PLACEHOLDER;
+  customThemeTrigger.textContent = value ? label || value : "Custom";
   markSelectedThemeOption();
 }
 // Keeps `.selected` on the row matching dataset.value — the accent color in
