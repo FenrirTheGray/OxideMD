@@ -5,7 +5,7 @@
    Per-row indentation is inline (depends on the min heading level in
    the doc). */
 #outline-sidebar {
-  width: 260px;
+  width: var(--outline-width, 260px);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -18,63 +18,8 @@
   display: none;
 }
 
-#outline-sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  /* Height (incl. the 1px bottom border, box-sizing: border-box) matches
-     #edit-toolbar and #sidebar-header so all three title bars and their
-     bottom borders line up across the top of the window. */
-  min-height: 38px;
-  padding: 8px 10px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-dim);
-  flex-shrink: 0;
-}
-
-#outline-sidebar-title {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-#outline-sidebar-close {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--fg-dim);
-  cursor: pointer;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  font-size: 12px;
-  line-height: 1;
-  padding: 0;
-  flex-shrink: 0;
-  transition:
-    background var(--dur-sm) var(--ease),
-    color var(--dur-sm) var(--ease),
-    border-color var(--dur-sm) var(--ease),
-    box-shadow var(--dur-sm) var(--ease);
-}
-#outline-sidebar-close:hover {
-  background: var(--bg-danger-hover);
-  color: var(--danger);
-  border-color: var(--danger);
-}
-#outline-sidebar-close:focus-visible {
-  outline: none;
-  color: var(--danger);
-  border-color: var(--danger);
-  box-shadow: 0 0 0 2px var(--accent-glow);
-}
+/* Title bar: shares every rule with #sidebar-header (see the Sidebar
+   section) — same height, type, and action-button cluster. */
 
 #outline-sidebar-body {
   flex: 1;
@@ -130,6 +75,11 @@
 }
 .outline-item:hover {
   background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+/* Same treatment as the folder tree's open file (.tree-row.active). */
+.outline-item.active {
+  background: var(--bg-tab-hover);
   color: var(--accent);
 }
 .outline-item:focus-visible {
@@ -511,19 +461,29 @@
 #sidebar:is(.hidden, .collapsed) + #sidebar-divider {
   display: none;
 }
+/* Same trick on the outline's side; outline.ts toggles .hidden with the
+   sidebar so the divider never shows for a closed outline. */
+#outline-divider {
+  flex: 0 0 var(--island-gap);
+  margin: 0 calc(-1 * var(--island-gap));
+}
+#outline-divider.hidden {
+  display: none;
+}
 body.resizing-sidebar,
 body.resizing-sidebar * {
   cursor: col-resize !important;
   user-select: none !important;
 }
 
-#sidebar-header {
+#sidebar-header,
+#outline-sidebar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* Matches #edit-toolbar / #outline-sidebar-header height so the title
-     bars and their bottom borders align across the top of the window. */
+  /* Matches #edit-toolbar height so the title bars align across the top
+     of the window. */
   min-height: 38px;
   padding: 8px 10px;
   font-size: 11px;
@@ -533,7 +493,8 @@ body.resizing-sidebar * {
   flex-shrink: 0;
 }
 
-#sidebar-folder-name {
+#sidebar-folder-name,
+#outline-sidebar-title {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -591,12 +552,14 @@ body.resizing-sidebar * {
   box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
-#sidebar-close:hover {
+#sidebar-close:hover,
+#outline-sidebar-close:hover {
   background: var(--bg-danger-hover);
   color: var(--danger);
   border-color: var(--danger);
 }
-#sidebar-close:focus-visible {
+#sidebar-close:focus-visible,
+#outline-sidebar-close:focus-visible {
   outline: none;
   color: var(--danger);
   border-color: var(--danger);
@@ -1462,7 +1425,8 @@ body.resizing-sidebar * {
     box-shadow: none;
   }
   /* Can't drag-resize a drawer. */
-  #sidebar-divider {
+  #sidebar-divider,
+  #outline-divider {
     display: none;
   }
 
@@ -1472,7 +1436,7 @@ body.resizing-sidebar * {
     top: 0;
     bottom: 0;
     right: 0;
-    width: min(260px, 85vw);
+    width: min(var(--outline-width, 260px), 85vw);
     z-index: 40;
     border-radius: var(--island-radius) 0 0 var(--island-radius);
     box-shadow: var(--shadow-md);

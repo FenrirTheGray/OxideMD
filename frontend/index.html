@@ -535,10 +535,17 @@
     <!-- Document outline sidebar (docked right; toggled by btn-outline in
          read mode). Filled live by outline.js — lists the active document's
          markdown headings and jumps the editor/preview when one is clicked. -->
+    <div id="outline-divider" class="island-divider hidden" role="separator" aria-orientation="vertical"
+         aria-label="Resize outline" aria-valuemin="180" aria-valuemax="480"
+         aria-valuenow="260" tabindex="0"></div>
     <aside id="outline-sidebar" class="hidden" aria-label="Document outline">
+      <!-- Same structure and classes as #sidebar-header, so the two
+           title bars share one set of rules. -->
       <div id="outline-sidebar-header">
         <span id="outline-sidebar-title">Outline</span>
-        <button id="outline-sidebar-close" title="Close outline" aria-label="Close outline">&#x2715;</button>
+        <div class="sidebar-header-actions">
+          <button id="outline-sidebar-close" title="Close outline" aria-label="Close outline">&#x2715;</button>
+        </div>
       </div>
       <div id="outline-sidebar-body"></div>
     </aside>
