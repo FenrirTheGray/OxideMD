@@ -50,8 +50,37 @@ import { printActiveTab } from "./features/print.ts";
 import { showToast } from "./ui/toast.ts";
 import "./ui/error-modal.ts";
 import "./ui/contextmenu.js";
-import "./ui/window-size.js";
+import { isMoreMenuOpen, closeMoreMenu } from "./ui/window-size.js";
 import { applyOutlineVisibility, closeOutline } from "./ui/outline.ts";
+
+// ── Input modality ─────────────────────────────────────────────────────────
+// WebKitGTK keeps :focus-visible on programmatic focus (dialog open, focus
+// restore after a menu, option → trigger) even when the last input was a
+// mouse click, so rings appeared without Tab ever being pressed. Track the
+// modality on <body>: a pointer press hides rings, a navigation key shows
+// them again (base.css gates every ring on this). Typing into a field
+// doesn't count — printable keys and modifiers alone leave the mode as is.
+document.addEventListener('pointerdown', () => document.body.classList.add('pointer-nav'), true);
+document.addEventListener('keydown', (e) => {
+  if (e.key.length === 1 || ['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) return;
+  document.body.classList.remove('pointer-nav');
+}, true);
+
+// ── Modal focus loop ───────────────────────────────────────────────────────
+// After the last control in a modal <dialog> (and before the first, going
+// backwards) WebKit parks focus on the document itself before wrapping — an
+// invisible Tab stop. Wrap straight from last to first and back instead.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const dialog = (e.target as Element).closest?.('dialog[open]');
+  if (!dialog) return;
+  const stops = Array.from(dialog.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]'))
+    .filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
+  if (!stops.length) return;
+  const first = stops[0], last = stops[stops.length - 1];
+  if (e.shiftKey && e.target === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && e.target === last) { e.preventDefault(); first.focus(); }
+});
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
@@ -332,18 +361,33 @@ contentEl.addEventListener('click', (e) => {
   if (target.closest('#welcome-new'))         { createNewFile(); return; }
   if (target.closest('#welcome-open-folder')) { openFolder(); return; }
   if (target.closest('#welcome-open'))        { openFilePicker(); return; }
-  const recentClear = target.closest('#welcome-recent-clear');
+  // Both buttons re-render (or hide) the list they live in; when they were
+  // activated from the keyboard, move focus on rather than dropping it.
+  const recentClear = target.closest('#welcome-recent-clear') as HTMLElement;
   if (recentClear) {
+    const viaKeyboard = recentClear.matches(':focus-visible');
     invoke('clear_recent_files')
-      .then(() => applyRecentFiles([]))
+      .then(() => {
+        applyRecentFiles([]);
+        if (viaKeyboard) document.getElementById('welcome-open')?.focus();
+      })
       .catch(() => {});
     return;
   }
   const recentForget = target.closest('.welcome-recent-forget') as HTMLElement;
   if (recentForget) {
     e.stopPropagation();
+    const viaKeyboard = recentForget.matches(':focus-visible');
+    const buttons = Array.from(contentEl.querySelectorAll('.welcome-recent-forget'));
+    const idx = buttons.indexOf(recentForget);
     invoke('forget_recent_file', { path: recentForget.dataset.path })
-      .then(applyRecentFiles)
+      .then((entries) => {
+        applyRecentFiles(entries);
+        if (!viaKeyboard) return;
+        const next = contentEl.querySelectorAll('.welcome-recent-forget');
+        const el = next[Math.min(idx, next.length - 1)] ?? document.getElementById('welcome-open');
+        (el as HTMLElement | null)?.focus();
+      })
       .catch(() => {});
     return;
   }
@@ -547,11 +591,15 @@ document.addEventListener('keydown', (e) => {
     // (preventDefault + stopPropagation) so it can't also reach a
     // lower-priority handler or the edit-mode toggle. With nothing
     // open, Escape is a no-op here and falls through untouched.
-    //   confirm dialog > shortcuts popover > settings > search bar
+    //   confirm dialog > more menu > shortcuts popover > settings > search bar
     // The confirm dialog is handled in editor.js (it owns the
     // resolve-on-key promise); we just stop here so settings/search
     // below don't also fire.
     if (confirmOverlay.open) { return; }
+    if (isMoreMenuOpen()) {
+      e.preventDefault(); e.stopPropagation();
+      closeMoreMenu({ focus: true }); return;
+    }
     if (!shortcutsPopover.classList.contains('hidden')) {
       e.preventDefault(); e.stopPropagation();
       closeShortcutsPopover(); btnLogo.focus(); return;

@@ -183,6 +183,8 @@ export function openProjectSearch() {
 
 export function closeProjectSearch() {
   panelOpen = false;
+  // Hiding the panel while it holds focus would drop focus on <body>.
+  if (sidebarSearchPanel.contains(document.activeElement)) sidebarSearchToggle?.focus();
   sidebarSearchPanel.classList.add('hidden');
   sidebarTreeEl.classList.remove('hidden');
   if (sidebarSearchToggle) {

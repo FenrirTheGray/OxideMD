@@ -39,15 +39,22 @@ import { escapeHtml } from "../lib/escape.ts";
 
 let menuEl = null;
 let menuCleanup = null;
+let menuOpener: Element | null = null;
 
 function closeMenu() {
   if (!menuEl) return;
+  const hadFocus = menuEl.contains(document.activeElement);
   menuEl.remove();
   menuEl = null;
   if (menuCleanup) { menuCleanup(); menuCleanup = null; }
+  // The first item took focus on open; give it back to the editor/row/
+  // input the menu was opened on.
+  if (hadFocus && menuOpener?.isConnected) (menuOpener as HTMLElement).focus();
+  menuOpener = null;
 }
 
 function showMenu(items, clientX, clientY) {
+  menuOpener = document.activeElement;
   if (!items || items.length === 0) return;
   closeMenu();
 
@@ -94,7 +101,12 @@ function showMenu(items, clientX, clientY) {
   el.style.left = '0px';
   el.style.top = '0px';
   el.style.visibility = 'hidden';
-  document.body.appendChild(el);
+  // Under a modal <dialog>, <body> is inert and painted below the top
+  // layer — a menu appended there is invisible and unclickable. Host it in
+  // the topmost open dialog instead (they're full-viewport, untransformed
+  // fixed boxes, so the coordinates below still mean the viewport).
+  const host = Array.from(document.querySelectorAll('dialog[open]')).pop() ?? document.body;
+  host.appendChild(el);
   const { offsetWidth: w, offsetHeight: h } = el;
   const margin = 4;
   const maxX = window.innerWidth - w - margin;
@@ -121,7 +133,9 @@ function showMenu(items, clientX, clientY) {
   };
   const onKey = (e) => {
     if (!menuEl) return;
-    if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
+    // Stop here (capture phase) so the global Escape chain doesn't also
+    // close whatever the menu is sitting on — a modal, the search bar.
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const enabled = Array.from(menuEl.querySelectorAll('.ctx-item:not([disabled])'));
@@ -573,4 +587,19 @@ document.addEventListener('contextmenu', (e) => {
   }
 
   if (items.length) showMenu(items, e.clientX, e.clientY);
+});
+
+// WebKitGTK never fires contextmenu for the Menu key or Shift+F10, so
+// synthesize one on the focused element (anchored to its box) to keep the
+// tree/tab/outline menus reachable from the keyboard.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el || el === document.body || menuEl) return;
+  e.preventDefault();
+  const r = el.getBoundingClientRect();
+  el.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true,
+    clientX: r.left + Math.min(r.width / 2, 24), clientY: r.bottom - 4,
+  }));
 });

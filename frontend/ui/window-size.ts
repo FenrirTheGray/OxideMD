@@ -237,11 +237,18 @@ function openMoreMenu() {
   moreMenu.setAttribute('aria-hidden', 'false');
   btnMore.setAttribute('aria-expanded', 'true');
 }
-export function closeMoreMenu() {
+export function isMoreMenuOpen() {
+  return !!moreMenu && !moreMenu.classList.contains('hidden');
+}
+// Escape lives in app.ts's overlay precedence chain (so it closes only
+// this menu, not the search bar underneath too); `focus` restores the
+// keyboard user's place on the trigger.
+export function closeMoreMenu({ focus = false } = {}) {
   if (!moreMenu || !btnMore) return;
   moreMenu.classList.add('hidden');
   moreMenu.setAttribute('aria-hidden', 'true');
   btnMore.setAttribute('aria-expanded', 'false');
+  if (focus) btnMore.focus();
 }
 
 if (btnMore) {
@@ -257,17 +264,11 @@ if (moreMenu) {
     if ((e.target as Element).closest('button')) closeMoreMenu();
   });
 }
-// Click-outside and Escape close the menu.
+// Click-outside closes the menu.
 document.addEventListener('mousedown', (e) => {
-  if (!moreMenu || moreMenu.classList.contains('hidden')) return;
+  if (!isMoreMenuOpen()) return;
   if (moreMenu.contains(e.target as Node) || (btnMore && btnMore.contains(e.target as Node))) return;
   closeMoreMenu();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && moreMenu && !moreMenu.classList.contains('hidden')) {
-    closeMoreMenu();
-    if (btnMore) btnMore.focus();
-  }
 });
 
 let compactRafId = 0;

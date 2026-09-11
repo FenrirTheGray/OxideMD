@@ -30,6 +30,8 @@ export function toggleSearch() {
 }
 
 export function closeSearch() {
+  // Escape from the find field goes back to the text it was searching.
+  if (isEditing() && searchBar.contains(document.activeElement)) editorModule()?.focusEditor();
   searchBar.classList.add('hidden');
   btnSearch.setAttribute('aria-pressed', 'false');
   clearSearch();

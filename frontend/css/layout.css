@@ -374,9 +374,11 @@ body.dragging-tab * {
   color: var(--danger);
   border-color: var(--danger);
 }
+/* Inset: #tab-area's overflow clips anything outside the pill, which
+   sheared an outer ring flat at the top and bottom. */
 .tab:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 .tab:active {
   background: var(--accent-glow);

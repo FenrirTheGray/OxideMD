@@ -240,6 +240,9 @@ document.addEventListener('keydown', (e) => {
   if (!state.confirmDialogOpen) return;
   if (e.key === 'Escape') { e.preventDefault(); closeConfirmDialog('cancel'); }
   else if (e.key === 'Enter') {
+    // A button the user tabbed to activates itself (native click); Enter
+    // anywhere else in the dialog (text input, body) means the primary.
+    if (document.activeElement?.closest('button')) return;
     e.preventDefault();
     closeConfirmDialog(confirmPrimary === 'cancel' ? 'cancel'
                      : confirmPrimary === 'discard' ? 'discard'

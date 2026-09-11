@@ -509,11 +509,8 @@ tabBarEl.addEventListener('keydown', (e) => {
   else if (e.key === 'Delete') {
     e.preventDefault();
     const id = Number((targetTab as HTMLElement).dataset.tabId);
-    if (!Number.isNaN(id)) {
-      closeTab(id);
-      const newActive = tabBarEl.querySelector('.tab.active') as HTMLElement;
-      if (newActive) newActive.focus();
-    }
+    // closeTab may prompt first; focus whatever is active once it settles.
+    if (!Number.isNaN(id)) closeTab(id).then(() => tabElement(state.activeTabId)?.focus());
     return;
   } else if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault();
@@ -525,12 +522,17 @@ tabBarEl.addEventListener('keydown', (e) => {
   }
 
   e.preventDefault();
-  const nextTab = allTabs[nextIdx];
-  const id = Number((nextTab as HTMLElement).dataset.tabId);
-  if (!Number.isNaN(id)) switchToTab(id);
-  (nextTab as HTMLElement).focus();
+  const id = Number((allTabs[nextIdx] as HTMLElement).dataset.tabId);
+  if (Number.isNaN(id)) return;
+  switchToTab(id);
+  // switchToTab rebuilt the strip, so the element we started from is
+  // detached — focus the freshly rendered one.
+  tabElement(id)?.focus();
 });
 
+function tabElement(id) {
+  return tabBarEl.querySelector(`.tab[data-tab-id="${id}"]`) as HTMLElement | null;
+}
 
 // ── Drag to reorder ───────────────────────────────────────────────────
 // Pointer events rather than HTML5 drag-and-drop: Tauri's native file-drop
