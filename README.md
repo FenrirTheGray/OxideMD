@@ -127,7 +127,7 @@ One-time setup commands required for this app to be added to them can be found o
 
 ## Keyboard shortcuts
 
-> On macOS, read `Ctrl` as `Cmd`. Every shortcut below is rebindable from **Settings → Shortcuts** — except tab navigation and move-tab, which are fixed on Linux.
+> On macOS, read `Ctrl` as `Cmd`. Every shortcut below is rebindable from **Settings → Shortcuts** — except next/previous tab, which are fixed on Linux.
 
 | Shortcut                      | Action                           |
 | ----------------------------- | -------------------------------- |
@@ -140,7 +140,7 @@ One-time setup commands required for this app to be added to them can be found o
 | `Ctrl+P`                      | Print to PDF                     |
 | `Ctrl+R`                      | Reload file                      |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab              |
-| `Ctrl+Shift+←` / `→`          | Move tab                         |
+| `Ctrl+Shift+PgUp` / `PgDn`     | Move tab                         |
 | `Ctrl++` / `-` / `0`          | Zoom in / out / reset            |
 | `Ctrl+B` / `I` / `K`          | Bold / italic / link (edit mode) |
 | `Enter` / `Shift+Enter`       | Next / previous search match     |
