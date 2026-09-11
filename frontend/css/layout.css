@@ -9,8 +9,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-toolbar);
-  border-left: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--island-radius);
   overflow: hidden;
   user-select: none;
 }
@@ -28,7 +28,6 @@
      bottom borders line up across the top of the window. */
   min-height: 38px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -210,10 +209,40 @@
   text-align: center;
 }
 
-/* ── Tab area ─────────────────────────────────────────────────────── */
+/* ── Content stack: tab-strip island over the main content island ──── */
+#content-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--island-gap);
+}
+
+/* ── Tab strip (its own island above the content) ─────────────────────
+   Height matches #sidebar-header and #outline-sidebar-header so the
+   island headers line up. Hidden while no tab is open. */
+#tab-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 38px;
+  padding: 0 6px;
+  flex-shrink: 0;
+  background: var(--bg);
+  border-radius: var(--island-radius);
+  overflow: hidden;
+}
+/* Toggled by renderTabBar() — a `:has(:empty)` rule isn't reliably
+   re-evaluated by WebKitGTK when tabs are inserted. */
+#tab-strip[hidden] {
+  display: none;
+}
+
 #tab-area {
   flex: 1;
   display: flex;
+  align-items: center;
+  gap: 4px;
   overflow-x: auto;
   min-width: 0;
   scrollbar-width: none;
@@ -257,8 +286,9 @@
   );
 }
 
-/* Tab overflow scroll buttons — visible only when tabs overflow on that side */
-.tab-scroll-btn {
+/* Previous / next tab arrows — always present, chip-styled like the top
+   bar buttons, disabled at either end of the tab order. */
+.tab-nav-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -266,88 +296,77 @@
   width: 26px;
   height: 26px;
   flex-shrink: 0;
-  margin: 0 2px;
-  background: var(--bg);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 7px;
-  color: var(--fg-muted);
+  color: var(--fg-toolbar);
   cursor: pointer;
   padding: 0;
-  -webkit-app-region: no-drag;
   transition:
     background var(--dur-sm) var(--ease),
     color var(--dur-sm) var(--ease),
     border-color var(--dur-sm) var(--ease),
     transform var(--dur-xs) var(--ease);
 }
-.tab-scroll-btn[hidden] {
-  display: none;
-}
-.tab-scroll-btn svg {
+.tab-nav-btn svg {
   width: 14px;
   height: 14px;
   display: block;
 }
-.tab-scroll-btn:hover:not(:disabled) {
+.tab-nav-btn:hover:not(:disabled) {
   background: var(--bg-btn-hover);
   color: var(--accent);
 }
-.tab-scroll-btn:active:not(:disabled) {
+.tab-nav-btn:active:not(:disabled) {
   transform: scale(0.94);
 }
-.tab-scroll-btn:disabled {
+.tab-nav-btn:disabled {
   opacity: 0.35;
   cursor: default;
 }
-.tab-scroll-btn:focus-visible {
+.tab-nav-btn:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 
 /* ── Tabs ─────────────────────────────────────────────────────────── */
+/* Borderless pills matching #toolbar-buttons button (same padding, radius,
+   type and hover); the active tab takes the top bar's pressed treatment. */
 .tab {
   display: flex;
   align-items: center;
-  height: 100%;
-  gap: 7px;
-  padding: 0 8px 0 16px;
+  align-self: center;
+  gap: 5px;
+  padding: 5px 8px 5px 11px;
+  border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
   max-width: 210px;
   min-width: 84px;
   flex-shrink: 0;
-  color: var(--fg-muted);
-  font-size: 12.5px;
+  color: var(--fg-toolbar);
+  background: var(--bg-elevated);
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.03em;
   position: relative;
   user-select: none;
-  -webkit-app-region: no-drag;
   transition:
     color var(--dur-sm) var(--ease),
     background var(--dur-sm) var(--ease);
 }
 
 .tab:hover {
-  color: var(--fg-dim);
-  background: var(--bg-tab-hover);
+  color: var(--accent);
+  background: var(--bg-btn-hover);
 }
 
-/* Active tab takes the body color and rounds its top corners so it
-   reads as a folder tab. Its full-height background covers the 1px
-   toolbar separator at its own width, producing the seamless flow
-   into the content area below (Notepad-style). */
 .tab.active {
-  color: var(--fg);
-  background: var(--bg);
-  border-radius: 8px 8px 0 0;
-  /* Frame the active tab on its top/left/right edges (not the bottom, so it
-     flows into the content area below). Inset box-shadow avoids any layout
-     shift that a real border would introduce. */
-  box-shadow:
-    inset 0 1px 0 var(--border),
-    inset 1px 0 0 var(--border),
-    inset -1px 0 0 var(--border);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+.tab.active:hover {
+  background: var(--bg-btn-hover);
 }
 
 .tab-title {
@@ -368,7 +387,9 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  opacity: 0.55;
+  /* Hidden until the tab is hovered or keyboard-focused; the slot keeps
+     its width so the title doesn't shift when the icon appears. */
+  opacity: 0;
   transition:
     opacity var(--dur-xs) var(--ease),
     background var(--dur-xs) var(--ease),
@@ -382,7 +403,8 @@
 }
 
 .tab:hover .tab-close,
-.tab.active .tab-close {
+.tab:focus-visible .tab-close,
+.tab .tab-close:focus-visible {
   opacity: 0.85;
 }
 .tab .tab-close:hover {
@@ -392,24 +414,29 @@
   border-color: var(--danger);
 }
 .tab:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px var(--border-focus);
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
 }
 .tab:active {
-  background: var(--bg-tab-hover);
+  background: var(--accent-glow);
 }
 #tab-area:has(:focus-visible) {
   -webkit-mask-image: none;
   mask-image: none;
 }
 
-/* ── Main container (sidebar + content) ─────────────────────────── */
+/* ── Main container (sidebar + content) ─────────────────────────────
+   The islands canvas: the frame color shows through the padding and
+   the gaps, and each child paints itself as a rounded island. */
 #main-container {
   flex: 1;
   display: flex;
   flex-direction: row;
+  gap: var(--island-gap);
+  padding: 0 var(--island-gap);
   min-height: 0;
   overflow: hidden;
+  background: var(--bg-toolbar);
 }
 
 /* ── Sidebar (file tree) ────────────────────────────────────────── */
@@ -418,8 +445,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-toolbar);
-  border-right: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--island-radius);
   overflow: hidden;
   user-select: none;
 }
@@ -427,41 +454,62 @@
 #sidebar.hidden {
   display: none;
 }
-
-/* Drag handle between sidebar and content. The element itself is a
-   9px transparent hit zone (extended beyond its layout slot with
-   negative margins so neighbors aren't pushed). The visible accent
-   line is painted by ::before at 1px centered, keeping the visual
-   weight the same as before while doubling the grab area. */
-#sidebar-divider {
-  flex: 0 0 9px;
+/* Collapsed (wide layout): a slim rail keeping only the expand button.
+   The drawer layout below reuses the same class to slide the drawer away. */
+#sidebar.collapsed {
+  width: 40px;
+}
+#sidebar.collapsed #sidebar-folder-name,
+#sidebar.collapsed .sidebar-header-actions > :not(#sidebar-collapse),
+#sidebar.collapsed #sidebar-filter,
+#sidebar.collapsed #sidebar-tree,
+#sidebar.collapsed #sidebar-search-panel {
+  display: none;
+}
+#sidebar.collapsed #sidebar-header {
+  justify-content: center;
+  padding: 8px 0;
+}
+#sidebar.collapsed #sidebar-collapse svg {
+  transform: rotate(180deg);
+}
+/* Drag handles between islands (sidebar ↔ content, editor ↔ preview): a
+   transparent gap-wide hit zone with an accent line that appears centered
+   on hover, drag, or keyboard focus. */
+.island-divider {
   cursor: col-resize;
   background: transparent;
   position: relative;
   z-index: 1;
-  margin-left: -4px;
-  margin-right: -4px;
+  user-select: none;
 }
-#sidebar-divider::before {
+.island-divider::before {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 4px;
-  width: 1px;
+  left: calc(50% - 1px);
+  width: 2px;
+  border-radius: 1px;
   background: transparent;
   transition: background var(--dur-sm) var(--ease);
 }
-#sidebar.hidden + #sidebar-divider {
-  display: none;
-}
-#sidebar-divider:hover::before,
-#sidebar-divider.dragging::before,
-#sidebar-divider:focus-visible::before {
+.island-divider:hover::before,
+.island-divider.dragging::before,
+.island-divider:focus-visible::before {
   background: var(--accent);
 }
-#sidebar-divider:focus-visible {
+.island-divider:focus-visible {
   outline: none;
+}
+/* The sidebar divider sits between two flex gaps; negative margins pull
+   it over them so the islands stay exactly one gap apart. */
+#sidebar-divider {
+  flex: 0 0 var(--island-gap);
+  margin: 0 calc(-1 * var(--island-gap));
+}
+#sidebar:is(.hidden, .collapsed) + #sidebar-divider {
+  display: none;
 }
 body.resizing-sidebar,
 body.resizing-sidebar * {
@@ -478,7 +526,6 @@ body.resizing-sidebar * {
      bars and their bottom borders align across the top of the window. */
   min-height: 38px;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -778,16 +825,17 @@ body.resizing-sidebar * {
   margin-top: 4px;
 }
 
-/* ── Content column (edit toolbar + scroll area) ──────────────────────
-   Stacks the edit toolbar above the scrolling content so the toolbar
-   spans only the editor/preview width — it sits between the file tree
-   and the outline rather than across the whole window. */
+/* ── Content column (the main content island) ─────────────────────────
+   Stacks the search bar over the read-mode scroll area or,
+   in edit mode, over #content-row's two inner islands (editor.css). */
 #content-column {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--bg);
+  border-radius: var(--island-radius);
 }
 
 /* ── Content scroll area ──────────────────────────────────────────── */
@@ -796,46 +844,59 @@ body.resizing-sidebar * {
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-
-  /* Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-hover) transparent;
+  /* No `scrollbar-width` / `scrollbar-color` here: engines that support
+     them (WebKit included now) stop honoring ::-webkit-scrollbar rules,
+     which would drop the island-pill look below. */
 }
 
-/* WebKit / Chromium — floating pill scrollbar */
-#content-scroll::-webkit-scrollbar {
+/* WebKit / Chromium — the scrollbar as its own vertical island: a
+   frame-colored pill track inset from the island's edge (margin top and
+   bottom, transparent border for the side inset), with a rounded thumb
+   riding inside it. Shared by the read view, the CodeMirror scroller (the
+   real scrolling element in edit mode) and the live preview. */
+#content-scroll::-webkit-scrollbar,
+#preview-pane::-webkit-scrollbar,
+.md-editor .cm-scroller::-webkit-scrollbar {
   width: 14px;
   height: 14px;
 }
-
-#content-scroll::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-#content-scroll::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-hover);
+#content-scroll::-webkit-scrollbar-track,
+#preview-pane::-webkit-scrollbar-track,
+.md-editor .cm-scroller::-webkit-scrollbar-track {
+  background-color: var(--bg-toolbar);
   background-clip: padding-box;
   border: 3px solid transparent;
+  border-radius: 999px;
+  margin: var(--island-gap) 0;
+}
+#content-scroll::-webkit-scrollbar-thumb,
+#preview-pane::-webkit-scrollbar-thumb,
+.md-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-hover);
+  background-clip: padding-box;
+  border: 4px solid transparent;
   border-radius: 999px;
   min-height: 40px;
   transition: background-color var(--dur-sm) var(--ease);
 }
-
-/* Container hover lifts the thumb further */
-#content-scroll:hover::-webkit-scrollbar-thumb {
+#content-scroll:hover::-webkit-scrollbar-thumb,
+#preview-pane:hover::-webkit-scrollbar-thumb,
+.md-editor .cm-scroller:hover::-webkit-scrollbar-thumb {
   background-color: var(--fg-muted);
 }
-
-#content-scroll::-webkit-scrollbar-thumb:hover {
+#content-scroll::-webkit-scrollbar-thumb:hover,
+#preview-pane::-webkit-scrollbar-thumb:hover,
+.md-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
   background-color: var(--fg-toolbar);
 }
-
-#content-scroll::-webkit-scrollbar-thumb:active {
+#content-scroll::-webkit-scrollbar-thumb:active,
+#preview-pane::-webkit-scrollbar-thumb:active,
+.md-editor .cm-scroller::-webkit-scrollbar-thumb:active {
   background-color: var(--accent);
 }
-
-#content-scroll::-webkit-scrollbar-corner {
+#content-scroll::-webkit-scrollbar-corner,
+#preview-pane::-webkit-scrollbar-corner,
+.md-editor .cm-scroller::-webkit-scrollbar-corner {
   background: transparent;
 }
 
@@ -1064,17 +1125,18 @@ body.resizing-sidebar * {
   background: var(--bg);
 }
 
-/* ── Status bar ───────────────────────────────────────────────────── */
+/* ── Status bar (on the frame, below the islands) ─────────────────────
+   Padded by the island gap on every side so it sits as far from the
+   islands above as from the window edge below, and its left/right edges
+   line up with the islands. Controls share one 24px height, 11px type. */
 #status-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: var(--bg-toolbar);
-  height: 34px;
-  padding: 0 12px;
+  padding: var(--island-gap);
   flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  font-size: 11.5px;
+  font-size: 11px;
 }
 
 #status-left {
@@ -1095,8 +1157,10 @@ body.resizing-sidebar * {
   font-size: 11px;
   letter-spacing: 0.03em;
   cursor: default;
-  padding: 2px 6px;
-  border-radius: 4px;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
   transition:
     color var(--dur-sm) var(--ease),
     background var(--dur-sm) var(--ease),
@@ -1154,6 +1218,39 @@ body.resizing-sidebar * {
   padding: 0;
   margin-left: 0;
   border-left: none;
+}
+
+/* Saved / unsaved state of the active document. Same separator + type as
+   the counts; the dot takes the tab's dirty accent when unsaved. */
+#status-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--fg-dim);
+  padding-left: 8px;
+  margin-left: 6px;
+  border-left: 1px solid var(--border);
+}
+#status-saved.hidden {
+  display: none;
+}
+.status-saved-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
+#status-saved[data-state="saved"] .status-saved-dot {
+  background: var(--status-ok);
+  box-shadow: 0 0 4px var(--status-ok-glow);
+}
+#status-saved[data-state="unsaved"] .status-saved-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 .status-sep {
@@ -1323,13 +1420,13 @@ body.resizing-sidebar * {
 
      ≤ 720px  sidebars become overlay drawers (body.narrow, set by
               window-size.js) instead of pushing the document.
-     ≤ 640px  the editor/preview split collapses to a single pane and the
-              formatting toolbar scrolls horizontally instead of clipping.
+     ≤ 640px  the editor/preview islands collapse to a single island.
      ≤ 520px  welcome-grid + status-counts tweaks (see the block above).
 
    Drawer open/closed state:
      #sidebar.hidden      → no folder open (docked behavior unchanged wide).
-     #sidebar.collapsed   → folder open but drawer slid away (narrow only).
+     #sidebar.collapsed   → folder open but tree hidden: a rail in the wide
+                            layout, the drawer slid away when narrow.
    The slide transition is auto-disabled by the reduced-motion block below
    (global transition-duration override). */
 
@@ -1356,6 +1453,7 @@ body.resizing-sidebar * {
     left: 0;
     width: min(var(--sidebar-width, 240px), 85vw);
     z-index: 40;
+    border-radius: 0 var(--island-radius) var(--island-radius) 0;
     box-shadow: var(--shadow-md);
     transition: transform var(--dur) var(--ease);
   }
@@ -1376,6 +1474,7 @@ body.resizing-sidebar * {
     right: 0;
     width: min(260px, 85vw);
     z-index: 40;
+    border-radius: var(--island-radius) 0 0 var(--island-radius);
     box-shadow: var(--shadow-md);
   }
 
@@ -1399,37 +1498,10 @@ body.resizing-sidebar * {
      existing split-mode toggle still chooses editor vs preview; we only
      drop the simultaneous two-pane layout. Default (no mode class) shows
      the editor. */
-  #editor-split:not(.split-mode-preview) #preview-pane,
-  #editor-split:not(.split-mode-preview) #split-divider {
+  #content-row:not(.split-mode-preview) #preview-pane,
+  #content-row:not(.split-mode-preview) #split-divider,
+  #content-row.split-mode-preview #editor-island {
     display: none;
-  }
-  #editor-split:not(.split-mode-preview) #editor-pane {
-    flex: 1 1 auto;
-  }
-  #editor-split.split-mode-preview #editor-pane,
-  #editor-split.split-mode-preview #split-divider {
-    display: none;
-  }
-  #editor-split.split-mode-preview #preview-pane {
-    flex: 1 1 auto;
-  }
-
-  /* Formatting toolbar: scroll the button strip horizontally instead of
-     clipping it. Save/Discard stay pinned at the right edge. */
-  #edit-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  #edit-toolbar .fmt-content {
-    grid-column: 1;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    scrollbar-width: none;
-  }
-  #edit-toolbar .fmt-content::-webkit-scrollbar {
-    display: none;
-  }
-  #edit-toolbar .edit-actions {
-    grid-column: 2;
   }
 }
 

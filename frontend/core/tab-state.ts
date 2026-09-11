@@ -143,3 +143,19 @@ export function applyZoom(zoom) {
   (btnZoomOut as HTMLButtonElement).disabled = zoom <= ZOOM_MIN;
   (btnZoomIn as HTMLButtonElement).disabled  = zoom >= ZOOM_MAX;
 }
+
+// ── Status bar: saved / unsaved indicator ────────────────────────────────
+// Repainted by syncToolbar() and by the editor's doc-change listener, so it
+// tracks every dirty transition the Save button does.
+const statusSaved = document.getElementById('status-saved');
+const statusSavedText = document.getElementById('status-saved-text');
+export function updateSaveStatus() {
+  const tab = activeTab();
+  statusSaved.classList.toggle('hidden', !tab);
+  if (!tab) return;
+  const kind = !tab.path ? 'new' : isDirty(tab) ? 'unsaved' : 'saved';
+  if (statusSaved.dataset.state === kind) return; // aria-live: only announce transitions
+  statusSaved.dataset.state = kind;
+  statusSavedText.textContent =
+    kind === 'new' ? 'Not saved yet' : kind === 'unsaved' ? 'Unsaved changes' : 'Saved';
+}

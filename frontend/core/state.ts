@@ -135,11 +135,13 @@ export const systemDarkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 
 // ── DOM refs ──────────────────────────────────────────────────────────────
 export const tabBarEl        = document.getElementById('tab-area');
-export const tabScrollLeftEl  = document.getElementById('tab-scroll-left');
-export const tabScrollRightEl = document.getElementById('tab-scroll-right');
+export const tabPrevEl       = document.getElementById('tab-prev');
+export const tabNextEl       = document.getElementById('tab-next');
 export const contentEl       = document.getElementById('content');
 export const contentScroll   = document.getElementById('content-scroll');
-export const editorSplit     = document.getElementById('editor-split');
+// The row holding the editor island and the preview island; carries
+// --editor-frac and the split-mode classes.
+export const editorSplit     = document.getElementById('content-row');
 export const editorPane      = document.getElementById('editor-pane');
 export const previewPane     = document.getElementById('preview-pane');
 export const splitDivider    = document.getElementById('split-divider');

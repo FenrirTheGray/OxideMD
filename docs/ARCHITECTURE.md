@@ -247,8 +247,9 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 
 **`ui/`** — chrome and view modules.
 
-- **`tabs.ts`** — the tab bar, tab switching, file load/reload, zoom, overflow
-  scrolling, anchor-click handling, and content mounting.
+- **`tabs.ts`** — the tab bar, tab switching (including the prev/next
+  arrows), file load/reload, zoom, the overflow edge fade, anchor-click
+  handling, and content mounting.
 - **`folder.ts`** — the sidebar folder tree, name filter, divider resize, and
   the `syncWatcher` that pushes the watched-path set to the backend.
 - **`outline.ts`** — the document outline sidebar (heading list, jump-to). In

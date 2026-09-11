@@ -118,6 +118,7 @@ export function setFolder(tree) {
   // A freshly opened folder should reveal its tree, even in narrow
   // (drawer) mode where the sidebar would otherwise be collapsed.
   sidebarEl.classList.remove('collapsed');
+  syncCollapseButton();
   renderFolderTree();
   updateProjectSearchAvailability();
   syncWatcher();
@@ -346,30 +347,42 @@ function buildTreeNode(node: any, opts: any = {}) {
       // subsequent highlightActiveTreeItem() jump the tree to "reveal" it.
       suppressTreeScroll = true;
       loadFile(node.path);
-      // In narrow (drawer) mode, picking a file slides the tree away so
-      // the document gets the full width. Keyboard activation routes
-      // through row.click(), so this covers it too.
-      collapseSidebarDrawer();
+      // In the wide layout the sidebar only collapses via its own button.
+      // As a drawer it covers the document, so a pick slides it away.
+      if (document.body.classList.contains('narrow')) collapseSidebarDrawer();
     });
   }
 
   return wrap;
 }
 
-// ── Narrow-window drawer state ──────────────────────────────────────
-// In narrow mode (body.narrow, set by window-size.js) the sidebar floats
-// over the content as a drawer. `.collapsed` slides it away without
-// forgetting the open folder (distinct from `.hidden`, which means no
-// folder is open). These are no-ops in the docked/wide layout — the CSS
-// only acts on `.collapsed` inside the ≤720px query — so callers don't
-// need to guard on the mode themselves, except where re-opening only
-// makes sense as a drawer (toggleSidebarDrawer).
+// ── Sidebar collapsed state ─────────────────────────────────────────
+// `.collapsed` keeps the folder open (distinct from `.hidden`, which
+// means no folder is open) but hides the tree: in the wide layout the
+// sidebar shrinks to a rail holding only the collapse button; in narrow
+// mode (body.narrow, set by window-size.ts) the sidebar floats over the
+// content as a drawer and `.collapsed` slides it away. Callers that only
+// want the drawer behavior must check `body.narrow` themselves.
 export function collapseSidebarDrawer() {
   sidebarEl.classList.add('collapsed');
+  syncCollapseButton();
 }
 export function toggleSidebarDrawer() {
   sidebarEl.classList.toggle('collapsed');
+  syncCollapseButton();
 }
+
+// In the wide layout `.collapsed` shrinks the sidebar to a rail holding
+// only this button (layout.css); in the drawer layout it slides the
+// drawer away. Same class, same button.
+const sidebarCollapseBtn = document.getElementById('sidebar-collapse');
+export function syncCollapseButton() {
+  const collapsed = sidebarEl.classList.contains('collapsed');
+  sidebarCollapseBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  sidebarCollapseBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  sidebarCollapseBtn.setAttribute('aria-label', sidebarCollapseBtn.title);
+}
+sidebarCollapseBtn.addEventListener('click', toggleSidebarDrawer);
 
 function renderHighlightedLabel(label, text, query) {
   const q = query.toLowerCase();

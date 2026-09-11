@@ -314,6 +314,19 @@ function buildTreeMenu(nodeEl) {
   return items;
 }
 
+// Right-click on the sidebar's empty space: the folder menu for the opened
+// root. Rename/Delete are left out — the root is what the sidebar is
+// showing, so renaming or deleting it from here would pull the rug out.
+function buildRootMenu(path) {
+  return [
+    { label: 'New File…', action: () => createNewFile(path) },
+    { label: 'New Folder…', action: () => createFolderIn(path) },
+    { separator: true },
+    { label: 'Reveal in File Explorer', action: () => revealPath(path) },
+    ...copyPathItems(path),
+  ];
+}
+
 function buildTabMenu(tabEl) {
   const id = Number(tabEl.dataset.tabId);
   if (Number.isNaN(id)) return [];
@@ -532,6 +545,8 @@ document.addEventListener('contextmenu', (e) => {
     : null;
   const inPreview = previewPane?.contains(e.target as Node);
   const inContent = contentEl?.contains(e.target as Node);
+  // Empty space in the file tree acts on the opened folder's root.
+  const inSidebar = !!state.currentFolder && sidebarTreeEl?.contains(e.target as Node);
 
   if (treeNode) {
     items = buildTreeMenu(treeNode);
@@ -549,6 +564,8 @@ document.addEventListener('contextmenu', (e) => {
     items = editorModule()?.buildEditorContextMenu() ?? [];
   } else if (otherInput) {
     items = buildInputMenu(otherInput);
+  } else if (inSidebar) {
+    items = buildRootMenu(state.currentFolder.root);
   } else if (inPreview) {
     items = buildMarkdownMenu(previewPane, e.target);
   } else if (inContent) {
