@@ -28,10 +28,11 @@ Release tags are the version prefixed with `v`:
    - `packaging/arch/PKGBUILD` (`pkgver`, so a local `makepkg` fetches the
      matching `.deb`; the publish workflow overrides it per release anyway)
 3. Commit the bump (see the [Commit Style Guide](COMMIT_STYLE.md)).
-4. Tag the release and push the tag:
+4. Tag the release (annotated — `tag.gpgsign` signs it, so it needs a message)
+   and push the tag:
 
    ```bash
-   git tag v4.4.0
+   git tag -m "OxideMD 4.4.0" v4.4.0
    git push origin v4.4.0
    ```
 
