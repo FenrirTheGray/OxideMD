@@ -48,6 +48,12 @@ body.editing #content-scroll {
 body.editing #content-row {
   display: flex;
 }
+/* Settings › Editor › Invert Editor/Preview Islands. Only the visual
+   order flips; the DOM (and so the tab order, split fraction and divider
+   ARIA) stays put. */
+body.preview-first #content-row {
+  flex-direction: row-reverse;
+}
 
 #editor-island {
   flex: 1;

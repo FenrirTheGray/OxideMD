@@ -140,6 +140,7 @@ export function applyConfig(cfg) {
   document.body.style.setProperty("--outline-width", `${cfg.outline_width}px`);
   // Base UI palette — sparse overrides merged over the theme defaults.
   applyPaletteToBody(effectivePalette(resolved, cfg.palette));
+  document.body.classList.toggle("preview-first", !!cfg.editor_preview_first);
   document
     .getElementById("toolbar-buttons")
     .classList.toggle("compact", !!cfg.toolbar_compact);
@@ -710,6 +711,10 @@ export function openSettings(tabName) {
     .editor_format_on_save
     ? "true"
     : "false";
+  (document.getElementById("setting-preview-first") as HTMLInputElement).value = state.config
+    .editor_preview_first
+    ? "true"
+    : "false";
   // Interface-palette swatches — saved overrides over the theme defaults.
   const effPalette = effectivePalette(resolved, state.config.palette);
   for (const key of BASE_PALETTE_TOKENS) {
@@ -1101,6 +1106,8 @@ function buildCandidateConfig() {
       (document.getElementById("setting-line-numbers") as HTMLInputElement).value === "true",
     editor_format_on_save:
       (document.getElementById("setting-format-on-save") as HTMLInputElement).value === "true",
+    editor_preview_first:
+      (document.getElementById("setting-preview-first") as HTMLInputElement).value === "true",
     keybindings: pendingOverrides ? { ...pendingOverrides } : {},
     // Compared against the theme being saved, so an in-dialog mode flip
     // is handled; an all-default palette collapses to {} (keeps tracking
@@ -1276,6 +1283,8 @@ async function resetSettings() {
       defaults.editor_line_numbers ? "true" : "false";
     (document.getElementById("setting-format-on-save") as HTMLInputElement).value =
       defaults.editor_format_on_save ? "true" : "false";
+    (document.getElementById("setting-preview-first") as HTMLInputElement).value =
+      defaults.editor_preview_first ? "true" : "false";
   } else if (activeTabName === "colors") {
     (document.getElementById("setting-theme") as HTMLInputElement).value = defaults.theme;
     // Heading and bg defaults both follow the currently-selected theme, so

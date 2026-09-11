@@ -1663,8 +1663,13 @@ if (splitDivider && editorSplit) {
     const rect = editorSplit.getBoundingClientRect();
     const cs = getComputedStyle(editorSplit);
     const padL = parseFloat(cs.paddingLeft), padR = parseFloat(cs.paddingRight);
-    return ((clientX - rect.left - padL) / (rect.width - padL - padR)) * 100;
+    // Preview-first flips the row, so the editor's share is measured from
+    // the right edge instead.
+    const fromLeft = clientX - rect.left - padL;
+    const inner = rect.width - padL - padR;
+    return ((previewFirst() ? inner - fromLeft : fromLeft) / inner) * 100;
   }
+  const previewFirst = () => document.body.classList.contains('preview-first');
   splitDivider.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     draggingId = e.pointerId;
@@ -1691,9 +1696,12 @@ if (splitDivider && editorSplit) {
   // to the clamp edges. Lets keyboard-only users rebalance the panes.
   splitDivider.addEventListener('keydown', (e) => {
     const cur = parseFloat(splitDivider.getAttribute('aria-valuenow') ?? '50');
+    // Arrows move the divider on screen; with the editor on the right,
+    // moving it left grows the editor.
+    const step = previewFirst() ? -2 : 2;
     let next = cur;
-    if (e.key === 'ArrowLeft')      next = cur - 2;
-    else if (e.key === 'ArrowRight') next = cur + 2;
+    if (e.key === 'ArrowLeft')      next = cur - step;
+    else if (e.key === 'ArrowRight') next = cur + step;
     else if (e.key === 'Home')       next = SPLIT_MIN;
     else if (e.key === 'End')        next = SPLIT_MAX;
     else return;
