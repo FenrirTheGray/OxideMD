@@ -1559,21 +1559,38 @@ function interpolateBlocks(blocks, key, pick, other) {
   return lo[other] + frac * (hi[other] - lo[other]);
 }
 
+// The editor scroller starts below the formatting toolbar while the
+// preview starts at its island's top, so "the same scrollTop" puts matched
+// content one toolbar-height apart on screen. Offset the mapping by the
+// two scrollers' screen-top difference so matched blocks share a screen y.
+function paneSkew(ev) {
+  return ev.scrollDOM.getBoundingClientRect().top - previewPane.getBoundingClientRect().top;
+}
+
+// CM6 line-block heights are relative to the first line, not the
+// scroller's top edge: the content padding above line 1 sits outside them.
+// Convert scrollTop into that space (and back) or line 1 maps one padding
+// too low in the preview at the top of the document.
 function syncEditorToPreviewByLine(ev) {
   const blocks = sourceLineBlocks();
   if (!blocks.length) return false;
-  const info = ev.lineBlockAtHeight(ev.scrollDOM.scrollTop);
+  const docTop = ev.scrollDOM.scrollTop - ev.documentPadding.top;
+  const info = ev.lineBlockAtHeight(docTop);
   const topLine = ev.state.doc.lineAt(info.from).number;
-  writeSyncedScroll(previewPane, interpolateBlocks(blocks, topLine, 'line', 'top'));
+  // Where that line sits below the editor's top edge (negative when it's
+  // partly scrolled out), so the preview lands its block at the same y.
+  const lineOffset = info.top - docTop;
+  const target = interpolateBlocks(blocks, topLine, 'line', 'top') - paneSkew(ev) - lineOffset;
+  writeSyncedScroll(previewPane, target);
   return true;
 }
 
 function syncPreviewToEditorByLine(ev) {
   const blocks = sourceLineBlocks();
   if (!blocks.length) return false;
-  const line = interpolateBlocks(blocks, previewPane.scrollTop, 'top', 'line');
+  const line = interpolateBlocks(blocks, previewPane.scrollTop + paneSkew(ev), 'top', 'line');
   const lineNo = Math.max(1, Math.min(ev.state.doc.lines, Math.round(line)));
-  const top = ev.lineBlockAt(ev.state.doc.line(lineNo).from).top;
+  const top = ev.lineBlockAt(ev.state.doc.line(lineNo).from).top + ev.documentPadding.top;
   writeSyncedScroll(ev.scrollDOM, top);
   return true;
 }
@@ -1586,6 +1603,17 @@ function mirrorScroll(from, to) {
   if (scrollSyncFrame) return;
   scrollSyncFrame = requestAnimationFrame(() => {
     scrollSyncFrame = 0;
+    // Read the live positions inside the frame so a coalesced burst maps
+    // from the gesture's final scrollTop, not the first event's.
+    const fromMax = from.scrollHeight - from.clientHeight;
+    const toMax = to.scrollHeight - to.clientHeight;
+    if (fromMax <= 0 || toMax <= 0) return;
+    // Pin the ends: the two maps below aren't exact inverses at the edges
+    // (content padding on one side, toolbar skew on the other), so without
+    // this, reaching the top of one pane nudges the other off its top, and
+    // neither can ever rest at 0 or at max.
+    if (from.scrollTop <= 0) return writeSyncedScroll(to, 0);
+    if (from.scrollTop >= fromMax) return writeSyncedScroll(to, toMax);
     // Prefer source-line mapping when the renderer annotated the preview;
     // otherwise fall back to the proportional map below.
     const ev = editorView;
@@ -1595,13 +1623,7 @@ function mirrorScroll(from, to) {
         : syncPreviewToEditorByLine(ev);
       if (done) return;
     }
-    // Read the live positions inside the frame so a coalesced burst maps
-    // from the gesture's final scrollTop, not the first event's.
-    const fromMax = from.scrollHeight - from.clientHeight;
-    const toMax = to.scrollHeight - to.clientHeight;
-    if (fromMax <= 0 || toMax <= 0) return;
-    const frac = from.scrollTop / fromMax;
-    writeSyncedScroll(to, toMax * frac);
+    writeSyncedScroll(to, toMax * (from.scrollTop / fromMax));
   });
 }
 if (previewPane) {
