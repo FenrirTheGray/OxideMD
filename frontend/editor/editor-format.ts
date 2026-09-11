@@ -247,81 +247,6 @@ function wrapCode(view) {
   view.focus();
 }
 
-// ── Underline (asymmetric <u>…</u> wrap) ──────────────────────────────
-// Markdown has no native underline, so this wraps the selection in the
-// HTML <u> tag (the renderer allowlists the bare tag). Unlike wrapInline
-// the open/close markers differ, so toggle-off has to check for `<u>`
-// before and `</u>` after the selection.
-const U_OPEN = '<u>';
-const U_CLOSE = '</u>';
-function toggleUnderline(view) {
-  const v = getDoc(view);
-  const { s, e } = getSel(view);
-  const sel = v.slice(s, e);
-
-  // Case 0: bare caret inside a <u>…</u> pair — unwrap it, mirroring the
-  // caret toggle-off bold/italic/strike/code have. Inline HTML has no
-  // container node in the markdown tree, so scan the caret's line for the
-  // nearest enclosing pair instead.
-  // ponytail: line-bounded scan; a <u> pair spanning lines falls through to
-  // the wrap case — extend to a paragraph scan if that ever matters.
-  if (s === e) {
-    const line = view.state.doc.lineAt(s);
-    const before = v.slice(line.from, s);
-    const after = v.slice(s, line.to);
-    const openIdx = before.lastIndexOf(U_OPEN);
-    const closeIdx = after.indexOf(U_CLOSE);
-    const nextOpen = after.indexOf(U_OPEN);
-    if (openIdx !== -1 && closeIdx !== -1
-        && before.lastIndexOf(U_CLOSE) < openIdx
-        && (nextOpen === -1 || nextOpen > closeIdx)) {
-      const openFrom = line.from + openIdx;
-      const closeFrom = s + closeIdx;
-      view.dispatch({
-        changes: [
-          { from: openFrom, to: openFrom + U_OPEN.length, insert: '' },
-          { from: closeFrom, to: closeFrom + U_CLOSE.length, insert: '' },
-        ],
-        selection: EditorSelection.cursor(s - U_OPEN.length),
-      });
-      view.focus();
-      return;
-    }
-    // No enclosing pair — drop a placeholder and select it.
-    edit(view, s, e, U_OPEN + 'underline' + U_CLOSE,
-      s + U_OPEN.length, s + U_OPEN.length + 'underline'.length);
-    return;
-  }
-
-  // Case B: the selection is exactly the wrapped span(s) — strip.
-  // unwrapChunks refuses edges that belong to different spans
-  // (`<u>a</u> x <u>b</u>`), which the old string compare mangled.
-  const un = unwrapChunks(sel, U_OPEN, U_CLOSE);
-  if (un != null) {
-    edit(view, s, e, un, s, s + un.length);
-    return;
-  }
-  // Case A: tags sit just outside the selection — strip them.
-  if (
-    s >= U_OPEN.length &&
-    v.slice(s - U_OPEN.length, s) === U_OPEN &&
-    v.slice(e, e + U_CLOSE.length) === U_CLOSE
-  ) {
-    edit(view, s - U_OPEN.length, e + U_CLOSE.length, sel, s - U_OPEN.length, s - U_OPEN.length + sel.length);
-    return;
-  }
-  // Case C: wrap each blank-line chunk, edge whitespace kept outside the
-  // tags. A single chunk keeps the select-the-inner-text behavior.
-  const wrapped = wrapChunks(sel, U_OPEN, U_CLOSE);
-  if (wrapped === sel) return; // whitespace-only selection: nothing to wrap
-  if (!/\n[ \t]*\n/.test(sel)) {
-    const start = s + /^\s*/.exec(sel)![0].length + U_OPEN.length;
-    edit(view, s, e, wrapped, start, start + sel.trim().length);
-  } else {
-    edit(view, s, e, wrapped, s, s + wrapped.length);
-  }
-}
-
 // ── Line prefix toggles (headings / list / quote / task) ──────────────
 function togglePrefix(view, prefix, exactRe, familyRe = exactRe) {
   const { lineStart, lineEnd, block } = expandToLines(view);
@@ -469,7 +394,6 @@ export function applyFormat(view, action) {
     case 'bold':      return wrapInline(view, '**', 'bold text', 'StrongEmphasis');
     case 'italic':    return wrapInline(view, '*',  'italic text', 'Emphasis');
     case 'strike':    return wrapInline(view, '~~', 'strikethrough', 'Strikethrough');
-    case 'underline': return toggleUnderline(view);
     case 'code':      return wrapCode(view);
     case 'h1':        return togglePrefix(view, '# ',     H1_EXACT, HEADING_RE);
     case 'h2':        return togglePrefix(view, '## ',    H2_EXACT, HEADING_RE);
