@@ -4,6 +4,38 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.13.0] - 2026-09-11
+
+### Added
+
+- The outline sidebar highlights the section under the viewport as you scroll, in both read and edit mode; the list is navigable with `↑`/`↓`/`Home`/`End`, each entry shows its full heading on hover, and a drag handle (double-click to fit, arrow keys to nudge) resizes it, persisted as `outline_width`
+- Drag tabs along the strip to reorder them
+- Settings › Editor › "Invert Editor/Preview Islands" puts the preview on the left and the editor on the right
+- `Menu` and `Shift+F10` open the context menu on the focused tree row, tab or outline entry
+- The welcome screen is a bento grid of islands: wordmark, three action tiles, recent files as a tall scrolling tile, and the shortcuts underneath. Recent-file rows are cards with a hover-revealed remove button
+
+### Changed
+
+- Every scrollbar in the app — read view, editor, preview, sidebars, dialogs, menus, code blocks — is the same inset island pill
+- Sidebar rows (file tree, outline, search results) are inset pills; the two sidebar headers share one style, tree rows indent 12 px per level with the highlight spanning the full width, and the close-folder button is an icon
+- The status bar is its own island below the content, hidden on the welcome screen; window-control buttons are toolbar pills with the danger treatment on Close
+- The Settings dialog is laid out as islands: category tabs are toolbar pills on the frame, the body floats as its own island
+- Reading width goes up to 2400 px (was 1400); font size is bounded to 12–28 px and line height to 1.2–2.2
+- The bundled themes were retuned for contrast: muted text lifted in Dracula, Nord, Rosé Pine, Tokyo Night and Tokyo Night Storm, H3 moved off the amber/yellow shared with the accent in every theme, Gruvbox's accent is now blue so it no longer collides with H2. The Atom One Dark H3 is One Dark green (`#98c379`); a saved amber H3 migrates to it
+- The theme dropdown reads "Custom" instead of "Select a theme…" when the colors match no theme
+
+### Fixed
+
+- Editor/preview scroll sync was off by the formatting toolbar's height and the editor's top padding, so matched content sat one toolbar apart; the ends are pinned so both panes can rest at the top and bottom
+- Jumping to a heading from the outline lands it at the top of the editor, like the read-mode jump
+- Windows (WebView2) drew a second, native scrollbar next to the editor's own
+- Focus rings only appear after keyboard input — WebKitGTK showed them on programmatic focus after a mouse click — and stay inset on tabs and settings buttons so they aren't clipped
+- Keyboard focus survives re-renders and closes: arrowing along the tab strip, deleting a tab, closing the find bar, project search, the tree filter, the More menu (`Escape` now closes just the menu), the context menu, a watcher refresh of the file tree, removing a recent file, and resetting a shortcut all put focus somewhere sensible instead of dropping it on `<body>`
+- Modal dialogs open on their tab strip rather than the ✕, `Tab` wraps from last to first control without WebKit's invisible document stop, `Enter` on a focused button activates that button rather than the primary, and the context menu renders above a modal instead of behind it
+- The "Themes" row no longer ellipsises long theme names, and reaching the end of its dropdown no longer scrolls the settings body behind it
+- The dragged split divider and its arrow keys follow the visual order when the islands are inverted
+- Reload shows an image that changed on disk: local image URLs now carry the file's mtime, so the webview can't serve its cached copy of the old one
+
 ## [4.12.0] - 2026-09-11
 
 ### Added
