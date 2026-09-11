@@ -327,18 +327,13 @@ pub fn run() {
                                     if ctrl {
                                         let keyval = event.keyval();
                                         if shift {
+                                            // Only the Tab combos are swallowed by WebKitGTK;
+                                            // Ctrl+Shift+Arrow must reach the editor for
+                                            // word-wise selection, so it is left alone.
                                             if keyval == constants::ISO_Left_Tab
                                                 || keyval == constants::Tab
                                             {
                                                 let _ = handle.emit("prev-tab", ());
-                                                return gtk::glib::Propagation::Stop;
-                                            }
-                                            if keyval == constants::Left {
-                                                let _ = handle.emit("move-tab-left", ());
-                                                return gtk::glib::Propagation::Stop;
-                                            }
-                                            if keyval == constants::Right {
-                                                let _ = handle.emit("move-tab-right", ());
                                                 return gtk::glib::Propagation::Stop;
                                             }
                                         } else if keyval == constants::Tab {

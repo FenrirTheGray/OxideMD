@@ -162,15 +162,14 @@ export const ACTIONS = [
     defaultAccel: 'Mod+Tab', rebindableOnLinux: false },
   { id: 'prevTab',       category: 'Tabs', label: 'Previous tab',
     defaultAccel: 'Mod+Shift+Tab', rebindableOnLinux: false },
-  { id: 'moveTabLeft',   category: 'Tabs', label: 'Move tab left',
-    defaultAccel: 'Mod+Shift+ArrowLeft', rebindableOnLinux: false },
-  { id: 'moveTabRight',  category: 'Tabs', label: 'Move tab right',
-    defaultAccel: 'Mod+Shift+ArrowRight', rebindableOnLinux: false },
+  // PageUp/PageDown is the move-tab convention in browsers, VS Code and
+  // GNOME Terminal, and leaves Mod+Shift+Arrow to the editor's word select.
+  { id: 'moveTabLeft',   category: 'Tabs', label: 'Move tab left',  defaultAccel: 'Mod+Shift+PageUp' },
+  { id: 'moveTabRight',  category: 'Tabs', label: 'Move tab right', defaultAccel: 'Mod+Shift+PageDown' },
   { id: 'closeTab',      category: 'Tabs', label: 'Close tab',        defaultAccel: 'Mod+W' },
 
   { id: 'bold',   category: 'Format', label: 'Bold',          defaultAccel: 'Mod+B',       context: 'editor' },
   { id: 'italic', category: 'Format', label: 'Italic',        defaultAccel: 'Mod+I',       context: 'editor' },
-  { id: 'underline', category: 'Format', label: 'Underline',  defaultAccel: 'Mod+U',       context: 'editor' },
   { id: 'strike', category: 'Format', label: 'Strikethrough', defaultAccel: 'Mod+Shift+X', context: 'editor' },
   { id: 'code',   category: 'Format', label: 'Inline code',   defaultAccel: 'Mod+`',       context: 'editor' },
   { id: 'h1',     category: 'Format', label: 'Heading 1',     defaultAccel: 'Mod+1',       context: 'editor' },

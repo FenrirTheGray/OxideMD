@@ -596,14 +596,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Some key combos are intercepted by WebKitGTK before JS sees them,
-// so the Rust side registers hidden menu accelerators and emits events.
+// so the Rust side installs a GTK key-press hook and emits events.
 // These must call the same action handlers as the Ctrl+Tab path so a
 // rebind of an adjacent action can't leave the GTK-intercepted default
 // firing a stale implementation.
 listen('prev-tab',       () => runAction('prevTab'));
 listen('next-tab',       () => runAction('nextTab'));
-listen('move-tab-left',  () => runAction('moveTabLeft'));
-listen('move-tab-right', () => runAction('moveTabRight'));
 
 // Prevent browser default drag-drop navigation
 document.addEventListener('dragover', (e) => e.preventDefault());

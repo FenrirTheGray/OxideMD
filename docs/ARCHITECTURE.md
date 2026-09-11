@@ -122,9 +122,9 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
 - **`update-progress`** — emitted during `download_and_install_update` with
   `{ downloaded, total }` byte counters so the settings panel can drive its
   progress bar.
-- **`prev-tab` / `next-tab` / `move-tab-left` / `move-tab-right`** — **Linux
-  only.** WebKitGTK swallows some `Ctrl+Tab` combos before JS sees them, so
-  `lib.rs` intercepts them at the GTK window level and re-emits them as events.
+- **`prev-tab` / `next-tab`** — **Linux only.** WebKitGTK swallows
+  `Ctrl+Tab` / `Ctrl+Shift+Tab` before JS sees them, so `lib.rs` intercepts
+  them at the GTK window level and re-emits them as events.
 
 ## Rust module map (`src-tauri/src/`)
 
@@ -136,7 +136,7 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   single-instance) plus version-mismatch detection in the single-instance
   callback; declares the `generate_handler!` command list; and in `setup` seeds
   the renderer's soft-break flag and (Linux only) installs a GTK key
-  interceptor that re-emits the `Ctrl+Tab` family as IPC events.
+  interceptor that re-emits `Ctrl+Tab` / `Ctrl+Shift+Tab` as IPC events.
 - **`commands.rs`** — every `#[tauri::command]`, their helper types, and the
   pure helpers (path canonicalization, the folder walk, the search scanner).
 - **`config.rs`** — the `Config` struct and its `Default`, TOML load/save, the
