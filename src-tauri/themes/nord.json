@@ -3,7 +3,7 @@
   "theme": "dark",
   "h1_color": "#88c0d0",
   "h2_color": "#a3be8c",
-  "h3_color": "#ebcb8b",
+  "h3_color": "#b48ead",
   "bullet_color": "#b48ead",
   "code_bg_color": "#242933",
   "code_accent_color": "#88c0d0",
@@ -21,7 +21,7 @@
   "bg-settings-ft": "#292e39",
   "fg": "#d8dee9",
   "fg-dim": "#8b95a8",
-  "fg-muted": "#7b8294",
+  "fg-muted": "#8b95a8",
   "fg-toolbar": "#b8c2d3",
   "border": "#434c5e",
   "border-focus": "#88c0d0",
@@ -33,7 +33,7 @@
   "link-hover": "#8fbcbb",
   "mark-current": "#88c0d0",
   "mark-current-fg": "#2e3440",
-  "scrollbar-thumb": "#434c5e",
-  "scrollbar-hover": "#4c566a",
+  "scrollbar-thumb": "#4c566a",
+  "scrollbar-hover": "#7b8294",
   "status-ok": "#a3be8c"
 }

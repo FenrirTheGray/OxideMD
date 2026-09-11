@@ -28,7 +28,9 @@ export const THEME_DEFAULTS = {
     note_bg_color: "#2a2f3a",
     h1_color: "#c084fc",
     h2_color: "#67e8f9",
-    h3_color: "#fbbf24",
+    // One Dark green: the amber it replaced wasn't a One Dark colour and
+    // fought the purple/cyan H1/H2.
+    h3_color: "#98c379",
     // Lifted from #8b5cf6, which was 3.31:1 on the dark background — the
     // one dark-theme default that was also failing.
     bullet_color: "#a78bfa",
@@ -38,7 +40,9 @@ export const THEME_DEFAULTS = {
     note_bg_color: "#eaeef8",
     h1_color: "#7e22ce",
     h2_color: "#0e7490",
-    h3_color: "#8a5304",
+    // Green-700; the dark amber it replaced was the light twin of the
+    // retired dark yellow.
+    h3_color: "#15803d",
     bullet_color: "#6d28d9",
   },
 };
@@ -52,6 +56,9 @@ export const THEME_DEFAULTS = {
 const RETIRED_DEFAULTS = {
   // Was the dark default until the 2026-08 contrast pass; 3.31:1 on #282c34.
   bullet_color: ["#8b5cf6"],
+  // Amber (dark) and its dark-amber light twin, defaults until 2026-09;
+  // replaced by greens.
+  h3_color: ["#fbbf24", "#8a5304"],
 };
 
 // If the saved value matches the *other* theme's default (or a retired

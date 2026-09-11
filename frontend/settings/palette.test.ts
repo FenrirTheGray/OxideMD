@@ -59,6 +59,8 @@ test("effectiveThemeColor: a retired default snaps to the current one", () => {
     effectiveThemeColor("#8B5CF6", "bullet_color", "light"),
     THEME_DEFAULTS.light.bullet_color,
   );
+  // Amber H3 (dark default until 2026-09) migrates to the green the same way.
+  assert.equal(effectiveThemeColor("#fbbf24", "h3_color", "dark"), THEME_DEFAULTS.dark.h3_color);
   // A field with no retired entries is unaffected.
   assert.equal(effectiveThemeColor("#8b5cf6", "h1_color", "dark"), "#8b5cf6");
 });
