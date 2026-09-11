@@ -2,12 +2,15 @@
 //
 // Split out of editor.js so the formatter (and its grapheme-width math) can
 // be unit-tested in Node without CodeMirror, the DOM, or the Tauri globals.
-// editor.js imports `formatMarkdownBuffer`; the rest are exported for tests.
+// editor.ts imports `formatMarkdownBuffer`; table-align.ts imports the
+// row/caret helpers for the live realign; the rest are exported for tests.
 //
-// The formatter powers the opt-in editor_format_on_save setting: it aligns
-// Markdown tables VS Code-style, normalizes line endings, trims trailing
-// whitespace (preserving the two-space hard-break), and collapses to a
-// single trailing newline.
+// The formatter powers the opt-in editor_format_on_save setting and the
+// Format document action: it aligns Markdown tables VS Code-style,
+// normalizes line endings, trims trailing whitespace (preserving the
+// two-space hard-break), and collapses to a single trailing newline.
+// `formatTableBlock` is also what the always-on live table alignment
+// (editor/table-align.ts) applies to the block under the caret.
 
 // Splits a row's body on un-escaped pipes (so `\|` inside a cell stays
 // part of that cell). Returns the raw cell strings — the caller trims.
@@ -111,9 +114,24 @@ export function padCell(text, width, align) {
   return text + ' '.repeat(pad);
 }
 
+// GFM (and pulldown-cmark, the app's renderer) only open a table when the
+// delimiter row has a pipe and the same cell count as the header. Anything
+// else — `a | b` over `---` — is a paragraph under a setext underline, and
+// aligning it would turn a heading into a table.
+export function isTableStart(header, sep) {
+  return header.trim() !== ''
+    && hasUnescapedPipe(header)
+    && hasUnescapedPipe(sep)
+    && isTableSeparator(sep)
+    && parseTableRow(header).length === parseTableRow(sep).length;
+}
+
 // Aligns one detected table block (header, separator, body rows) into
-// VS Code-style padded columns with leading/trailing pipes.
+// VS Code-style padded columns with leading/trailing pipes. The header's
+// indentation is kept on every row so a table nested in a list item stays
+// inside the item.
 export function formatTableBlock(block) {
+  const indent = /^[ \t]*/.exec(block[0])![0];
   const header = parseTableRow(block[0]);
   const aligns = parseAlignments(block[1]);
   const body   = block.slice(2).map(parseTableRow);
@@ -130,7 +148,7 @@ export function formatTableBlock(block) {
   }
 
   const buildRow = (cells) =>
-    '| ' + cells.map((c, i) => padCell(c, widths[i], aligns[i])).join(' | ') + ' |';
+    indent + '| ' + cells.map((c, i) => padCell(c, widths[i], aligns[i])).join(' | ') + ' |';
 
   const sepCells = widths.map((w, i) => {
     const a = aligns[i];
@@ -139,9 +157,54 @@ export function formatTableBlock(block) {
     if (a === 'right')  return '-'.repeat(Math.max(2, w - 1)) + ':';
     return '-'.repeat(Math.max(3, w));
   });
-  const sepRow = '| ' + sepCells.map((s, i) => padCell(s, widths[i], 'default')).join(' | ') + ' |';
+  const sepRow = indent + '| ' + sepCells.map((s, i) => padCell(s, widths[i], 'default')).join(' | ') + ' |';
 
   return [buildRow(header), sepRow, ...body.map(buildRow)];
+}
+
+// Raw [start, end) spans of each cell's text on one row, pipes excluded,
+// so a caret column can be mapped to "cell N, offset M" and back.
+export function cellSpans(line) {
+  const spans = [];
+  let i = line.search(/\S|$/);
+  if (line[i] === '|') i++;
+  let start = i;
+  for (; i < line.length; i++) {
+    if (line[i] === '\\') { i++; continue; }
+    if (line[i] === '|') { spans.push([start, i]); start = i + 1; }
+  }
+  if (line.slice(start).trim() !== '' || !line.trimEnd().endsWith('|')) spans.push([start, line.length]);
+  return spans;
+}
+
+// Realigns one table block while keeping a caret in the same cell at the
+// same offset from the cell's first non-space character. The offset is
+// clamped to the cell's closing pipe, so a caret in trimmed-away trailing
+// space lands on the separator space — typing there still extends the cell.
+// ponytail: a second consecutive space inside a cell is collapsed by the
+// realign; accepted, GFM renders it as one space anyway.
+export function realignTableBlock(block, caret) {
+  const lines = formatTableBlock(block);
+  const raw = block[caret.line];
+  const spans = cellSpans(raw);
+  // A row that is only `|` so far has no cells yet; treat the caret as
+  // being in the first cell so it lands inside the padded row, not after
+  // its closing pipe (where the next keystroke would add a column).
+  let cell = spans.findIndex(([, end]) => caret.col <= end);
+  if (cell === -1) cell = Math.max(0, spans.length - 1);
+  // First non-space column of a cell; a blank cell counts its one space of
+  // padding as content so the caret sits inside it, not on the closing pipe.
+  const contentStart = (line, [s, e]) => {
+    const ws = line.slice(s, e).match(/^\s*/)![0].length;
+    return s + (ws === e - s ? Math.min(ws, 1) : ws);
+  };
+  let offset = 0;
+  if (cell < spans.length) offset = Math.max(0, caret.col - contentStart(raw, spans[cell]));
+  const target = lines[caret.line];
+  const tspans = cellSpans(target);
+  let col = target.length;
+  if (cell < tspans.length) col = Math.min(tspans[cell][1], contentStart(target, tspans[cell]) + offset);
+  return { lines, caret: { line: caret.line, col } };
 }
 
 // Walks the buffer, leaves fenced code blocks alone, and reformats any
@@ -171,10 +234,7 @@ export function alignMarkdownTables(text) {
     }
     if (inFence) { out.push(line); i++; continue; }
 
-    if (i + 1 < lines.length
-        && hasUnescapedPipe(line)
-        && line.trim() !== ''
-        && isTableSeparator(lines[i + 1])) {
+    if (i + 1 < lines.length && isTableStart(line, lines[i + 1])) {
       let end = i + 2;
       while (end < lines.length
              && hasUnescapedPipe(lines[end])

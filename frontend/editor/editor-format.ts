@@ -60,7 +60,9 @@ function getDoc(view) { return view.state.doc.toString(); }
 // compute them in terms of the inserted text's length. Re-focuses the view
 // because toolbar clicks pull focus away.
 function edit(view: any, from: any, to: any, insert: any, selFrom?: any, selTo?: any) {
-  const tr: any = { changes: { from, to, insert } };
+  // Tagged as user input so the live table realign treats toolbar edits
+  // like typed ones.
+  const tr: any = { changes: { from, to, insert }, userEvent: 'input' };
   if (selFrom != null) {
     tr.selection = EditorSelection.range(selFrom, selTo ?? selFrom);
   }
