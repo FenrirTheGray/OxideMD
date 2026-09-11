@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   splitTableCells, parseTableRow, isTableSeparator, hasUnescapedPipe,
   parseAlignments, visibleWidth, padCell,
-  alignMarkdownTables, formatMarkdownBuffer,
+  alignMarkdownTables, formatMarkdownBuffer, realignTableBlock,
 } from "./md-table.ts";
 
 test('splitTableCells: respects escaped pipes', () => {
@@ -90,6 +90,43 @@ test('alignMarkdownTables: leaves fenced code blocks untouched', () => {
     '```',
   ].join('\n');
   assert.equal(alignMarkdownTables(input), input);
+});
+
+test('alignMarkdownTables: a setext heading with a pipe is not a table', () => {
+  // GFM needs the delimiter row to carry a pipe and match the header's
+  // cell count; `a | b` over `---` is an <h2>, and must stay untouched.
+  assert.equal(alignMarkdownTables('a | b\n---'), 'a | b\n---');
+  assert.equal(alignMarkdownTables('a | b\n--- | --- | ---'), 'a | b\n--- | --- | ---');
+});
+
+test('alignMarkdownTables: keeps a nested table inside its list item', () => {
+  const input = '- item\n  | a | bb |\n  |---|---|\n  | 1 | 2 |';
+  const out = alignMarkdownTables(input);
+  assert.equal(out, '- item\n  | a   | bb  |\n  | --- | --- |\n  | 1   | 2   |');
+});
+
+test('realignTableBlock: caret stays in its cell across a realign', () => {
+  const block = ['| a | bb |', '|---|---|', '| ccc | d |'];
+  // Caret right after "ccc" (col 5) on the body row.
+  const r = realignTableBlock(block, { line: 2, col: 5 });
+  assert.deepEqual(r.lines, ['| a   | bb  |', '| --- | --- |', '| ccc | d   |']);
+  assert.equal(r.caret.col, 5);
+  // Caret in the second cell of a row typed without padding maps to that
+  // cell's content, not to the same column number.
+  const r2 = realignTableBlock(['| a | bb |', '|---|---|', '| c | d |'], { line: 2, col: 6 });
+  assert.equal(r2.lines[2], '| c   | d   |');
+  assert.equal(r2.caret.col, 8);
+  // Caret after a just-typed trailing space lands on the separator space,
+  // so the next character still extends the cell.
+  const r3 = realignTableBlock(['| abc |', '|-----|', '| x |'], { line: 0, col: 6 });
+  assert.equal(r3.lines[0], '| abc |');
+  assert.equal(r3.caret.col, 6);
+  // A new row that is just `|` has no cells yet: the caret goes into the
+  // first padded cell, not past the closing pipe (which would make the
+  // next keystroke a new column).
+  const r4 = realignTableBlock(['| a | bb |', '|---|---|', '|'], { line: 2, col: 1 });
+  assert.equal(r4.lines[2], '|     |     |');
+  assert.equal(r4.caret.col, 2);
 });
 
 test('formatMarkdownBuffer: normalizes endings and trailing whitespace', () => {

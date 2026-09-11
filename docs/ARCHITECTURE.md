@@ -199,7 +199,10 @@ co-located `*.test.ts`).
 - **`md-table.ts`** — `formatMarkdownBuffer` and its table-alignment /
   grapheme-width helpers, split out of `editor.ts`; powers the opt-in
   format-on-save and the manual `formatDoc` action, both routed through
-  `formatActiveBuffer()` in `editor.ts` so they behave identically.
+  `formatActiveBuffer()` in `editor.ts` so they behave identically. The same
+  block formatter drives the always-on live table alignment, a CodeMirror
+  `transactionFilter` in `editor/table-align.ts` that re-pads the table under
+  the caret inside the keystroke's own transaction.
 - **`timing.ts`** — `debounce`, the shared trailing-edge timing helper used
   across the UI modules.
 
