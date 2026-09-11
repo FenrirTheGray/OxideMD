@@ -524,7 +524,9 @@ body.editing #search-bar .search-replace-row { display: grid; }
   display: flex;
   align-items: baseline;
   gap: 6px;
-  width: 100%;
+  width: calc(100% - 2 * var(--row-inset));
+  margin: 0 var(--row-inset);
+  border-radius: var(--row-radius);
   padding: 3px 10px 3px 24px;
   background: transparent;
   border: none;
@@ -581,7 +583,7 @@ body.editing #search-bar .search-replace-row { display: grid; }
   justify-content: center;
   height: 24px;
   min-width: 24px;
-  background: var(--bg);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--fg);
   cursor: pointer;

@@ -5,6 +5,7 @@ import {
   pickerBackdrop, pickerLoader,
   sidebarEl, sidebarDivider, sidebarFolderName, sidebarTreeEl,
   sidebarFilterEl, sidebarFilterToggle, sidebarFilterInput, sidebarFilterClearBtn,
+  sidebarExpandAllBtn, sidebarCollapseAllBtn,
   hasActiveOverlay,
 } from "../core/state.ts";
 import { activeTab, loadFile, renderContent } from "./tabs.ts";
@@ -257,6 +258,11 @@ export function renderFolderTree() {
   if (!state.currentFolder) return;
 
   const allEntries = state.currentFolder.entries;
+  // Expand/collapse-all are no-ops on a flat folder; hiding them gives
+  // the folder name its width back in the crowded header.
+  const hasDirs = (allEntries || []).some((e) => e.isDir);
+  sidebarExpandAllBtn?.classList.toggle('hidden', !hasDirs);
+  sidebarCollapseAllBtn?.classList.toggle('hidden', !hasDirs);
   if (!allEntries || allEntries.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'tree-empty';
@@ -317,6 +323,9 @@ function buildTreeNode(node: any, opts: any = {}, depth = 0) {
     row.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   }
   row.title = node.path;
+  // Indent the row itself (not .tree-children) so the hover/active
+  // background spans the sidebar's full width at every depth.
+  row.style.paddingLeft = `${4 + depth * 12}px`;
 
   const twisty = document.createElement('span');
   twisty.className = 'tree-twisty' + (node.isDir ? '' : ' empty');
@@ -340,7 +349,7 @@ function buildTreeNode(node: any, opts: any = {}, depth = 0) {
     const children = document.createElement('div');
     children.className = 'tree-children';
     for (const child of node.children || []) {
-      children.appendChild(buildTreeNode(child, opts));
+      children.appendChild(buildTreeNode(child, opts, depth + 1));
     }
     wrap.appendChild(children);
 
