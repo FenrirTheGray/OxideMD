@@ -64,9 +64,11 @@ export function syncToolbar() {
   (btnZoomIn as HTMLButtonElement).disabled  = !hasTab;
   (btnZoomOut as HTMLButtonElement).disabled = !hasTab;
   (zoomLabel as HTMLButtonElement).disabled  = !hasTab;
-  // Hide the zoom cluster entirely until a file is loaded.
+  // Hide the zoom cluster entirely until a file is loaded; the status
+  // island as a whole hides with it (layout.css keys off body.has-tab).
   const zoomControls = document.getElementById('zoom-controls');
   if (zoomControls) zoomControls.classList.toggle('hidden', !hasTab);
+  document.body.classList.toggle('has-tab', hasTab);
 
   // Mode toggle enabled only for file-backed tabs. Untitled (new) tabs
   // stay locked in edit mode until their first save — their read view
