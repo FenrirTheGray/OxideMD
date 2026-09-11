@@ -273,7 +273,10 @@ document.querySelectorAll(".tags-field").forEach((el) => {
       remove.type = "button";
       remove.className = "chip-remove";
       remove.setAttribute("aria-label", `Remove ${tok}`);
-      remove.textContent = "×";
+      // Same SVG cross as the tab close buttons: a text "×" sits off-centre
+      // in its box (math-axis baseline), which the focus ring exposes.
+      remove.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
       remove.addEventListener("click", () => {
         removeToken(tok);
         field.focus();

@@ -26,6 +26,15 @@ body.maximized {
   border-color: transparent;
 }
 
+/* Focus rings only follow keyboard input. app.ts sets body.pointer-nav on
+   a pointer press and clears it on a navigation key; WebKitGTK would
+   otherwise show :focus-visible on programmatic focus after a click. Text
+   fields keep their ring either way — a caret needs a visible home. */
+body.pointer-nav :focus-visible:not(input):not(textarea):not([contenteditable]) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* ── Window-edge resize handles ──────────────────────────────────────
    Thin overlays at the body edges + corners. Each sets its own
    resize cursor on hover; window-size.js attaches mousedown listeners

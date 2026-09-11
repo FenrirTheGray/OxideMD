@@ -202,12 +202,15 @@
   border-radius: 4px;
   background: transparent;
   color: var(--fg-dim);
-  font-size: 15px;
-  line-height: 1;
   cursor: pointer;
   transition:
     background var(--dur-sm) var(--ease),
     color var(--dur-sm) var(--ease);
+}
+.tags-list .chip-remove svg {
+  width: 10px;
+  height: 10px;
+  display: block;
 }
 .tags-list .chip-remove:hover {
   background: var(--bg-danger-hover);
@@ -351,6 +354,7 @@
 .settings-info-icon:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
+  border-radius: 50%;
 }
 
 /* The explanatory text, pulled straight from `aria-label`, shown on both
@@ -484,6 +488,15 @@
 }
 .segmented > button + button {
   border-left: 1px solid var(--border);
+}
+/* The wrapper's 7px pill minus its 1px border: the end buttons carry the
+   rounding themselves so the inset focus ring follows the pill instead of
+   drawing a square that the wrapper's overflow clips at the corners. */
+.segmented > button:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.segmented > button:last-child {
+  border-radius: 0 6px 6px 0;
 }
 .segmented > button:hover:not([aria-pressed="true"]) {
   background: var(--bg-btn-hover);
@@ -654,7 +667,7 @@
 }
 .shortcut-edit-pill:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 .shortcut-edit-pill.capturing {
   color: var(--accent);
@@ -696,7 +709,7 @@
 }
 .shortcut-edit-reset:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: 1px;
+  outline-offset: -2px;
 }
 .shortcut-edit-reset[disabled] {
   opacity: 0.3;
@@ -936,7 +949,7 @@
 }
 #settings-footer button:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 /* Close abandons unsaved changes, so it gets the danger treatment on
@@ -948,10 +961,10 @@
   border-color: var(--danger);
 }
 #settings-footer #settings-cancel:focus-visible {
-  outline: none;
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
   color: var(--danger);
   border-color: var(--danger);
-  box-shadow: 0 0 0 2px var(--accent-glow);
 }
 
 #settings-footer #settings-reset {
@@ -1031,7 +1044,7 @@
 #btn-check-updates:focus-visible,
 .settings-action-btn:focus-visible {
   outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 #btn-check-updates svg,
 .settings-action-btn svg {
@@ -1112,7 +1125,7 @@
 }
 .update-status .update-download:focus-visible {
   outline: 2px solid var(--fg);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 
 /* Inline progress strip shown while an update is downloading +

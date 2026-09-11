@@ -91,6 +91,9 @@ export function getEditorViewportLine(slack = 0) {
     atBottom: sd.scrollTop >= sd.scrollHeight - sd.clientHeight - slack,
   };
 }
+export function focusEditor() {
+  editorView?.focus();
+}
 export function getEditorSelectionHead() {
   return editorView ? editorView.state.selection.main.head : 0;
 }
@@ -796,7 +799,11 @@ export function mountEditor(tab) {
   schedulePreviewRender(0);
 
   requestAnimationFrame(() => {
-    view.focus();
+    // Arrowing along the tab strip mounts editors as it goes; leave the
+    // keyboard focus on the strip so the next arrow keeps moving tabs.
+    const onStrip = !document.body.classList.contains('pointer-nav')
+      && document.activeElement?.closest('[role="tab"]');
+    if (!onStrip) view.focus();
     if (typeof tab.editorScrollTop === 'number') view.scrollDOM.scrollTop = tab.editorScrollTop;
     if (typeof tab.previewScrollTop === 'number') previewPane.scrollTop = tab.previewScrollTop;
   });

@@ -159,6 +159,8 @@ export function openFilterMode() {
 }
 export function closeFilterMode() {
   filterMode = false;
+  // Hiding the input while it holds focus would drop focus on <body>.
+  if (sidebarFilterEl?.contains(document.activeElement)) sidebarFilterToggle?.focus();
   if (sidebarFilterEl) sidebarFilterEl.classList.add('hidden');
   if (sidebarFilterToggle) {
     sidebarFilterToggle.classList.remove('active');
@@ -248,6 +250,9 @@ export function closeFolder() {
 }
 
 export function renderFolderTree() {
+  // A watcher refresh can rebuild the tree mid-keyboard-navigation; put
+  // focus back on the same row afterwards.
+  const focusedPath = (document.activeElement?.closest('.tree-node') as HTMLElement)?.dataset.path;
   sidebarTreeEl.innerHTML = '';
   if (!state.currentFolder) return;
 
@@ -288,9 +293,13 @@ export function renderFolderTree() {
   const first = sidebarTreeEl.querySelector('.tree-row');
   const entry = active || first;
   if (entry) (entry as HTMLElement).tabIndex = 0;
+  if (focusedPath) {
+    const node = sidebarTreeEl.querySelector(`.tree-node[data-path="${CSS.escape(focusedPath)}"]`);
+    focusTreeRow(node?.querySelector(':scope > .tree-row') ?? entry);
+  }
 }
 
-function buildTreeNode(node: any, opts: any = {}) {
+function buildTreeNode(node: any, opts: any = {}, depth = 0) {
   const forceExpand = !!opts.forceExpand;
   const highlight = opts.highlight || '';
 

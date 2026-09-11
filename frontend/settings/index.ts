@@ -466,6 +466,10 @@ function formatAccelForDisplay(accel) {
 
 function renderShortcutsPanel() {
   hideShortcutConflict();
+  // Rebuilding the rows would drop focus off the pill/reset the user just
+  // used; note which one it was and put focus back afterwards.
+  const focused = document.activeElement as HTMLElement | null;
+  const focusedRow = focused?.closest(".shortcut-edit-row") as HTMLElement | null;
   shortcutsList.innerHTML = "";
   const effective = effectiveBindings(pendingOverrides);
 
@@ -537,6 +541,15 @@ function renderShortcutsPanel() {
         renderShortcutsPanel();
       });
     }
+  }
+  if (focusedRow) {
+    const row = shortcutsList.querySelector(
+      `.shortcut-edit-row[data-action-id="${CSS.escape(focusedRow.dataset.actionId)}"]`,
+    );
+    // Same control if it's still enabled (Reset disables itself once
+    // used), else the row's pill.
+    const same = row?.querySelector(`.${focused.className.split(" ")[0]}`) as HTMLButtonElement | null;
+    ((same && !same.disabled ? same : row?.querySelector(".shortcut-edit-pill")) as HTMLElement | null)?.focus();
   }
 }
 
@@ -762,6 +775,9 @@ export function openSettings(tabName) {
   // (see the global handler in app.ts) for the unsaved-changes prompt; the
   // cancel listener below blocks the native instant-close that would skip it.
   settingsOverlay.showModal();
+  // showModal lands on the first focusable — the ✕. Start on the tab
+  // strip instead so Tab walks into the panel, not straight to Close.
+  (document.querySelector(".settings-tab.active") as HTMLElement)?.focus();
   // Form just mirrored state.config — nothing to save yet.
   refreshSaveButtonState();
 }
