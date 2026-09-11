@@ -29,7 +29,8 @@ import { printActiveTab } from "../features/print.ts";
 import { logError } from "../core/logger.ts";
 import { showErrorModal } from "./error-modal.ts";
 import { showToast } from "./toast.ts";
-import { promptText } from "./confirm.ts";
+import { promptText, promptDelete } from "./confirm.ts";
+import { escapeHtml } from "../lib/escape.ts";
 
 // ── Menu renderer ────────────────────────────────────────────────────────
 // One menu element exists at a time, lazily attached to <body>. Click-out,
@@ -230,10 +231,11 @@ function revealPath(path) {
 // tree on its own.
 async function deleteTreeEntry(path, isDir) {
   const name = path.split(/[\\/]/).pop() || path;
-  const message = isDir
-    ? `Delete the folder "${name}" and everything inside it?\n\nThis is permanent and cannot be undone.`
-    : `Delete the file "${name}"?\n\nThis is permanent and cannot be undone.`;
-  if (!confirm(message)) return;
+  const target = `<span class="confirm-file-name">${escapeHtml(name)}</span>`;
+  const bodyHtml = isDir
+    ? `Delete the folder ${target} and everything inside it? This is permanent and cannot be undone.`
+    : `Delete the file ${target}? This is permanent and cannot be undone.`;
+  if (!(await promptDelete({ title: isDir ? 'Delete folder' : 'Delete file', bodyHtml }))) return;
   try {
     await invoke('delete_path', { path });
     dropTabsForDeletedPath(path);
