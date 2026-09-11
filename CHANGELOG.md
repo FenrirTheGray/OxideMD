@@ -4,6 +4,41 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.12.0] - 2026-09-11
+
+### Added
+
+- Markdown tables realign as you type: after any edit inside a table the block is re-padded with the same formatter save uses, the caret stays in its cell, and the re-pad rides in the keystroke's own undo step. Tables nested in list items keep their indentation
+- VS Code-style editing surface: multiple cursors (`Alt`+click), column selection (`Shift+Alt`+drag), `Ctrl+D` selects the next occurrence, matching-bracket highlight, auto-closing brackets and quotes, and highlighted selection matches
+- The status bar shows whether the active document is saved, unsaved, or not saved yet
+- A collapse button in the sidebar header shrinks the file tree to a rail in the wide layout
+- Right-clicking empty space in the file tree opens New File / New Folder / Reveal / Copy Path for the opened folder
+
+### Changed
+
+- The window is laid out as islands: the tab strip sits above the content instead of in the title bar, and in edit mode the editor and preview are two islands with the drag handle in the gap between them. The "Toolbar & tabs" color setting is now "Window frame"
+- Tab arrows switch to the previous / next tab rather than scrolling the strip
+- Move tab is now `Ctrl+Shift+PgUp` / `PgDn`, leaving `Ctrl+Shift+←` / `→` to the editor's word selection
+- The editor always uses a monospace font so aligned tables line up; the reading font applies to the preview only
+- The theme name in Settings is derived from the colors in the controls, so a fresh install reads "Atom One Dark" and editing a color back to a theme's value restores its name
+- Removing a font or theme from Settings uses the app's own confirm dialog (Cancel is the default button)
+
+### Removed
+
+- The Underline format action and the `<u>` allowlist in the renderer; inline HTML is now always escaped
+
+### Fixed
+
+- Removing a font, removing a theme, and deleting a file or folder from the tree never asked for confirmation: Tauri shims native `confirm()` into a promise, so the check always passed
+- Removing the font or theme currently in use no longer leaves a dangling reference in the saved config, which made the dialog look dirty on every open and errored on launch
+- The settings save-error dialog actually shows (native `alert()` is shimmed the same way)
+- The editor selection color and active-line tint win over CodeMirror's stock lavender
+- Dragging the editor/preview divider measured against the padded row, so the split jumped on grab
+- Keyboard navigation in the theme dropdown no longer scrolls the section header out of view when the first option is focused
+- Picking a file in the wide layout no longer collapses the sidebar
+- Focus returns to the dropdown trigger after choosing or removing an option, so the next `Escape` closes the dropdown rather than the whole Settings dialog
+- Removing a font or theme reports a failed delete or config save instead of silently leaving the saved config pointing at a missing file
+
 ## [4.11.0] - 2026-09-03
 
 ### Added
