@@ -66,6 +66,9 @@ pub struct Config {
     // a single trailing newline. Off by default — opt-in to keep saves
     // byte-for-byte for users with strict version control diffs.
     pub editor_format_on_save: bool,
+    // Preview island on the left, editor on the right (default is editor
+    // left). Layout only; the split fraction still describes the editor.
+    pub editor_preview_first: bool,
     // File extensions (lowercased, no leading dot) the folder browser
     // treats as Markdown. Normalized on save by the frontend; an empty
     // list falls back to MD_EXTS_DEFAULT at the read sites.
@@ -137,6 +140,7 @@ impl Default for Config {
             editor_spell_check: false,
             editor_line_numbers: true,
             editor_format_on_save: false,
+            editor_preview_first: false,
             md_extensions: MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect(),
             recent_files: Vec::new(),
         }

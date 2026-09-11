@@ -112,7 +112,10 @@
 }
 
 .settings-row label {
-  width: 180px;
+  /* Column width for short labels; a longer one widens its own row
+     rather than wrapping while the control beside it has room. */
+  min-width: 180px;
+  white-space: nowrap;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 500;
