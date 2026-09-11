@@ -137,6 +137,7 @@ export function applyConfig(cfg) {
   );
   document.body.style.setProperty("--note-accent", cfg.note_accent_color);
   document.body.style.setProperty("--sidebar-width", `${cfg.sidebar_width}px`);
+  document.body.style.setProperty("--outline-width", `${cfg.outline_width}px`);
   // Base UI palette — sparse overrides merged over the theme defaults.
   applyPaletteToBody(effectivePalette(resolved, cfg.palette));
   document

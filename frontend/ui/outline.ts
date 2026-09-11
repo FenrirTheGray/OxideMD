@@ -90,10 +90,14 @@ function renderOutline(entries) {
   // Normalize indent: many docs start at h2 — anchor levels to the
   // shallowest heading present so the tree doesn't waste left padding.
   const minLevel = entries.reduce((m, e) => Math.min(m, e.level), 6);
+  // 12px per level — the same step the folder tree uses, so nested rows
+  // in the two sidebars line up. title= surfaces headings the pill
+  // ellipsises, like the tree rows' path tooltip.
   const items = entries.map((e, i) => {
-    const indent = (e.level - minLevel) * 14;
+    const indent = (e.level - minLevel) * 12;
     return `<button class="outline-item outline-h${e.level}" type="button"
-                    data-index="${i}" data-line="${e.line}"
+                    data-index="${i}" data-line="${e.line}" tabindex="-1"
+                    title="${escapeHtml(e.text)}"
                     style="padding-left: ${12 + indent}px;">
               ${escapeHtml(e.text)}
             </button>`;
@@ -117,6 +121,7 @@ export function refreshOutline(opts: { idle?: boolean } = {}) {
     const tab = activeTab();
     const entries = tab ? parseOutline(tab.raw ?? '') : [];
     outlineSidebarBody.innerHTML = renderOutline(entries);
+    updateActiveHeading();
   };
   // The debounced edit path passes { idle:true } so the re-parse + innerHTML
   // rebuild yields to input frames; direct callers (open, tab/mode switch)
@@ -127,6 +132,69 @@ export function refreshOutline(opts: { idle?: boolean } = {}) {
     paint();
   }
 }
+
+// ── Current-section highlight ────────────────────────────────────────
+// The active entry is the last heading at or above a line just below the
+// viewport's top edge (the tolerance absorbs the 12px jump offset), or
+// the last heading once the scroller is at its end — a short final
+// section can never reach the top, so it would otherwise never light up.
+const ACTIVE_TOLERANCE = 32;
+
+function markActive(index) {
+  const items = outlineSidebarBody.querySelectorAll('.outline-item');
+  const prev = outlineSidebarBody.querySelector('.outline-item.active');
+  items.forEach((el, i) => {
+    el.classList.toggle('active', i === index);
+    // Roving tabindex (see the keydown handler): Tab lands on the current
+    // section, arrows move from there.
+    (el as HTMLElement).tabIndex = i === index ? 0 : -1;
+  });
+  // Long outline, long document: keep the highlight on screen as it moves
+  // (same `nearest` the tree uses when the open file changes).
+  const next = items[index];
+  if (next && next !== prev) next.scrollIntoView({ block: 'nearest' });
+}
+
+function updateActiveHeading() {
+  if (!isOpen) return;
+  const items = outlineSidebarBody.querySelectorAll('.outline-item');
+  if (!items.length) return;
+  const tab = activeTab();
+  let index = 0;
+  if (tab?.editing) {
+    // No view yet (editor still mounting): fall through and mark the first
+    // entry so the list keeps a tabindex=0 entry point.
+    const vp = editorModule()?.getEditorViewportLine(ACTIVE_TOLERANCE);
+    if (vp?.atBottom) index = items.length - 1;
+    else if (vp) items.forEach((el, i) => {
+      if (parseInt((el as HTMLElement).dataset.line, 10) <= vp.line) index = i;
+    });
+  } else {
+    const scroller = contentScroll;
+    if (!scroller) return;
+    if (scroller.scrollTop >= scroller.scrollHeight - scroller.clientHeight - ACTIVE_TOLERANCE) {
+      index = items.length - 1;
+    } else {
+      const edge = scroller.getBoundingClientRect().top + ACTIVE_TOLERANCE;
+      contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((h, i) => {
+        if (i < items.length && h.getBoundingClientRect().top <= edge) index = i;
+      });
+    }
+  }
+  markActive(index);
+}
+
+// One capturing listener sees every scroller's events (CodeMirror's
+// don't bubble); a rAF coalesces bursts and keeps the DOM reads off the
+// scroll event itself.
+let activeFrame = 0;
+window.addEventListener('scroll', () => {
+  if (!isOpen || activeFrame) return;
+  activeFrame = requestAnimationFrame(() => {
+    activeFrame = 0;
+    updateActiveHeading();
+  });
+}, { capture: true, passive: true });
 
 // Persist the open/closed state the way sidebar_width is persisted —
 // debounced write through save_config_cmd so a rapid toggle doesn't
@@ -140,10 +208,13 @@ function persistOutlineVisible(visible) {
   saveOutlineConfig();
 }
 
+const outlineDivider = document.getElementById('outline-divider');
+
 export function openOutline() {
   if (isOpen) return;
   isOpen = true;
   outlineSidebar.classList.remove('hidden');
+  outlineDivider?.classList.remove('hidden');
   refreshOutline();
   syncToolbar();
 }
@@ -152,7 +223,81 @@ export function closeOutline() {
   if (!isOpen) return;
   isOpen = false;
   outlineSidebar.classList.add('hidden');
+  outlineDivider?.classList.add('hidden');
   syncToolbar();
+}
+
+// ── Outline divider ──────────────────────────────────────────────────
+// The folder sidebar's resizer (folder.ts) mirrored to the right edge:
+// drag or arrow-key the width, clamp, persist to config.outline_width on
+// release. The width grows leftward, so it's measured from the divider
+// to #main-container's right edge.
+const OUTLINE_MIN = 180;
+const OUTLINE_MAX = 480;
+
+function setOutlineWidth(px, maxOverride = OUTLINE_MAX) {
+  const w = Math.max(OUTLINE_MIN, Math.min(maxOverride, Math.round(px)));
+  document.body.style.setProperty('--outline-width', `${w}px`);
+  outlineDivider.setAttribute('aria-valuenow', String(w));
+  return w;
+}
+function persistOutlineWidth(width) {
+  if (!state.config) return;
+  state.config.outline_width = width;
+  saveOutlineConfig();
+}
+
+if (outlineDivider) {
+  let dragPointerId = null;
+  let containerRight = 0;
+  outlineDivider.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    dragPointerId = e.pointerId;
+    containerRight = document.getElementById('main-container').getBoundingClientRect().right;
+    outlineDivider.classList.add('dragging');
+    document.body.classList.add('resizing-sidebar');
+    try { outlineDivider.setPointerCapture(e.pointerId); } catch {}
+  });
+  outlineDivider.addEventListener('pointermove', (e) => {
+    if (dragPointerId !== e.pointerId) return;
+    setOutlineWidth(containerRight - e.clientX);
+  });
+  const endDrag = (e) => {
+    if (dragPointerId !== e.pointerId) return;
+    dragPointerId = null;
+    outlineDivider.classList.remove('dragging');
+    document.body.classList.remove('resizing-sidebar');
+    try { outlineDivider.releasePointerCapture(e.pointerId); } catch {}
+    persistOutlineWidth(parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10));
+  };
+  outlineDivider.addEventListener('pointerup', endDrag);
+  outlineDivider.addEventListener('pointercancel', endDrag);
+  // Double-click fits the widest heading (folder.ts does the same for the
+  // tree). Each row ellipsizes on its own, so the overflow is per item:
+  // scrollWidth still reports the full text width under overflow:hidden.
+  outlineDivider.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    let overflow = 0;
+    outlineSidebarBody.querySelectorAll('.outline-item').forEach((el) => {
+      overflow = Math.max(overflow, el.scrollWidth - el.clientWidth);
+    });
+    if (overflow <= 0) return;
+    const cur = parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10);
+    const maxAllowed = Math.max(OUTLINE_MIN, Math.floor(window.innerWidth * 0.5));
+    persistOutlineWidth(setOutlineWidth(cur + overflow, maxAllowed));
+  });
+  outlineDivider.addEventListener('keydown', (e) => {
+    const cur = parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10);
+    let next = cur;
+    // Mirrored: ← widens the outline (it grows leftward), → narrows.
+    if (e.key === 'ArrowLeft')       next = cur + 10;
+    else if (e.key === 'ArrowRight') next = cur - 10;
+    else if (e.key === 'Home')       next = OUTLINE_MIN;
+    else if (e.key === 'End')        next = OUTLINE_MAX;
+    else return;
+    e.preventDefault();
+    persistOutlineWidth(setOutlineWidth(next));
+  });
 }
 
 export function toggleOutline() {
@@ -189,6 +334,27 @@ if (outlineSidebarCloseBtn) {
     closeOutline();
     persistOutlineVisible(false);
     btnOutline.focus();
+  });
+}
+
+// Arrow-key navigation over the list, mirroring the folder tree: ↑/↓
+// move, Home/End jump, Enter/Space activate. Focus follows the roving
+// tabindex markActive maintains.
+if (outlineSidebarBody) {
+  outlineSidebarBody.addEventListener('keydown', (e) => {
+    const item = (e.target as HTMLElement).closest('.outline-item') as HTMLElement;
+    if (!item) return;
+    const items = Array.from(outlineSidebarBody.querySelectorAll('.outline-item')) as HTMLElement[];
+    const idx = items.indexOf(item);
+    let to = -1;
+    if (e.key === 'ArrowDown') to = Math.min(items.length - 1, idx + 1);
+    else if (e.key === 'ArrowUp') to = Math.max(0, idx - 1);
+    else if (e.key === 'Home') to = 0;
+    else if (e.key === 'End') to = items.length - 1;
+    else return;
+    e.preventDefault();
+    items[to].focus();
+    items[to].scrollIntoView({ block: 'nearest' });
   });
 }
 

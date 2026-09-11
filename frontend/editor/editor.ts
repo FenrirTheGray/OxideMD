@@ -77,6 +77,20 @@ export function getEditorValue() {
 export function getEditorScrollTop() {
   return editorView ? editorView.scrollDOM.scrollTop : 0;
 }
+// The 1-based line `slack` px below the viewport's top edge, and whether
+// the editor is within `slack` of its end — what the outline needs to
+// mark the current section. Line-block heights exclude the content
+// padding, so convert scrollTop into that space first.
+export function getEditorViewportLine(slack = 0) {
+  if (!editorView) return null;
+  const ev = editorView;
+  const sd = ev.scrollDOM;
+  const info = ev.lineBlockAtHeight(sd.scrollTop - ev.documentPadding.top + slack);
+  return {
+    line: ev.state.doc.lineAt(info.from).number,
+    atBottom: sd.scrollTop >= sd.scrollHeight - sd.clientHeight - slack,
+  };
+}
 export function getEditorSelectionHead() {
   return editorView ? editorView.state.selection.main.head : 0;
 }
@@ -1389,9 +1403,13 @@ document.addEventListener('keydown', (e) => {
 // prompts) lives in ui/confirm.ts so read mode can use it without
 // loading this (lazy, CodeMirror-heavy) module.
 
-// Jump the mounted editor's cursor to a 1-based source line and center
-// it. Used by the outline sidebar, which is a read-mode module and so
-// can't touch CodeMirror types itself; a missing editor is a no-op.
+// Jump the mounted editor's cursor to a 1-based source line and put it
+// at the top of the viewport, like the read-mode jump. (`scrollIntoView:
+// true` is "nearest": a line below the viewport lands at the bottom
+// edge.) Near the end of the document CM clamps to max scroll, so the
+// line just sits as high as it can. Used by the outline sidebar, which
+// is a read-mode module and so can't touch CodeMirror types itself; a
+// missing editor is a no-op.
 export function jumpEditorToLine(line) {
   if (!editorView) return;
   const totalLines = editorView.state.doc.lines;
@@ -1399,7 +1417,7 @@ export function jumpEditorToLine(line) {
   const lineObj = editorView.state.doc.line(lineNo);
   editorView.dispatch({
     selection: EditorSelection.cursor(lineObj.from),
-    scrollIntoView: true,
+    effects: EditorView.scrollIntoView(lineObj.from, { y: 'start', yMargin: 12 }),
   });
   editorView.focus();
 }

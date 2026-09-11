@@ -52,6 +52,8 @@ pub struct Config {
     // by the toolbar's outline button in read mode; persisted so the
     // layout choice survives a restart, mirroring sidebar_width.
     pub outline_visible: bool,
+    // Drag-resized outline width, the outline's counterpart to sidebar_width.
+    pub outline_width: u32,
     // Sparse overrides keyed by action id (e.g. "save" → "Mod+S").
     // Missing entries fall back to the frontend's default registry, so
     // new actions shipped in updates auto-apply without rewriting config.
@@ -129,6 +131,7 @@ impl Default for Config {
             load_remote_images: false,
             sidebar_width: 240,
             outline_visible: false,
+            outline_width: 260,
             keybindings: HashMap::new(),
             editor_word_wrap: true,
             editor_spell_check: false,
