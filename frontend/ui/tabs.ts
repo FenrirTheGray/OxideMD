@@ -531,6 +531,62 @@ tabBarEl.addEventListener('keydown', (e) => {
   (nextTab as HTMLElement).focus();
 });
 
+
+// ── Drag to reorder ───────────────────────────────────────────────────
+// Pointer events rather than HTML5 drag-and-drop: Tauri's native file-drop
+// handler swallows dragstart/dragover in WebKitGTK, and pointer capture
+// gives a clean threshold → live reorder → commit flow with no ghost image.
+// While dragging, the tab element itself is moved through the strip as
+// the pointer crosses its siblings' midpoints; on release the DOM order
+// is written back to `tabs`. Pointer capture on the strip retargets the
+// trailing click to the strip, so the tab's own click → switchToTab
+// never fires for a drag.
+// ponytail: no edge auto-scroll while dragging; add if strips get long
+// enough to overflow routinely.
+const DRAG_THRESHOLD = 5;
+let tabDrag: { el: HTMLElement; pointerId: number; startX: number; active: boolean } | null = null;
+
+tabBarEl.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const el = (e.target as Element).closest('.tab') as HTMLElement | null;
+  if (!el || (e.target as Element).closest('.tab-close')) return;
+  // Cancel the press's default: the tab is user-select:none, but WebKit
+  // still anchors a selection here and extends it into the document as
+  // the pointer moves, painting the page blue mid-drag. Click still fires.
+  e.preventDefault();
+  el.focus({ preventScroll: true }); // the cancelled default would have done this
+  tabDrag = { el, pointerId: e.pointerId, startX: e.clientX, active: false };
+});
+tabBarEl.addEventListener('pointermove', (e) => {
+  if (!tabDrag || e.pointerId !== tabDrag.pointerId) return;
+  if (!tabDrag.active) {
+    if (Math.abs(e.clientX - tabDrag.startX) < DRAG_THRESHOLD) return;
+    tabDrag.active = true;
+    window.getSelection()?.removeAllRanges();
+    tabDrag.el.classList.add('dragging');
+    document.body.classList.add('dragging-tab');
+    try { tabBarEl.setPointerCapture(e.pointerId); } catch {}
+  }
+  const { el } = tabDrag;
+  const before = Array.from(tabBarEl.querySelectorAll('.tab'))
+    .find((t) => t !== el && e.clientX < t.getBoundingClientRect().left + t.clientWidth / 2) ?? null;
+  if (before !== el.nextElementSibling) tabBarEl.insertBefore(el, before);
+});
+function endTabDrag(e: PointerEvent) {
+  if (!tabDrag || e.pointerId !== tabDrag.pointerId) return;
+  const { el, active } = tabDrag;
+  tabDrag = null;
+  if (!active) return;
+  el.classList.remove('dragging');
+  document.body.classList.remove('dragging-tab');
+  try { tabBarEl.releasePointerCapture(e.pointerId); } catch {}
+  const order = Array.from(tabBarEl.querySelectorAll('.tab')).map((t) => Number((t as HTMLElement).dataset.tabId));
+  tabs.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  renderTabBar();
+}
+tabBarEl.addEventListener('pointerup', endTabDrag);
+tabBarEl.addEventListener('pointercancel', endTabDrag);
+
 // Fade the clipped edge of the strip when tabs overflow it. The arrows
 // beside the strip switch tabs (renderTabBar scrolls the active one into
 // view), so overflow only drives the mask.
