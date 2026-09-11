@@ -161,7 +161,12 @@ siblings.
 **`app.ts`** — the entry point: runs `init()`, wires the global keyboard and
 button handlers, registers action handlers against the keybinding registry, and
 subscribes to backend events. It imports `core/logger` first so the global
-error handlers are live before anything else runs.
+error handlers are live before anything else runs. It also owns two
+document-level input guards: the `body.pointer-nav` modality class (a pointer
+press hides focus rings, a navigation key shows them — WebKitGTK otherwise
+paints `:focus-visible` on programmatic focus after a click) and the modal
+`Tab` wrap, which skips the invisible document stop WebKit inserts after the
+last control in an open `<dialog>`.
 
 **`core/`** — cross-cutting state and pure infrastructure.
 
@@ -248,15 +253,25 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 **`ui/`** — chrome and view modules.
 
 - **`tabs.ts`** — the tab bar, tab switching (including the prev/next
-  arrows), file load/reload, zoom, the overflow edge fade, anchor-click
-  handling, and content mounting.
+  arrows), drag-to-reorder (pointer events with capture rather than HTML5
+  drag-and-drop, which Tauri's file-drop handler swallows in WebKitGTK), file
+  load/reload, zoom, the overflow edge fade, anchor-click handling, and
+  content mounting.
 - **`folder.ts`** — the sidebar folder tree, name filter, divider resize, and
   the `syncWatcher` that pushes the watched-path set to the backend.
-- **`outline.ts`** — the document outline sidebar (heading list, jump-to). In
+- **`outline.ts`** — the document outline sidebar: the heading list, the
+  current-section highlight (recomputed from the scroll position of whichever
+  pane is showing, via one capturing `scroll` listener), arrow-key
+  navigation over a roving tabindex, jump-to, and its own drag divider
+  (persisted as `outline_width`, the counterpart of `sidebar_width`). In
   edit mode the same toolbar button is repurposed as the preview toggle.
 - **`contextmenu.ts`** — context-aware right-click menus for the tree and tab
-  bar (the default webview menu is suppressed). The editor-surface menu comes
-  from the lazy editor module via `editorModule()?.buildEditorContextMenu()`.
+  bar (the default webview menu is suppressed). The `Menu` key and `Shift+F10`
+  synthesize a `contextmenu` event on the focused element, since WebKitGTK
+  never fires one for them. The menu is appended to the topmost open
+  `<dialog>` when there is one — `<body>` is inert and painted below the top
+  layer while a modal is up. The editor-surface menu comes from the lazy
+  editor module via `editorModule()?.buildEditorContextMenu()`.
 - **`counts.ts`** — the status-bar line/word/char counts. O(doc) over the
   source text; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
 - **`confirm.ts`** — the shared confirm dialog (unsaved changes, draft

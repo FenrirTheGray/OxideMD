@@ -62,7 +62,7 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
 ### Editing
 
 - A full text editor with Markdown-aware highlighting, toggled per tab
-- Split view with a draggable divider and synchronized scrolling
+- Split view with a draggable divider and synchronized scrolling; the preview can sit on either side
 - A formatting toolbar and rebindable shortcuts for bold, italic, strikethrough, inline code, headings, lists, links, images, and indentation
 - Smart Enter that continues lists and blockquotes, and exits the block on a second press
 - Themed find-and-replace inside the editor
@@ -70,11 +70,11 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
 
 ### Workspace
 
-- Tabs with independent scroll, zoom, and split-view state, reorderable by keyboard
+- Tabs with independent scroll, zoom, and split-view state, reorderable by drag or keyboard
 - A folder sidebar with name filtering, expand/collapse-all, and live file watching that reloads externally edited tabs
 - Project-wide content search across every Markdown file under the open folder
-- A document outline popover for jumping between headings
-- Right-click context menus on the tab strip and the folder tree
+- A resizable document outline sidebar that tracks the section you are reading and jumps between headings
+- Context menus on the tab strip and the folder tree, from the mouse or the `Menu` key
 - Drag and drop `.md` files onto the window to open them; drop an image into the editor to insert it
 - A responsive layout: on narrow windows the sidebars become overlay drawers and the toolbar folds its overflow into a "⋯" menu, so the app stays usable down to its minimum size
 
@@ -107,14 +107,14 @@ Prebuilt installers are attached to every [release](https://github.com/FenrirThe
 
 ### Manual Updates - Through Settings
 
-**<u>Installation Steps:</u>**
+**Installation Steps:**
 
 1. Open `Settings`
 2. Navigate to the `About` section
 3. Press the `Check for Updates` button
 4. Click the `Install` button *- (appears if a new version is available)*
 
-> The app  will **update and restart itself** if you installed this app through one of the following installers:
+> The app will **update and restart itself** if you installed this app through one of the following installers:
 > - Windows (`.msi` or `.exe`)
 > - MacOS (`.dmg`)
 > - Linux (`.AppImage` )
