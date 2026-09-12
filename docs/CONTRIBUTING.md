@@ -11,7 +11,7 @@ IPC, makes it much faster to find where a change belongs.
 
 ## Set up a dev environment
 
-You'll need [Rust](https://rustup.rs/) (stable) and [Node.js](https://nodejs.org/).
+You'll need [Rust](https://rustup.rs/) (1.85 or newer) and [Node.js](https://nodejs.org/).
 Install the platform build dependencies listed under
 [Build from source](../README.md#build-from-source) in the README, then:
 

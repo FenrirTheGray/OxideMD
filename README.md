@@ -149,7 +149,7 @@ One-time setup commands required for this app to be added to them can be found o
 ## Build from source
 
 ### Requirements:
-- Rust: [https://rustup.rs/](https://rustup.rs/)
+- Rust 1.85 or newer: [https://rustup.rs/](https://rustup.rs/)
 - NodeJS: [https://nodejs.org/](https://nodejs.org/)
 
 ### Dependencies:

@@ -139,10 +139,11 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   interceptor that re-emits `Ctrl+Tab` / `Ctrl+Shift+Tab` as IPC events.
 - **`commands.rs`** — every `#[tauri::command]`, their helper types, and the
   pure helpers (path canonicalization, the folder walk, the search scanner).
-- **`config.rs`** — the `Config` struct and its `Default`, TOML load/save, the
-  per-platform config / fonts / themes paths, the `APP_QUALIFIER` /
-  `APP_ORGANIZATION` / `APP_NAME` identifier triple and the `project_dirs()`
-  helper, and recent-files maintenance.
+- **`config.rs`** — the `Config` struct and its `Default`, JSON load/save
+  (plus the one-time read of a pre-4.9 `config.toml`), the per-platform
+  config / fonts / themes paths, the `APP_QUALIFIER` / `APP_ORGANIZATION` /
+  `APP_NAME` identifier triple and the `project_dirs()` helper, and
+  recent-files maintenance.
 - **`markdown.rs`** — pulldown-cmark source → HTML string: heading slugs/ids,
   footnotes, local-image resolution, raw-HTML escaping, the soft-break
   atomic, and the table-cell width heuristic (`is_short_cell`) described
@@ -314,17 +315,20 @@ mode can use them without pulling in the lazy CodeMirror chunk.
 
 ### Config
 
-`Config` (`config.rs`) is serialized as TOML in the platform config dir
-(`%APPDATA%\oxidemd\OxideMD\config` on Windows, `~/.config/oxidemd` on Linux,
-`~/Library/Application Support/com.oxidemd.OxideMD` on macOS), resolved via the
-`directories` crate from the `APP_QUALIFIER` / `APP_ORGANIZATION` / `APP_NAME`
-triple. `load_config` falls back to `Config::default()` on any read or parse
-error. The struct is `#[serde(default)]`, so a file written by an older version
-backfills any newly added field from its default, and serde ignores keys it no
-longer recognizes — additive schema changes (the common case) need nothing
-more. There is no version-stamped migration pass: a renamed or reinterpreted
-key simply falls back to its default rather than being rewritten, so a breaking
-schema change would need that handling reintroduced. The frontend
+`Config` (`config.rs`) is serialized as JSON (`config.json`) in the platform
+config dir (`%APPDATA%\oxidemd\OxideMD\config` on Windows, `~/.config/oxidemd`
+on Linux, `~/Library/Application Support/com.oxidemd.OxideMD` on macOS),
+resolved via the `directories` crate from the `APP_QUALIFIER` /
+`APP_ORGANIZATION` / `APP_NAME` triple. `load_config` falls back to
+`Config::default()` on any read or parse error. When `config.json` is missing
+it reads the pre-4.9 `config.toml` once, saves it back as JSON, and leaves the
+old file in place. The struct is `#[serde(default)]`, so a file written by an
+older version backfills any newly added field from its default, and serde
+ignores keys it no longer recognizes — additive schema changes (the common
+case) need nothing more. There is no version-stamped migration pass: a renamed
+or reinterpreted key simply falls back to its default rather than being
+rewritten, so a breaking schema change would need that handling reintroduced.
+The frontend
 fetches the whole struct once at init (`state.config = await
 invoke('get_config')`) and `save_config_cmd` persists it back. Some settings
 must reach the renderer immediately: the soft-break flag is mirrored into the
