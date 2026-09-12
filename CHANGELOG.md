@@ -4,6 +4,12 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.13.2] - 2026-09-12
+
+### Fixed
+
+- Launch no longer flashes a white surface and then an unstyled default layout before the real one; the window stays hidden until the config, shortcuts and recent files are painted, so slow machines (Windows 10 especially) see a single clean first frame
+
 ## [4.13.1] - 2026-09-12
 
 ### Changed
