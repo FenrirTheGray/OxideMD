@@ -43,12 +43,13 @@
   display: block;
   /* Pill rows inset from the island edge, like the tabs. */
   width: calc(100% - 2 * var(--row-inset));
-  margin: 0 var(--row-inset);
+  margin: 0 var(--row-inset) 1px;
   text-align: left;
   background: transparent;
-  border: none;
   color: var(--fg);
   padding: 6px 12px;
+  /* Reserved on every row so painting it on the active item shifts nothing. */
+  border: 1px solid transparent;
   font: inherit;
   font-family: var(--font-family);
   cursor: pointer;
@@ -67,6 +68,7 @@
 /* Same treatment as the folder tree's open file (.tree-row.active). */
 .outline-item.active {
   background: var(--bg-tab-hover);
+  border-color: var(--accent);
   color: var(--accent);
 }
 .outline-item:focus-visible {
@@ -276,6 +278,8 @@
   gap: 5px;
   padding: 5px 8px 5px 11px;
   border-radius: 7px;
+  /* Reserved on every tab so painting it on the active one shifts nothing. */
+  border: 1px solid transparent;
   cursor: pointer;
   white-space: nowrap;
   max-width: 210px;
@@ -312,6 +316,7 @@ body.dragging-tab * {
 .tab.active {
   color: var(--accent);
   background: var(--accent-glow);
+  border-color: var(--accent);
 }
 .tab.active:hover {
   background: var(--bg-btn-hover);
@@ -551,6 +556,7 @@ body.resizing-sidebar * {
    by name / search in folder). */
 .sidebar-header-btn.active {
   background: var(--accent-glow);
+  border-color: var(--accent);
   color: var(--accent);
 }
 .sidebar-header-btn:focus-visible {
@@ -685,8 +691,12 @@ body.resizing-sidebar * {
      background extending across the visible viewport for short names. */
   width: max-content;
   min-width: calc(100% - 2 * var(--row-inset));
-  margin: 0 var(--row-inset);
+  /* 1px below each row so two filled rows never touch. */
+  margin: 0 var(--row-inset) 1px;
   border-radius: var(--row-radius);
+  /* Reserved on every row so painting it on the open file shifts nothing.
+     A border, not a box-shadow: the focus ring owns box-shadow here. */
+  border: 1px solid transparent;
   color: var(--fg);
   transition:
     background var(--dur-sm) var(--ease),
@@ -703,8 +713,11 @@ body.resizing-sidebar * {
 .tree-row:active {
   background: var(--bg-tab-hover);
 }
+/* Hover and active are the same accent 3% apart, so the fill alone can't
+   say which file is open — the border is the part hover can't have. */
 .tree-row.active {
   background: var(--bg-tab-hover);
+  border-color: var(--accent);
   color: var(--accent);
 }
 
