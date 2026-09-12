@@ -4,6 +4,17 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.13.1] - 2026-09-12
+
+### Changed
+
+- The open file, the current outline entry and the active tab are ringed in the accent color instead of only tinted, so an open row next to a hovered one no longer reads as one block. The same ring marks every pressed toggle — toolbar, overflow menu, search case, the sidebar filter and search, settings tabs and the editor's search options — and sidebar rows are separated by 1 px
+
+### Fixed
+
+- The welcome screen keeps its full bento layout after the last tab is closed; it was left holding the reading width of the document that had been open
+- The Save button enables after resetting a settings tab to its defaults
+
 ## [4.13.0] - 2026-09-11
 
 ### Added
