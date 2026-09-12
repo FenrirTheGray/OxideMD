@@ -4,6 +4,12 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.13.3] - 2026-09-12
+
+### Changed
+
+- Dependency refresh: Tauri 2.11, pulldown-cmark 0.13, notify 8, TypeScript 7 and the rest of the Rust and npm dependencies on their current releases. The backend moved to the Rust 2024 edition, so building from source now needs Rust 1.85 or newer
+
 ## [4.13.2] - 2026-09-12
 
 ### Fixed
