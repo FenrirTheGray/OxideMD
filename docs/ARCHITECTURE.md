@@ -238,8 +238,16 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 **`settings/`** — the tabbed settings dialog, split from one large module.
 
 - **`index.ts`** — the dialog itself: opening/closing, config apply, custom-font
-  loading, and the tab orchestration (General / Reading / Editor / Colors /
-  Shortcuts / About).
+  loading, and the tab orchestration (General / Associations / Reading / Editor /
+  Colors / Shortcuts / About). Save is enabled by diffing a candidate config
+  built from the live controls against `state.config`, one animation frame after
+  any `input` / `change` / `click` / `keyup` that bubbles to the dialog root —
+  the custom controls mutate `dataset` without firing native events. Anything
+  that changes dialog state *without* such an event has to call
+  `refreshSaveButtonState()` itself: assigning `input.value` from script fires
+  nothing, and work behind an `await` (a confirm dialog, a native file picker,
+  an `invoke`) lands after the originating click was already diffed. The
+  reset-to-defaults, font/theme import and font/theme removal paths all do.
 - **`controls.ts`** — the generic custom form controls (custom selects,
   segmented toggles, number steppers). `wireCustomSelect` is the shared
   trigger-click + keyboard-navigation wiring, reused by the dynamic font and
