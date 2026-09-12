@@ -70,6 +70,7 @@
 }
 #more-menu button[aria-pressed="true"]:not(:disabled) {
   background: var(--accent-glow);
+  border-color: var(--accent);
   color: var(--accent);
 }
 #more-menu button:focus-visible {
@@ -125,6 +126,7 @@
    extra underline that would read as a tab indicator. */
 #toolbar-buttons button[aria-pressed="true"]:not(:disabled) {
   background: var(--accent-glow);
+  border-color: var(--accent);
   color: var(--accent);
 }
 #toolbar-buttons button[aria-pressed="true"]:hover:not(:disabled) {
@@ -313,7 +315,9 @@ body.editing #search-bar .search-replace-row { display: grid; }
 
 .search-btn-group button {
   background: transparent;
-  border: none;
+  /* Reserved so the active segment's ring shifts nothing; the right
+     edge stays the group's divider until then. */
+  border: 1px solid transparent;
   border-right: 1px solid var(--border);
   color: var(--fg);
   cursor: pointer;
@@ -352,6 +356,10 @@ body.editing #search-bar .search-replace-row { display: grid; }
 }
 #search-case.active {
   background: var(--accent-glow);
+  border-color: var(--accent);
+  /* Nests inside the group's own pill instead of a square ring in a
+     rounded box. */
+  border-radius: 5px;
   color: var(--accent);
 }
 

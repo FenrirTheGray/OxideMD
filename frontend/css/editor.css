@@ -317,7 +317,7 @@ body.resizing-split * {
 .md-editor .cm-panel.cm-search label:has(input:checked) {
   background: var(--accent-glow);
   color: var(--accent);
-  border-color: var(--border-focus);
+  border-color: var(--accent);
 }
 .md-editor .cm-panel.cm-search label input[type="checkbox"] {
   appearance: none;

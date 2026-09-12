@@ -40,6 +40,7 @@
 .settings-tab.active {
   color: var(--accent);
   background: var(--accent-glow);
+  border-color: var(--accent);
 }
 /* Inset, like the app's own tabs: #settings-tabs scrolls (overflow-x),
    so an outset ring gets clipped on the strip's edges. Every settings
