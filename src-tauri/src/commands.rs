@@ -1,6 +1,6 @@
 use crate::config::{
-    add_recent_file, drafts_dir, fonts_dir, load_config, save_config, themes_dir, Config,
-    MD_EXTS_DEFAULT,
+    Config, MD_EXTS_DEFAULT, add_recent_file, drafts_dir, fonts_dir, load_config, save_config,
+    themes_dir,
 };
 use crate::markdown;
 use base64::Engine;

@@ -104,7 +104,8 @@ pub fn run() {
         if std::env::var_os("WAYLAND_DISPLAY").is_some()
             && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
         {
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            // SAFETY: runs before the Tauri builder spawns any thread.
+            unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
         }
     }
 

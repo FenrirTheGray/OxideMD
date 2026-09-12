@@ -14,15 +14,15 @@
 		"@codemirror/search": "^6.6.0",
 		"@codemirror/state": "^6.6.0",
 		"@codemirror/view": "^6.41.1",
-		"idiomorph": "^0.7.4"
+		"idiomorph": "^0.8.0"
 	},
 	"devDependencies": {
 		"@types/node": "^25.9.2",
 		"esbuild": "^0.28.0",
 		"tsx": "^4.22.4",
-		"typescript": "^6.0.3"
+		"typescript": "^7.0.2"
 	},
 	"allowScripts": {
-		"esbuild@0.28.0": true
+		"esbuild@0.28.2": true
 	}
 }
