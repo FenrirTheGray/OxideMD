@@ -84,25 +84,38 @@ document.addEventListener('keydown', (e) => {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
-  // The three startup reads are independent — issue them concurrently so
-  // first paint waits on one IPC round-trip, not three in sequence.
-  const [config, customFonts, cliFiles] = await Promise.all([
-    invoke('get_config'),
-    invoke('list_custom_fonts'),
-    invoke('get_cli_files'),
-  ]);
-  state.config = config;
-  state.bindings = effectiveBindings(state.config.keybindings);
-  renderShortcutsUI();
-  state.customFonts = customFonts;
-  if (state.config.font_family.startsWith('custom:')) {
-    await loadCustomFont(state.config.font_family.slice(7));
+  // The window is created hidden (`visible: false` in tauri.conf.json) and
+  // shown only once the config, bindings and recent list are painted.
+  // Shown earlier, the launch is three visible stages — the webview's
+  // blank white surface, then index.html with its static defaults (wrong
+  // theme colors, empty shortcut chips, no Recent column), then the real
+  // layout — which on a slow machine reads as a flash and a late restyle.
+  // The startup reads are independent — issue them concurrently so first
+  // paint waits on one IPC round-trip, not four in sequence.
+  let cliFiles = [];
+  try {
+    const [config, customFonts, recent, cli] = await Promise.all([
+      invoke('get_config'),
+      invoke('list_custom_fonts'),
+      invoke('list_recent_files').catch(() => []),
+      invoke('get_cli_files'),
+    ]);
+    cliFiles = cli;
+    state.config = config;
+    state.bindings = effectiveBindings(state.config.keybindings);
+    renderShortcutsUI();
+    state.customFonts = customFonts;
+    if (state.config.font_family.startsWith('custom:')) {
+      await loadCustomFont(state.config.font_family.slice(7));
+    }
+    applyConfig(state.config);
+    // Restore the right-side outline sidebar's persisted open/closed state.
+    applyOutlineVisibility();
+    applyRecentFiles(recent);
+  } finally {
+    // Whatever happened above, never leave the user with an invisible app.
+    await appWindow.show();
   }
-  applyConfig(state.config);
-  // Restore the right-side outline sidebar's persisted open/closed state.
-  applyOutlineVisibility();
-
-  invoke('list_recent_files').then(applyRecentFiles).catch(() => {});
 
   // Open every file passed on the command line (Explorer "Open with…" can
   // pass multiple paths in a single launch).
