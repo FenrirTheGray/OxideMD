@@ -161,7 +161,13 @@ siblings.
 **`app.ts`** — the entry point: runs `init()`, wires the global keyboard and
 button handlers, registers action handlers against the keybinding registry, and
 subscribes to backend events. It imports `core/logger` first so the global
-error handlers are live before anything else runs. It also owns two
+error handlers are live before anything else runs. The main window is created
+hidden (`visible: false` in `tauri.conf.json`) and `init()` calls
+`appWindow.show()` — in a `finally`, so a failed read never leaves the app
+invisible — only after the config, bindings and recent list are painted;
+shown any earlier, the launch flashes the webview's blank white surface and
+then `index.html`'s static defaults before the real layout, which on a slow
+machine reads as a late restyle. It also owns two
 document-level input guards: the `body.pointer-nav` modality class (a pointer
 press hides focus rings, a navigation key shows them — WebKitGTK otherwise
 paints `:focus-visible` on programmatic focus after a click) and the modal
