@@ -5,21 +5,21 @@ description = "A lightweight, cross-platform Markdown viewer and editor"
 authors = ["Aleksandar Colovic"]
 license = "MIT"
 repository = "https://github.com/FenrirTheGray/OxideMD"
-edition = "2021"
-rust-version = "1.77.2"
+edition = "2024"
+rust-version = "1.85"
 
 [lib]
 name = "oxidemd_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.6", features = [] }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.10.3", features = ["protocol-asset"] }
+tauri = { version = "2.11.5", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = "2"
@@ -27,17 +27,17 @@ tauri-plugin-updater = "2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
 
-pulldown-cmark = { version = "0.12", features = ["simd"] }
+pulldown-cmark = { version = "0.13", features = ["simd"] }
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }
 # ponytail: read-only, migrates pre-4.9 config.toml → config.json; drop
 # once migrated installs dominate (see config.rs load_legacy_config).
-toml = "0.8"
-directories = "5"
+toml = "1"
+directories = "6"
 open = "5"
-base64 = "0.22"
-notify = "6"
+base64 = "0.23"
+notify = "8"
 tempfile = "3"
-sha2 = "0.10"
+sha2 = "0.11"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

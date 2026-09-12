@@ -3,8 +3,8 @@ use crate::util::{html_escape, html_escape_attr};
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// How an image `src` should reach the rendered HTML.
 ///
@@ -927,7 +927,9 @@ mod tests {
     #[test]
     fn render_heading_with_emphasis_preserves_em_inside_hn() {
         let out = render("### *emph* rest\n", None);
-        assert!(out.contains("<h3 id=\"emph-rest\" data-source-line=\"1\"><em>emph</em> rest</h3>"));
+        assert!(
+            out.contains("<h3 id=\"emph-rest\" data-source-line=\"1\"><em>emph</em> rest</h3>")
+        );
     }
 
     #[test]
