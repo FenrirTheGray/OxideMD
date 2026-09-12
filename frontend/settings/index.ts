@@ -1339,6 +1339,12 @@ async function resetSettings() {
     pendingOverrides = Object.create(null);
     renderShortcutsPanel();
   }
+
+  // Same async/programmatic-mutation caveat as addFontFromDialog: the
+  // "Reset defaults" click was diffed before the confirm was answered, and
+  // every branch above assigns `.value` directly (no input/change event),
+  // so recompute the dirty state or Save stays disabled on a real change.
+  refreshSaveButtonState();
 }
 
 // ── Settings event wiring ─────────────────────────────────────────────────
