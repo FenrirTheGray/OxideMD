@@ -383,7 +383,9 @@ export function showWelcome() {
   // rebinds are reflected.
   renderShortcutsUI();
   renderRecentFiles();
-  contentEl.style.fontSize = '';
+  // Drop applyZoom's inline font-size *and* max-width — the inline width
+  // would otherwise outrank the welcome screen's wider bento layout.
+  contentEl.removeAttribute('style');
   appWindow.setTitle('OxideMD');
   document.title = 'OxideMD';
   setStatusFilePath('');
