@@ -35,6 +35,13 @@ export function pathExtension(p) {
   return p.slice(dot + 1).toLowerCase();
 }
 
+// Image extensions accepted for import into a document's assets/ folder
+// (editor drop, image prompt). Mirrors the backend's DROP_IMAGE_EXTS so both
+// ends agree on what counts as an image.
+export const IMAGE_EXTS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico', 'tif', 'tiff',
+]);
+
 export function isMarkdownPath(p) {
   return typeof p === 'string' && mdExtensions().includes(pathExtension(p));
 }

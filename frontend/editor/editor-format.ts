@@ -6,12 +6,15 @@
 
 import { EditorSelection } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
-import { snippet } from '@codemirror/autocomplete';
 import {
-  toggleOrderedBlock, buildHrInsert, LIST_PREFIX_RE, splitIndent,
-  codeSpan, unpadCode, codeFence, stripCodeSpan,
+  toggleOrderedBlock, buildHrInsert, buildTableInsert, buildLink, buildCodeBlockInsert, LIST_PREFIX_RE, splitIndent,
+  codeSpan, unpadCode, stripCodeSpan,
   blockLineSpan, wrapChunks, unwrapChunks,
 } from './md-transform.ts';
+import { promptTable, promptLink, promptImage, promptCodeBlock } from '../ui/insert-dialogs.ts';
+import { invoke } from '../core/state.ts';
+import { activeTab } from '../core/tab-state.ts';
+import { showErrorModal } from '../ui/error-modal.ts';
 
 // Walk up from `pos` to the nearest enclosing lezer-markdown node named
 // `nodeName` (e.g. 'StrongEmphasis', 'Emphasis', 'Strikethrough',
@@ -68,10 +71,6 @@ function edit(view: any, from: any, to: any, insert: any, selFrom?: any, selTo?:
   }
   view.dispatch(tr);
   view.focus();
-}
-
-function atLineStart(v, pos) {
-  return pos === 0 || v[pos - 1] === '\n';
 }
 
 // Block-op helper: expand the current selection to cover whole lines.
@@ -271,9 +270,9 @@ function toggleOrdered(view) {
 }
 
 // ── Block inserts (link / image / code block / hr) ────────────────────
-// A scheme-prefixed URL on the clipboard fills the url slot directly instead
-// of the `url` placeholder (mirrors Google Docs / GitHub). Kept strict —
-// scheme-only — so arbitrary clipboard text never lands in the url slot.
+// A scheme-prefixed URL on the clipboard prefills the prompt's URL field
+// (mirrors Google Docs / GitHub). Kept strict — scheme-only — so arbitrary
+// clipboard text never lands there.
 const CLIPBOARD_URL_RE = /^(?:https?:\/\/|mailto:|tel:)\S+$/i;
 async function clipboardUrl() {
   try {
@@ -282,71 +281,85 @@ async function clipboardUrl() {
   } catch { return null; }
 }
 
+// Link / image / code block each ask in a modal first (ui/insert-dialogs).
+// As with the table, the selection is re-read after the modal closes and a
+// remounted editor (external reload behind the modal) is left alone; Cancel
+// hands focus back with the selection untouched. The selection, if any,
+// prefills the link text / alt text and is replaced by the result.
 async function insertLink(view) {
-  let { s, e } = getSel(view);
-  // No selection: insert with snippet tab-stops so Tab jumps text → url.
-  if (s === e) {
-    snippet('[${text}](${url})')(view, null, s, e);
-    view.focus();
-    return;
-  }
-  // Text selected: it becomes the label; fill the url from a clipboard URL
-  // when one is present, else drop the `url` placeholder selected.
-  const url = await clipboardUrl();
-  // Re-read the selection: the clipboard read can take a while (permission
-  // prompt) and the doc may have changed under the stale offsets.
-  ({ s, e } = getSel(view));
-  const text = view.state.sliceDoc(s, e);
-  const out = `[${text}](${url ?? 'url'})`;
-  if (url) {
-    const end = s + out.length;  // whole link filled — caret after it
-    edit(view, s, e, out, end, end);
-  } else {
-    const urlStart = s + 1 + text.length + 2;  // '[' + text + ']('
-    edit(view, s, e, out, urlStart, urlStart + 3);
-  }
+  const { s, e } = getSel(view);
+  const spec = await promptLink({ text: view.state.sliceDoc(s, e), url: (await clipboardUrl()) ?? '' });
+  if (!view.dom.isConnected) return;
+  if (!spec) { view.focus(); return; }
+  const { s: from, e: to } = getSel(view);
+  const out = buildLink(spec.text || spec.url, spec.url);
+  edit(view, from, to, out, from + out.length);
 }
 
+// A picked or dropped file is copied into the document's assets/ folder
+// only now, after Insert, so a cancelled prompt leaves no stray copy.
+// ponytail: a file already inside assets/ is copied again (as name-1.png);
+// reference it in place if that turns out to be common.
 async function insertImage(view) {
-  let { s, e } = getSel(view);
-  if (s === e) {
-    snippet('![${alt}](${url})')(view, null, s, e);
-    view.focus();
-    return;
+  const { s, e } = getSel(view);
+  const basePath = activeTab()?.path;
+  const spec = await promptImage({
+    alt: view.state.sliceDoc(s, e),
+    url: (await clipboardUrl()) ?? '',
+    canUpload: !!basePath,
+  });
+  if (!view.dom.isConnected) return;
+  if (!spec) { view.focus(); return; }
+  let src = spec.url;
+  if (spec.file) {
+    try {
+      src = (await invoke('import_dropped_image', { basePath, sourcePath: spec.file }) as any).relative_href;
+    } catch (err) {
+      await showErrorModal('Image insert failed', 'Could not copy the image into the assets folder.', err);
+      if (view.dom.isConnected) view.focus();
+      return;
+    }
+    if (!view.dom.isConnected) return;
   }
-  const url = await clipboardUrl();
-  // Same stale-offset guard as insertLink.
-  ({ s, e } = getSel(view));
-  const alt = view.state.sliceDoc(s, e);
-  const out = `![${alt}](${url ?? 'url'})`;
-  if (url) {
-    const end = s + out.length;
-    edit(view, s, e, out, end, end);
-  } else {
-    const urlStart = s + 2 + alt.length + 2;  // '![' + alt + ']('
-    edit(view, s, e, out, urlStart, urlStart + 3);
-  }
+  const { s: from, e: to } = getSel(view);
+  const out = buildLink(spec.alt, src, true);
+  edit(view, from, to, out, from + out.length);
 }
 
-function insertCodeBlock(view) {
+async function insertCodeBlock(view) {
+  const spec = await promptCodeBlock();
+  if (!view.dom.isConnected) return;
+  if (!spec) { view.focus(); return; }
   const v = getDoc(view);
   const { s, e } = getSel(view);
-  const sel = v.slice(s, e);
-  const pre = atLineStart(v, s) ? '' : '\n';
-  const fence = codeFence(sel);  // ≥3 backticks, longer than any run inside
-  const snippet = `${pre}${fence}\n${sel}\n${fence}\n`;
-  if (!sel) {
-    const caret = s + pre.length + fence.length + 1;  // pre + fence + '\n'
-    edit(view, s, e, snippet, caret, caret);
-  } else {
-    edit(view, s, e, snippet);
-  }
+  const { text, caret } = buildCodeBlockInsert(v.slice(0, s), v.slice(s, e), spec.lang);
+  if (caret == null) edit(view, s, e, text);
+  else edit(view, s, e, text, s + caret);
 }
 
 function insertHr(view) {
   const v = getDoc(view);
   const { s } = getSel(view);
   edit(view, s, s, buildHrInsert(v.slice(0, s)));
+}
+
+// Asks for the size and header texts in the modal, then inserts at the
+// caret. A left-blank first header is inserted as its `Header 1` placeholder
+// and selected so typing replaces it; otherwise the caret goes to the first
+// body cell, the next thing to fill in. The caret is read after the dialog closes, not
+// before: the modal blocks the user, but an external reload or a file opened
+// from another instance can still remount the editor behind it, and then
+// this view is gone. Cancel hands focus back to the editor with its
+// selection untouched.
+async function insertTable(view) {
+  const spec = await promptTable();
+  if (!view.dom.isConnected) return;
+  if (!spec) { view.focus(); return; }
+  const v = getDoc(view);
+  const pos = view.state.selection.main.head;
+  const { text, header, body } = buildTableInsert(v.slice(0, pos), v.slice(pos), spec.headers, spec.rows);
+  if (spec.headers[0].trim()) edit(view, pos, pos, text, pos + body);
+  else edit(view, pos, pos, text, pos + header, pos + header + 'Header 1'.length);
 }
 
 // ── Indent / outdent (Tab / Shift+Tab) ────────────────────────────────
@@ -406,6 +419,7 @@ export function applyFormat(view, action) {
     case 'image':     return insertImage(view);
     case 'codeblock': return insertCodeBlock(view);
     case 'hr':        return insertHr(view);
+    case 'table':     return insertTable(view);
     case 'indent':    return indent(view);
     case 'outdent':   return outdent(view);
   }

@@ -63,7 +63,7 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
 
 - A full text editor with Markdown-aware highlighting, toggled per tab
 - Split view with a draggable divider and synchronized scrolling; the preview can sit on either side
-- A formatting toolbar and rebindable shortcuts for bold, italic, strikethrough, inline code, headings, lists, links, images, and indentation
+- A formatting toolbar and rebindable shortcuts for bold, italic, strikethrough, inline code, headings, lists, links, images, and indentation, plus dialogs for inserting tables (size and header names), links, images (alt text, then a dropped or picked file or a link) and code blocks (language)
 - Smart Enter that continues lists and blockquotes, and exits the block on a second press
 - Themed find-and-replace inside the editor
 - Per-file draft autosave with a recovery prompt — and a conflict warning if the file changed on disk

@@ -48,6 +48,7 @@ import { activeTab } from "./ui/tabs.ts";
 import { isDirty } from "./core/tab-state.ts";
 import { printActiveTab } from "./features/print.ts";
 import { showToast } from "./ui/toast.ts";
+import { imagePromptDrag } from "./ui/insert-dialogs.ts";
 import "./ui/error-modal.ts";
 import "./ui/contextmenu.js";
 import { isMoreMenuOpen, closeMoreMenu } from "./ui/window-size.js";
@@ -70,9 +71,9 @@ document.addEventListener('keydown', (e) => {
 // After the last control in a modal <dialog> (and before the first, going
 // backwards) WebKit parks focus on the document itself before wrapping — an
 // invisible Tab stop. Wrap straight from last to first and back instead.
-document.addEventListener('keydown', (e) => {
 // Focus parked on the <dialog> itself (a backdrop click puts it there) is
 // outside the stops, so Tab goes to the first and Shift+Tab to the last.
+document.addEventListener('keydown', (e) => {
   // `code`, not `key`: WebKitGTK on X11 reports Shift+Tab (ISO_Left_Tab)
   // as key 'Unidentified'.
   if (e.code !== 'Tab') return;
@@ -159,6 +160,9 @@ async function init() {
 
   await appWindow.onDragDropEvent(async (e) => {
     const p = e.payload;
+    // The image insert prompt takes every drag while it's open.
+    const at = p.type === 'leave' ? null : dropClientPoint(p.position);
+    if (imagePromptDrag(p.type, 'paths' in p ? p.paths : [], at?.x, at?.y)) return;
     if (p.type === 'leave') {
       editorModule()?.clearEditorDropHint();
       return;

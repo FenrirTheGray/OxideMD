@@ -12,7 +12,7 @@ import {
   btnSave, btnDiscard, btnPreview,
   statusIndicator, statusText,
   modKey,
-  pathExtension,
+  pathExtension, IMAGE_EXTS,
 } from "../core/state.ts";
 import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
 import { syncWatcher } from "../ui/folder.ts";
@@ -697,11 +697,6 @@ function blobToBase64(blob) {
 }
 
 // ── Drag-and-drop image insertion ──────────────────────────────────────────
-// Image extensions accepted via drag-and-drop. Mirrors the backend's
-// DROP_IMAGE_EXTS so both ends agree on what counts as an image.
-const DROP_IMAGE_EXTS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico', 'tif', 'tiff',
-]);
 
 // True when the editor is mounted (edit mode) and the client point lands on
 // the CodeMirror surface — the gate for treating a file drop as an image
@@ -729,7 +724,7 @@ let lastDropAt = 0;
 
 export async function dropImagesIntoEditor(paths, x, y) {
   if (!pointInEditor(x, y)) return false;
-  const images = paths.filter((p) => DROP_IMAGE_EXTS.has(pathExtension(p)));
+  const images = paths.filter((p) => IMAGE_EXTS.has(pathExtension(p)));
   if (!images.length) return false; // non-images fall through (e.g. a .md)
 
   // Tauri v2 can fire a single file-drop twice (tauri#14134). Ignore an

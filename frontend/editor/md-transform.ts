@@ -3,6 +3,8 @@
 // unit-tested directly with `node --test` (see md-transform.test.ts), the same
 // way the accelerator layer is.
 
+import { formatTableBlock } from '../lib/md-table.ts';
+
 // The marker of any list item (bullet, task, or ordered) at the start of a
 // line, so a line can be re-tagged from one list type to another. Both
 // CommonMark ordered delimiters (`1.` and `1)`) are recognized on input;
@@ -152,9 +154,64 @@ export function toggleOrderedBlock(block: string): string {
 // topping the trailing newlines up to two (none needed at the start of the
 // document).
 export function buildHrInsert(before: string): string {
-  if (before.length === 0) return '---\n';
+  return blankLineBefore(before) + '---\n';
+}
+
+// Newlines that top `before`'s trailing ones up to a blank line (none at the
+// start of the document), so an inserted block starts on its own paragraph.
+function blankLineBefore(before: string): string {
+  if (before.length === 0) return '';
   const trailing = /\n*$/.exec(before)?.[0].length ?? 0;
-  return '\n'.repeat(Math.max(0, 2 - trailing)) + '---\n';
+  return '\n'.repeat(Math.max(0, 2 - trailing));
+}
+
+// A GFM table with one column per entry of `headers` (a blank entry becomes
+// the placeholder `Header N`), a delimiter row and `rows` empty body rows, to
+// insert between `before` and `after`. Pre-aligned by the same formatter the
+// live realign uses so it lands verbatim. Blank lines go on both sides: one
+// is needed before so the header isn't read as part of a paragraph, and one
+// after because a non-blank line directly under a table is taken as another
+// row (GFM tables end at a blank line). `header` and `body` are the offsets
+// in `text` of the first header cell's text and the first body cell.
+export function buildTableInsert(before: string, after: string, headers: string[], rows: number): { text: string, header: number, body: number } {
+  // An unescaped `|` in a header would split it into two columns.
+  const cells = headers.map((h, i) => h.trim().replace(/(?<!\\)\|/g, '\\|') || `Header ${i + 1}`);
+  const lines = formatTableBlock([
+    `| ${cells.join(' | ')} |`,
+    '|' + ' --- |'.repeat(cells.length),
+    ...Array<string>(rows).fill('|' + ' |'.repeat(cells.length)),
+  ]);
+  const lead = blankLineBefore(before);
+  const leading = /^\n*/.exec(after)![0].length;
+  const tail = after.length === 0 ? '\n' : '\n'.repeat(Math.max(0, 2 - leading));
+  // Each row opens with `| `, so a cell's text starts two columns in.
+  const header = lead.length + 2;
+  const body = header + lines[0].length + 1 + lines[1].length + 1;
+  return { text: lead + lines.join('\n') + tail, header, body };
+}
+
+// `[text](url)`, or `![alt](url)` with `image`. Unescaped brackets in the
+// text are escaped so they can't end the label early. A destination with
+// whitespace or parentheses is wrapped in `<…>`, the CommonMark form that
+// allows them (a bare space would end the URL); `<`/`>` can't appear inside
+// that form, so they're percent-encoded.
+export function buildLink(text: string, url: string, image = false): string {
+  const label = text.replace(/(?<!\\)[[\]]/g, '\\$&');
+  const dest = url.replace(/</g, '%3C').replace(/>/g, '%3E');
+  return `${image ? '!' : ''}[${label}](${/[\s()]/.test(dest) ? `<${dest}>` : dest})`;
+}
+
+// A fenced code block around `sel` (empty for a new block) tagged with
+// `lang`, to replace the selection that follows `before`. The info string
+// keeps only the first word with backticks dropped: a backtick there would
+// stop the line being a fence. `caret` (offset in `text`) is the empty body
+// line for a new block, null when wrapping a selection.
+export function buildCodeBlockInsert(before: string, sel: string, lang: string): { text: string, caret: number | null } {
+  const info = lang.trim().split(/\s+/)[0].replace(/`/g, '');
+  const pre = before === '' || before.endsWith('\n') ? '' : '\n';
+  const fence = codeFence(sel);  // ≥3 backticks, longer than any run inside
+  const text = `${pre}${fence}${info}\n${sel}\n${fence}\n`;
+  return { text, caret: sel ? null : pre.length + fence.length + info.length + 1 };
 }
 
 const longestBacktickRun = (s: string): number =>

@@ -87,9 +87,12 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   the webview can register a `@font-face`).
 - **Recent files** — `list_recent_files`, `mark_recent_file`,
   `forget_recent_file`, `clear_recent_files`; backed by a capped list in config.
-- **Image paste** — `write_pasted_image` (decode base64 image bytes into an
+- **Images** — `write_pasted_image` (decode base64 image bytes into an
   `assets/` folder beside the file; returns both the absolute path and the
-  Markdown-relative href).
+  Markdown-relative href), `import_dropped_image` (copy a local image file
+  into that folder, same return shape; used by editor drops and the image
+  insert prompt), `pick_image` (native open dialog filtered to the
+  importable image types).
 - **Export / print** — `export_html` (render to a self-contained,
   theme-agnostic HTML file), `pick_export_path`. Print-to-PDF itself is
   frontend-only (see [Rendering](#rendering)).
@@ -232,13 +235,13 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 - **`editor-format.ts`** — the Markdown formatting commands (bold, italic,
   lists, headings, link, …), each a single CM6 transaction, shared by the
   toolbar and the shortcuts.
-
-**`features/`** — self-contained user-facing features.
-
 - **`line-selection.ts`** — paints the text selection line by line with
   rounded corners, in place of `drawSelection`'s full-width slab
   (`drawSelection` still draws the cursors), and flags the editor while a
   selection exists so the active-line wash steps aside.
+
+**`features/`** — self-contained user-facing features.
+
 - **`search.ts`** — in-document search (match highlighting, next/prev, counter).
 - **`search-project.ts`** — the project-wide content-search panel that lives
   inside the sidebar (calls `search_project`, lists file-grouped results).
@@ -300,6 +303,13 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   `showModal()` for the focus trap and inert background, with a `cancel`
   handler that routes Escape through the app's close path instead of the
   native instant-close.
+- **`insert-dialogs.ts`** — the edit toolbar's insert prompts (table, link,
+  image, code block), each a form rendered into the shared confirm dialog.
+  The code block language is a searchable dropdown in the `custom-select`
+  style. OS file drops arrive only as Tauri drag-drop events, so `app.ts`
+  routes them to the image prompt's drop zone while it is open. It lives in
+  `ui/` (main bundle) for that routing; the actions that call it are in
+  `editor/editor-format.ts`.
 - **`reveal.ts`** — search-hit reveal painting (CSS Highlight API + block
   wash) shared by read mode and the edit-mode preview.
 

@@ -213,6 +213,7 @@ pub fn run() {
             commands::render_preview,
             commands::get_cli_files,
             commands::pick_file,
+            commands::pick_image,
             commands::save_new_file,
             commands::delete_path,
             commands::rename_path,

@@ -5,9 +5,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  toggleOrderedBlock, buildHrInsert, codeSpan, unpadCode, codeFence, stripCodeSpan,
+  toggleOrderedBlock, buildHrInsert, buildTableInsert, buildLink, buildCodeBlockInsert, codeSpan, unpadCode, codeFence, stripCodeSpan,
   splitIndent, diffSplice, blockLineSpan, wrapChunks, unwrapChunks,
 } from './md-transform.ts';
+import { formatTableBlock } from '../lib/md-table.ts';
 
 test('toggleOrderedBlock: numbers a single line', () => {
   assert.equal(toggleOrderedBlock('Foo'), '1. Foo');
@@ -184,4 +185,58 @@ test('codeSpan / stripCodeSpan: wrapping then unwrapping round-trips', () => {
 test('stripCodeSpan: returns null when not a code span', () => {
   assert.equal(stripCodeSpan('not code'), null);
   assert.equal(stripCodeSpan('`unbalanced'), null);
+});
+
+test('buildTableInsert: aligned table split off by blank lines at a mid-line cursor', () => {
+  const { text, header, body } = buildTableInsert('foo', 'bar', ['', 'Name'], 2);
+  const table = [
+    '| Header 1 | Name |',
+    '| -------- | ---- |',
+    '|          |      |',
+    '|          |      |',
+  ];
+  assert.equal(text, '\n\n' + table.join('\n') + '\n\n');
+  assert.equal(text.slice(header, header + 8), 'Header 1');
+  assert.equal(body, text.indexOf(table[2]) + 2);
+  // Already in formatter shape, so the live realign leaves it alone.
+  assert.deepEqual(formatTableBlock(table), table);
+});
+
+test('buildTableInsert: headers are trimmed and a bare pipe is escaped', () => {
+  const { text } = buildTableInsert('', '', ['  a|b ', 'c\\|d'], 1);
+  assert.equal(text.split('\n')[0], '| a\\|b | c\\|d |');
+});
+
+test('buildTableInsert: gaps top up existing newlines, none at the document edges', () => {
+  const t = buildTableInsert('', '', [''], 1).text;
+  assert.equal(t, '| Header 1 |\n| -------- |\n|          |\n');
+  assert.equal(buildTableInsert('a\n', '\nb', [''], 1).text, '\n' + t);
+  assert.equal(buildTableInsert('a\n\n', '\n\nb', [''], 1).text, t.slice(0, -1));
+});
+
+test('buildLink: plain link and image', () => {
+  assert.equal(buildLink('Docs', 'https://x.io/a'), '[Docs](https://x.io/a)');
+  assert.equal(buildLink('A cat', 'assets/cat.png', true), '![A cat](assets/cat.png)');
+});
+
+test('buildLink: brackets in the text are escaped, already-escaped ones kept', () => {
+  assert.equal(buildLink('a [b] c', 'u'), '[a \\[b\\] c](u)');
+  assert.equal(buildLink('x\\]', 'u'), '[x\\]](u)');
+});
+
+test('buildLink: spaces or parens wrap the destination in angle brackets', () => {
+  assert.equal(buildLink('t', 'my file.png'), '[t](<my file.png>)');
+  assert.equal(buildLink('t', 'https://en.wikipedia.org/wiki/Rust_(language)'), '[t](<https://en.wikipedia.org/wiki/Rust_(language)>)');
+  assert.equal(buildLink('t', 'a b<c>'), '[t](<a b%3Cc%3E>)');
+});
+
+test('buildCodeBlockInsert: new block tagged, caret on the empty body line', () => {
+  const { text, caret } = buildCodeBlockInsert('intro', '', ' sql extra ');
+  assert.equal(text, '\n```sql\n\n```\n');
+  assert.equal(text.slice(0, caret!), '\n```sql\n');
+});
+
+test('buildCodeBlockInsert: wraps a selection, backticks dropped from the language', () => {
+  assert.deepEqual(buildCodeBlockInsert('', 'a ``` b', 'j`s'), { text: '````js\na ``` b\n````\n', caret: null });
+  assert.equal(buildCodeBlockInsert('x\n', 'y', '').text, '```\ny\n```\n');
 });

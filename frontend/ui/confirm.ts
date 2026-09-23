@@ -22,13 +22,16 @@ let confirmResolve = null;
 // Which button is the "primary" action for the current dialog open —
 // what Enter resolves to.
 let confirmPrimary = 'save';
+// Whether a click on the dim backdrop cancels the current open.
+let confirmBackdropCloses = true;
 
 // `saveHidden` lets the toolbar's Discard flow reuse this dialog as a
 // pure confirm (the user already chose to discard — Save would be
 // nonsensical). `primary` selects which button Enter activates:
 // 'save' for the unsaved-changes prompt,
 // 'discard' for the explicit Discard click, 'cancel' otherwise.
-function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, discardHidden, primary }: any) {
+// `backdropCloses: false` leaves the buttons and Escape as the only exits.
+export function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, discardHidden, primary, backdropCloses = true }: any) {
   confirmDialogTitle.textContent = title;
   confirmDialogBody.innerHTML = bodyHtml;
   confirmSaveBtn.textContent = saveLabel ?? 'Save';
@@ -37,6 +40,9 @@ function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHi
   confirmSaveBtn.hidden = !!saveHidden;
   confirmDiscardBtn.hidden = !!discardHidden;
   confirmPrimary = primary || 'save';
+  confirmBackdropCloses = backdropCloses;
+  // A prompt may disable its primary until the form is filled; start enabled.
+  (confirmSaveBtn as HTMLButtonElement).disabled = false;
 }
 
 export function promptUnsavedChanges(tab) {
@@ -196,7 +202,7 @@ function formatDraftTimestamp(ts) {
   try { return new Date(ts).toLocaleString(); } catch { return 'an earlier session'; }
 }
 
-function openConfirmDialog() {
+export function openConfirmDialog() {
   // showModal() gives the focus trap + inert background natively, and
   // restores focus to the trigger on close(). It focuses the first control;
   // move that to the dialog itself so nothing is highlighted until Tab.
@@ -228,7 +234,7 @@ confirmSaveBtn.addEventListener('click', () => closeConfirmDialog('save'));
 confirmDiscardBtn.addEventListener('click', () => closeConfirmDialog('discard'));
 confirmCancelBtn.addEventListener('click', () => closeConfirmDialog('cancel'));
 confirmOverlay.addEventListener('click', (e) => {
-  if (e.target === confirmOverlay) closeConfirmDialog('cancel');
+  if (e.target === confirmOverlay && confirmBackdropCloses) closeConfirmDialog('cancel');
 });
 document.addEventListener('keydown', (e) => {
   if (!state.confirmDialogOpen) return;
@@ -238,8 +244,11 @@ document.addEventListener('keydown', (e) => {
     // anywhere else in the dialog (text input, body) means the primary.
     if (document.activeElement?.closest('button')) return;
     e.preventDefault();
-    closeConfirmDialog(confirmPrimary === 'cancel' ? 'cancel'
-                     : confirmPrimary === 'discard' ? 'discard'
-                     : 'save');
+    const decision = confirmPrimary === 'cancel' ? 'cancel'
+                   : confirmPrimary === 'discard' ? 'discard'
+                   : 'save';
+    // A primary disabled until its form is filled can't be forced by Enter.
+    const btn = { cancel: confirmCancelBtn, discard: confirmDiscardBtn, save: confirmSaveBtn }[decision] as HTMLButtonElement;
+    if (!btn.disabled) closeConfirmDialog(decision);
   }
 });

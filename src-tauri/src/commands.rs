@@ -130,6 +130,24 @@ pub async fn pick_file(app: tauri::AppHandle) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/// Native open dialog for the image insert prompt, filtered to the types
+/// `import_dropped_image` accepts. `None` when the user cancels.
+#[tauri::command]
+pub async fn pick_image(app: tauri::AppHandle) -> Option<String> {
+    let window = app.get_webview_window("main")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_parent(&window)
+            .add_filter("Images", DROP_IMAGE_EXTS)
+            .blocking_pick_file()
+            .map(|p| p.to_string())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// Save-as for an untitled (never-written) buffer: show the native save
 /// dialog (optionally rooted at `dir`), write the current `content` to the
 /// chosen path, and return it in the same shape as `open_file` so the
@@ -1067,8 +1085,8 @@ pub async fn write_pasted_image(
     .map_err(|e| e.to_string())?
 }
 
-/// Image extensions accepted for drag-and-drop import. Kept in sync with the
-/// frontend's `DROP_IMAGE_EXTS` so both sides agree on what counts as an image.
+/// Image extensions accepted for import (drop or picker). Kept in sync with
+/// the frontend's `IMAGE_EXTS` so both sides agree on what counts as an image.
 const DROP_IMAGE_EXTS: &[&str] = &[
     "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "ico", "tif", "tiff",
 ];

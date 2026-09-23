@@ -52,7 +52,7 @@ const TOOLBAR_LABELS = {
 // Edit-toolbar format buttons. Each `data-format` here has a matching
 // editor-context action in the registry, so its title can carry the live
 // shortcut hint. Format buttons that lack a shortcut (quote, codeblock,
-// hr) are absent from this map and keep their static HTML title.
+// hr, table) are absent from this map and keep their static HTML title.
 const FMT_TO_ACTION = {
   bold:   'bold',   italic: 'italic', strike: 'strike', code:   'code',
   h1:     'h1',     h2:     'h2',     h3:     'h3',

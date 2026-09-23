@@ -595,12 +595,14 @@ body.resizing-split * {
   box-shadow: var(--shadow-dialog);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* No overflow clip: a prompt's dropdown list may extend past the card.
+     The header and footer round their own corners instead. */
   font-size: 13px;
   animation: dialog-appear var(--dur) var(--ease-out);
 }
 
 #confirm-header {
+  border-radius: 14px 14px 0 0;
   padding: 15px 20px;
   background: var(--bg-settings-hd);
   border-bottom: 1px solid var(--border);
@@ -634,12 +636,125 @@ body.resizing-split * {
   font-size: 13px;
   font-family: var(--font-family);
 }
+.confirm-table-size {
+  display: grid;
+  /* minmax(0, …): a plain 1fr track can't shrink below its content's
+     min-content, and the stepper's value <input> has a wide intrinsic
+     width, so the Columns stepper overflowed the dialog. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.confirm-table-size > span,
+.confirm-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Link / image / code block prompt forms: labelled fields stacked. */
+.confirm-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.confirm-text-input:disabled {
+  opacity: 0.45;
+}
+/* A group of alternative inputs (image: file or link) as an island, the
+   app's rounded panel. Recessed onto the frame colour rather than raised:
+   --bg-elevated equals the dialog's --bg-settings in the stock themes, so
+   a raised island would vanish. */
+.confirm-island {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-toolbar);
+  border-radius: var(--island-radius);
+}
+.confirm-or {
+  align-self: center;
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--fg-dim);
+}
+/* Image prompt drop zone. OS drags arrive as Tauri events, so app.ts
+   toggles .drag-over from the pointer position (ui/insert-dialogs.ts). */
+.confirm-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 14px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  color: var(--fg-dim);
+  text-align: center;
+  transition:
+    border-color var(--dur-sm) var(--ease),
+    background var(--dur-sm) var(--ease);
+}
+.confirm-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+  color: var(--fg);
+}
+.confirm-drop-zone.has-file {
+  border-style: solid;
+  color: var(--fg);
+}
+.confirm-drop-zone.disabled {
+  opacity: 0.6;
+}
+.confirm-drop-label {
+  word-break: break-all;
+}
+.confirm-drop-actions {
+  display: flex;
+  gap: 8px;
+}
+/* Searchable dropdown (code block language): settings.css's custom-select
+   with a text input as the trigger. */
+.custom-select.searchable {
+  display: block;
+  user-select: auto;
+}
+.custom-select.searchable .custom-select-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  cursor: text;
+  outline: none;
+}
+.custom-select.searchable .custom-select-trigger:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.custom-select.searchable .custom-select-option {
+  display: block;
+}
+.custom-select.searchable .custom-select-option[hidden] {
+  display: none;
+}
+/* Up to 50 header fields: scroll past a handful rather than grow the
+   dialog off-screen. */
+.confirm-table-headers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.confirm-table-headers input[hidden] {
+  display: none;
+}
 .confirm-text-input:focus {
   outline: none;
   border-color: var(--border-focus);
 }
 
 #confirm-footer {
+  border-radius: 0 0 14px 14px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -647,7 +762,8 @@ body.resizing-split * {
   background: var(--bg-settings-ft);
   border-top: 1px solid var(--border);
 }
-#confirm-footer button {
+#confirm-footer button,
+.confirm-drop-actions button {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -665,12 +781,19 @@ body.resizing-split * {
     transform var(--dur-sm) var(--ease),
     opacity var(--dur-sm) var(--ease);
 }
-#confirm-footer button:hover {
+#confirm-footer button:hover:not(:disabled),
+.confirm-drop-actions button:hover:not(:disabled) {
   background: var(--bg-btn-hover);
   color: var(--accent);
   border-color: var(--border-focus);
 }
-#confirm-footer button:focus-visible {
+#confirm-footer button:disabled,
+.confirm-drop-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#confirm-footer button:focus-visible,
+.confirm-drop-actions button:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 2px;
 }
@@ -692,7 +815,7 @@ body.resizing-split * {
   font-weight: 700;
   padding: 7px 24px;
 }
-#confirm-footer #confirm-save.primary:hover {
+#confirm-footer #confirm-save.primary:hover:not(:disabled) {
   filter: brightness(1.08);
   color: #fff;
 }

@@ -156,7 +156,9 @@ document.querySelectorAll(".segmented").forEach((el) => {
 });
 
 // ── Custom number inputs ───────────────────────────────────────────────────
-document.querySelectorAll(".custom-number").forEach((el) => {
+// Exported for number fields built at runtime (the table insert prompt);
+// the static settings ones are wired below at import.
+export function wireCustomNumber(el: Element) {
   const num = el as HTMLElement;
   const display = num.querySelector(".custom-number-value") as HTMLInputElement;
   const min = parseFloat(num.dataset.min ?? "0");
@@ -211,7 +213,8 @@ document.querySelectorAll(".custom-number").forEach((el) => {
     const parsed = parseFloat(display.value.replace(",", "."));
     (num as any).value = Number.isFinite(parsed) ? parsed : (num as any).value;
   });
-});
+}
+document.querySelectorAll(".custom-number").forEach(wireCustomNumber);
 
 // ── Tags field (token editor) ───────────────────────────────────────────────
 // The Markdown-extension editor: a list of removable chips (the current
