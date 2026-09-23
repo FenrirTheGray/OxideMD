@@ -33,12 +33,13 @@ import { showErrorModal } from "../ui/error-modal.ts";
 import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
 import { liveTableAlign } from "./table-align.ts";
+import { lineSelection } from "./line-selection.ts";
 import { diffSplice } from "./md-transform.ts";
 import { debounce } from "../lib/timing.ts";
 
 import {
   EditorView, keymap, lineNumbers, Decoration, ViewPlugin,
-  drawSelection, dropCursor, highlightActiveLine, highlightSpecialChars, rectangularSelection,
+  drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, rectangularSelection,
 } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder, Compartment } from '@codemirror/state';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
@@ -357,6 +358,9 @@ const oxideCmTheme = EditorView.theme({
     overflow: 'auto',
     fontFamily: 'inherit',
     lineHeight: 'var(--content-line-height, 1.7)',
+    // Inset the rows from the island edges, like the sidebar rows, so the
+    // active-line pill doesn't run into them. The scrollbar stays flush.
+    padding: '0 var(--row-inset)',
   },
   '.cm-content': {
     padding: '28px 0',
@@ -366,14 +370,29 @@ const oxideCmTheme = EditorView.theme({
     padding: '0 32px',
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
-  // drawSelection paints the selection into .cm-selectionLayer. CM6's base
-  // theme targets it with a 4-class selector, so ours must be at least as
-  // specific or the stock lavender wins.
-  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionLayer .cm-selectionBackground, ::selection': {
-    background: 'var(--accent-glow)',
+  // Smooth caret: CM6 reuses the cursor element across updates and only
+  // moves it, so a transition glides it to each new position (Word / VS Code
+  // "smooth caret animation"). Height too, for moves between heading and
+  // body lines. base.css's reduced-motion rule zeroes it.
+  '.cm-cursor': {
+    transition: 'left var(--dur-xs) var(--ease-out), top var(--dur-xs) var(--ease-out), height var(--dur-xs) var(--ease-out)',
   },
+  // The selection is painted by lineSelection (line-selection.ts), rounded
+  // per line; drawSelection's own slab rectangles are hidden.
+  '.cm-selectionLayer .cm-selectionBackground': { display: 'none' },
+  '.cm-lineSelection': { background: 'var(--accent-glow)', borderRadius: '4px' },
+  '&.cm-hasSelection .cm-activeLine, &.cm-hasSelection .cm-activeLineGutter': { backgroundColor: 'transparent' },
   // Translucent so the drawn selection underneath still shows through.
-  '.cm-activeLine': { backgroundColor: 'rgba(128, 128, 128, 0.09)' },
+  // A rounded pill; with line numbers on, the number's gutter cell carries
+  // the same wash and the left corners, the line the right ones, so the two
+  // halves (separate columns in CM6) read as one row highlight.
+  '.cm-activeLine': { backgroundColor: 'rgba(128, 128, 128, 0.09)', borderRadius: '7px' },
+  '.cm-gutters ~ .cm-content .cm-activeLine': { borderRadius: '0 7px 7px 0' },
+  '.cm-activeLineGutter': {
+    backgroundColor: 'rgba(128, 128, 128, 0.09)',
+    borderRadius: '7px 0 0 7px',
+    color: 'var(--fg)',
+  },
   '.cm-selectionMatch': { backgroundColor: 'var(--mark)', borderRadius: '2px' },
   '&.cm-focused .cm-matchingBracket': {
     backgroundColor: 'var(--accent-glow)',
@@ -560,6 +579,7 @@ function buildView(tab) {
     // Mouse gestures follow VS Code: Alt+click adds a cursor, Shift+Alt+
     // drag selects a column, Mod+D grabs the next occurrence.
     drawSelection(),
+    lineSelection,
     dropCursor(),
     highlightSpecialChars(),
     highlightActiveLine(),
@@ -582,7 +602,7 @@ function buildView(tab) {
       'spellcheck': spellCheck ? 'true' : 'false',
     })),
     wrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
-    gutterCompartment.of(showLineNumbers ? lineNumbers() : []),
+    gutterCompartment.of(showLineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : []),
     oxideCmTheme,
     updateListener,
   ];
@@ -828,7 +848,7 @@ function applyEditorSettings(view, cfg) {
   const tab = activeTab();
   view.dispatch({ effects: [
     wrapCompartment.reconfigure((cfg?.editor_word_wrap !== false) ? EditorView.lineWrapping : []),
-    gutterCompartment.reconfigure(cfg?.editor_line_numbers ? lineNumbers() : []),
+    gutterCompartment.reconfigure(cfg?.editor_line_numbers ? [lineNumbers(), highlightActiveLineGutter()] : []),
     attrsCompartment.reconfigure(EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab?.title ?? ''}`,
       'spellcheck': cfg?.editor_spell_check ? 'true' : 'false',

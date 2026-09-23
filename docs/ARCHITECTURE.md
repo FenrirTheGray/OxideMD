@@ -235,6 +235,10 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 
 **`features/`** — self-contained user-facing features.
 
+- **`line-selection.ts`** — paints the text selection line by line with
+  rounded corners, in place of `drawSelection`'s full-width slab
+  (`drawSelection` still draws the cursors), and flags the editor while a
+  selection exists so the active-line wash steps aside.
 - **`search.ts`** — in-document search (match highlighting, next/prev, counter).
 - **`search-project.ts`** — the project-wide content-search panel that lives
   inside the sidebar (calls `search_project`, lists file-grouped results).
