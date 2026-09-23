@@ -312,9 +312,6 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   `editor/editor-format.ts`.
 - **`reveal.ts`** — search-hit reveal painting (CSS Highlight API + block
   wash) shared by read mode and the edit-mode preview.
-
-`counts`, `confirm`, and `reveal` live in `ui/` rather than `editor/` so read
-mode can use them without pulling in the lazy CodeMirror chunk.
 - **`shortcuts-display.ts`** — renders the shortcut chips in the popover,
   welcome screen, and tooltips from `state.bindings`.
 - **`toast.ts`** — bottom-right toast notifications with an optional per-call
@@ -324,6 +321,9 @@ mode can use them without pulling in the lazy CodeMirror chunk.
   and the responsive-layout logic: the two-stage toolbar collapse, the
   `body.narrow` drawer mode below 720 px, and the invisible edge/corner resize
   handles.
+
+`counts`, `confirm`, and `reveal` live in `ui/` rather than `editor/` so read
+mode can use them without pulling in the lazy CodeMirror chunk.
 
 ## Key lifecycles
 

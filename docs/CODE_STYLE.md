@@ -25,7 +25,7 @@ rather than by an auto-formatter. Conventions in use:
   currently sets `"strict": false`, but still prefer precise types and avoid
   introducing new implicit `any`s.
 - **Imports** — within `frontend/`, import sibling modules with their explicit
-  `.ts` extension (e.g. `from "../core/state.ts"`), as the rest of the code
+  `.ts` extension (e.g. `from '../core/state.ts'`), as the rest of the code
   does.
 - **Quotes** — single quotes for strings, except where double quotes avoid
   escaping.
