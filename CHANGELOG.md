@@ -4,6 +4,25 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.14.0] - 2026-09-24
+
+### Added
+
+- Insert dialogs on the formatting toolbar. A new Table button asks for rows and columns (1–50) and the header names, then inserts a pre-aligned table with the caret in the first body cell. Link asks for the text and URL. Image asks for alt text, then a file dropped on or picked into its drop zone (copied into `assets/` only once you press Insert) or a link. Code block asks for the language from a searchable list. A selection prefills the text or alt field, and a URL on the clipboard prefills the URL
+- The editor caret glides to its new position instead of jumping; reduced-motion turns it off
+- The editor's active line is a rounded pill that spans the line-number gutter and brightens the current line number
+
+### Changed
+
+- Selections in the editor are painted line by line with rounded corners instead of one full-width slab, and the active-line highlight steps aside while text is selected
+- Dropdown lists (theme, font, code language, …) have inset rows with rounded highlights, like the context menu
+
+### Fixed
+
+- The formatting toolbar wraps onto more rows, a group at a time, when the editor island is too narrow, instead of clipping buttons off the edge
+- Modal dialogs open with nothing highlighted, and focus rings appear only after `Tab` or an arrow key, no longer after `Enter` or `Escape` closes a dialog
+- `Tab` and `Shift+Tab` stay inside an open dialog after a click on its backdrop, and `Shift+Tab` wraps correctly on X11, where WebKitGTK reports it as an unidentified key
+
 ## [4.13.3] - 2026-09-12
 
 ### Changed
