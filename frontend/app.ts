@@ -57,13 +57,13 @@ import { applyOutlineVisibility, closeOutline } from "./ui/outline.ts";
 // WebKitGTK keeps :focus-visible on programmatic focus (dialog open, focus
 // restore after a menu, option → trigger) even when the last input was a
 // mouse click, so rings appeared without Tab ever being pressed. Track the
-// modality on <body>: a pointer press hides rings, a navigation key shows
-// them again (base.css gates every ring on this). Typing into a field
-// doesn't count — printable keys and modifiers alone leave the mode as is.
+// modality on <body>: a pointer press hides rings, Tab or an arrow key (the
+// keys that move focus) shows them again (base.css gates every ring on this).
+// The app starts with rings hidden (index.html), and Enter / Escape don't
+// count, so closing a modal doesn't light up the element focus returns to.
 document.addEventListener('pointerdown', () => document.body.classList.add('pointer-nav'), true);
 document.addEventListener('keydown', (e) => {
-  if (e.key.length === 1 || ['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock'].includes(e.key)) return;
-  document.body.classList.remove('pointer-nav');
+  if (e.code === 'Tab' || e.key.startsWith('Arrow')) document.body.classList.remove('pointer-nav');
 }, true);
 
 // ── Modal focus loop ───────────────────────────────────────────────────────
@@ -71,15 +71,19 @@ document.addEventListener('keydown', (e) => {
 // backwards) WebKit parks focus on the document itself before wrapping — an
 // invisible Tab stop. Wrap straight from last to first and back instead.
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Tab') return;
+// Focus parked on the <dialog> itself (a backdrop click puts it there) is
+// outside the stops, so Tab goes to the first and Shift+Tab to the last.
+  // `code`, not `key`: WebKitGTK on X11 reports Shift+Tab (ISO_Left_Tab)
+  // as key 'Unidentified'.
+  if (e.code !== 'Tab') return;
   const dialog = (e.target as Element).closest?.('dialog[open]');
   if (!dialog) return;
   const stops = Array.from(dialog.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href], [tabindex]'))
     .filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && el.offsetParent !== null);
   if (!stops.length) return;
-  const first = stops[0], last = stops[stops.length - 1];
-  if (e.shiftKey && e.target === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && e.target === last) { e.preventDefault(); first.focus(); }
+  const i = stops.indexOf(e.target as HTMLElement);
+  if (e.shiftKey && i <= 0) { e.preventDefault(); stops[stops.length - 1].focus(); }
+  else if (!e.shiftKey && (i === -1 || i === stops.length - 1)) { e.preventDefault(); stops[0].focus(); }
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────

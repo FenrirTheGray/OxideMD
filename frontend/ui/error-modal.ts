@@ -11,9 +11,11 @@ let errorResolve: (() => void) | null = null;
 function openErrorDialog() {
   // Native showModal() traps focus, inerts the background, and restores
   // focus to the trigger on close().
+  // Focus the dialog, not OK: nothing highlighted until Tab. Enter /
+  // Escape dismiss it from the document-level handler below.
   if (!errorOverlay.open) errorOverlay.showModal();
+  errorOverlay.focus();
   state.errorDialogOpen = true;
-  requestAnimationFrame(() => errorOkBtn.focus());
   return new Promise<void>((resolve) => { errorResolve = resolve; });
 }
 

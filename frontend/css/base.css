@@ -36,6 +36,11 @@ body.pointer-nav :focus-visible:not(input):not(textarea):not([contenteditable]) 
   outline: none !important;
   box-shadow: none !important;
 }
+/* Modals open with focus on the <dialog> itself, so nothing inside is
+   highlighted until Tab moves into it. */
+dialog:focus {
+  outline: none;
+}
 
 /* ── Window-edge resize handles ──────────────────────────────────────
    Thin overlays at the body edges + corners. Each sets its own

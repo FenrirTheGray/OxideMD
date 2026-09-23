@@ -20,13 +20,13 @@ import { escapeHtml } from "../lib/escape.ts";
 
 let confirmResolve = null;
 // Which button is the "primary" action for the current dialog open —
-// drives both initial focus and what Enter resolves to.
+// what Enter resolves to.
 let confirmPrimary = 'save';
 
 // `saveHidden` lets the toolbar's Discard flow reuse this dialog as a
 // pure confirm (the user already chose to discard — Save would be
-// nonsensical). `primary` selects which button gets the initial focus
-// and the Enter accelerator: 'save' for the unsaved-changes prompt,
+// nonsensical). `primary` selects which button Enter activates:
+// 'save' for the unsaved-changes prompt,
 // 'discard' for the explicit Discard click, 'cancel' otherwise.
 function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, cancelHidden, saveHidden, discardHidden, primary }: any) {
   confirmDialogTitle.textContent = title;
@@ -168,14 +168,13 @@ export function promptText({ title, saveLabel, initial }: { title: string, saveL
   const promise = openConfirmDialog();
   const input = document.getElementById('confirm-text-input') as HTMLInputElement;
   input.value = initial ?? '';
-  // Runs after openConfirmDialog's own focus rAF (registered later), so
-  // the input wins. Preselect the stem so typing replaces the name but
-  // keeps the extension.
-  requestAnimationFrame(() => {
-    input.focus();
+  // No autofocus (nothing is highlighted until Tab). On first focus,
+  // preselect the stem so typing replaces the name but keeps the extension;
+  // a frame later, so it lands after the browser's own select-all on Tab.
+  input.addEventListener('focus', () => requestAnimationFrame(() => {
     const dot = input.value.lastIndexOf('.');
     input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
-  });
+  }), { once: true });
   return promise.then((decision) => {
     const value = input.value.trim();
     return decision === 'save' && value ? value : null;
@@ -199,17 +198,12 @@ function formatDraftTimestamp(ts) {
 
 function openConfirmDialog() {
   // showModal() gives the focus trap + inert background natively, and
-  // restores focus to the trigger on close(). The rAF below moves the
-  // initial focus from showModal's first-focusable to the primary button.
+  // restores focus to the trigger on close(). It focuses the first control;
+  // move that to the dialog itself so nothing is highlighted until Tab.
+  // Enter (primary) and Escape are document-level, so they work regardless.
   if (!confirmOverlay.open) confirmOverlay.showModal();
+  confirmOverlay.focus();
   state.confirmDialogOpen = true;
-  requestAnimationFrame(() => {
-    const target = confirmPrimary === 'discard' ? confirmDiscardBtn
-                 : confirmPrimary === 'cancel'  ? confirmCancelBtn
-                 : confirmSaveBtn;
-    if (target && !target.hidden) target.focus();
-    else confirmCancelBtn.focus();
-  });
   return new Promise((resolve) => { confirmResolve = resolve; });
 }
 

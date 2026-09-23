@@ -773,9 +773,9 @@ export function openSettings(tabName) {
   // (see the global handler in app.ts) for the unsaved-changes prompt; the
   // cancel listener below blocks the native instant-close that would skip it.
   settingsOverlay.showModal();
-  // showModal lands on the first focusable — the ✕. Start on the tab
-  // strip instead so Tab walks into the panel, not straight to Close.
-  (document.querySelector(".settings-tab.active") as HTMLElement)?.focus();
+  // showModal lands on the first focusable — the ✕. Park focus on the
+  // dialog itself instead: nothing highlighted until Tab.
+  settingsOverlay.focus();
   // Form just mirrored state.config — nothing to save yet.
   refreshSaveButtonState();
 }
