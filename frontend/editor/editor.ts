@@ -347,7 +347,9 @@ const oxideCmTheme = EditorView.theme({
     color: 'var(--fg)',
     // Always monospace: aligned Markdown tables are a fixed-width trick,
     // so the reading font (Settings → Reading) stays a preview concern.
-    fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", Consolas, ui-monospace, monospace',
+    // Generic family first: WebKitGTK swaps a missing named family for
+    // fontconfig's default sans instead of trying the next one.
+    fontFamily: 'monospace, monospace',
     // Inherit the size from #editor-pane, which applyZoom() drives with the
     // same `calc(var(--font-size) * zoom)` it gives the preview — so the
     // editor scales with Ctrl+/− and matches the preview's text size.
@@ -363,11 +365,11 @@ const oxideCmTheme = EditorView.theme({
     padding: '0 var(--row-inset)',
   },
   '.cm-content': {
-    padding: '28px 0',
+    padding: '1.75em 0',
     caretColor: 'var(--fg)',
   },
   '.cm-line': {
-    padding: '0 32px',
+    padding: '0 2em',
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
   // Smooth caret: CM6 reuses the cursor element across updates and only
@@ -412,7 +414,7 @@ const oxideCmTheme = EditorView.theme({
     border: 'none',
   },
   '.cm-lineNumbers .cm-gutterElement': {
-    padding: '0 12px 0 16px',
+    padding: '0 0.75em 0 1em',
   },
 });
 

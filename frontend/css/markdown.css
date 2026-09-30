@@ -46,7 +46,7 @@
   position: absolute;
   bottom: -2px;
   left: 0;
-  width: 48px;
+  width: 1.5em;
   height: 2px;
   background: var(--tab-indicator);
   border-radius: 1px;
@@ -77,13 +77,15 @@
 
 /* ── Inline code ──────────────────────────────────────────────────── */
 .md-rendered code {
-  font-family:
-    "Cascadia Code", "Cascadia Mono", "Fira Code", Consolas, monospace;
+  /* Generic family first: on WebKitGTK a missing named family (Cascadia,
+     Fira) is replaced by fontconfig's default sans instead of falling
+     through the list, so code rendered proportional on Linux. */
+  font-family: monospace, monospace;
   font-size: 0.84em;
   background: var(--code-bg, var(--bg-code));
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 0.15em 0.45em;
   color: var(--accent-2);
 }
 
@@ -104,7 +106,7 @@
 .md-rendered pre {
   background: var(--code-bg, var(--bg-code));
   border-radius: 10px;
-  padding: 20px 24px;
+  padding: 1.25em 1.5em;
   overflow-x: auto;
   margin: 1.2em 0;
   line-height: 1.65;
@@ -116,10 +118,10 @@
 
 .md-rendered .codeblock-lang {
   position: absolute;
-  top: 8px;
-  right: 56px;
-  padding: 2px 8px;
-  font-size: 10.5px;
+  top: 0.76em;
+  right: 5.33em;
+  padding: 0.19em 0.76em;
+  font-size: 0.656em;
   font-family: var(--font-family);
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -135,10 +137,10 @@
 
 .md-rendered .codeblock-copy {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 36px;
-  height: 28px;
+  top: 0.5em;
+  right: 0.5em;
+  width: 2.25em;
+  height: 1.75em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -156,8 +158,8 @@
     border-color var(--dur-sm) var(--ease);
 }
 .md-rendered .codeblock-copy svg {
-  width: 14px;
-  height: 14px;
+  width: 0.875em;
+  height: 0.875em;
 }
 .md-rendered .codeblock:hover .codeblock-copy,
 .md-rendered .codeblock-copy:focus-visible,
@@ -183,7 +185,7 @@
   background: none;
   border: none;
   padding: 0;
-  font-size: 13px;
+  font-size: 0.8125em;
   white-space: pre;
   color: inherit;
 }
@@ -192,7 +194,7 @@
 .md-rendered blockquote {
   border-left: 3px solid var(--note-accent, var(--quote-border));
   margin: 1.2em 0;
-  padding: 14px 22px;
+  padding: 0.875em 1.375em;
   background: var(--note-bg, var(--accent-glow));
   border-radius: 0 8px 8px 0;
 }
@@ -256,7 +258,7 @@
   border-collapse: collapse;
   width: 100%;
   margin: 0;
-  font-size: 13.5px;
+  font-size: 0.844em;
 }
 
 .md-rendered thead {
@@ -264,7 +266,7 @@
 }
 
 .md-rendered thead tr th {
-  font-size: 10.5px;
+  font-size: 0.778em;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
@@ -272,9 +274,14 @@
   border-bottom: 1px solid var(--border);
 }
 
-.md-rendered th,
+/* Cell padding in each cell's own em so th (smaller type) and td land on the
+   same pixel inset at 100% and both follow the zoom. */
+.md-rendered th {
+  padding: 0.95em 1.71em;
+  text-align: left;
+}
 .md-rendered td {
-  padding: 10px 18px;
+  padding: 0.74em 1.33em;
   text-align: left;
 }
 
@@ -434,30 +441,27 @@
 .md-rendered .task-list-checkbox {
   appearance: none;
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  margin: 0 0.55em -2px 0;
+  /* em-sized so the box and its tick follow the content zoom; inputs do not
+     inherit font-size on their own, so pull it in explicitly. */
+  font-size: inherit;
+  width: 0.875em;
+  height: 0.875em;
+  margin: 0 0.55em -0.125em 0;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 0.2em;
   background: var(--bg-elevated);
   cursor: default;
   vertical-align: baseline;
   position: relative;
   flex-shrink: 0;
 }
+/* The tick is an inline SVG background so the browser centres it; a rotated
+   pseudo-element sized under the global border-box reset came out as a
+   2x6 sliver sitting up and left of centre. */
 .md-rendered .task-list-checkbox:checked {
-  background: var(--accent);
+  background: var(--accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2.5 7.5l3 3L11.5 4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 100% no-repeat;
   border-color: var(--accent);
-}
-.md-rendered .task-list-checkbox:checked::after {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 0px;
-  width: 4px;
-  height: 8px;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
 }
 

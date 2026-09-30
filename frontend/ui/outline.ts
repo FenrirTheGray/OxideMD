@@ -26,6 +26,9 @@ import { escapeHtml } from "../lib/escape.ts";
 import { debounce } from "../lib/timing.ts";
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+// Trailing `{#id .class}` heading attributes (pulldown-cmark's
+// ENABLE_HEADING_ATTRIBUTES); the renderer strips them, so the outline must too.
+const HEADING_ATTRS_RE = /\s*\{[^{}]*\}\s*$/;
 const FENCE_RE   = /^\s*(```|~~~)/;
 // Setext underline: 1+ = or - chars, optionally indented up to 3 spaces,
 // optional trailing whitespace. Per CommonMark the underline must
@@ -43,7 +46,7 @@ export function parseOutline(text) {
     if (inFence) continue;
     const atx = HEADING_RE.exec(line);
     if (atx) {
-      out.push({ level: atx[1].length, text: atx[2].trim(), line: i + 1 });
+      out.push({ level: atx[1].length, text: atx[2].replace(HEADING_ATTRS_RE, '').trim(), line: i + 1 });
       continue;
     }
     // Setext: this line is === or ---, previous line is non-blank text
@@ -55,7 +58,7 @@ export function parseOutline(text) {
       const prev = lines[i - 1];
       if (prev && prev.trim() && !HEADING_RE.test(prev)) {
         const level = setext[1][0] === '=' ? 1 : 2;
-        out.push({ level, text: prev.trim(), line: i });
+        out.push({ level, text: prev.replace(HEADING_ATTRS_RE, '').trim(), line: i });
       }
     }
   }
