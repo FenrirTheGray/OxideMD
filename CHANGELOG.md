@@ -4,6 +4,15 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.14.1] - 2026-09-30
+
+### Fixed
+
+- Task-list ticks are centred in their boxes; the old rotated pseudo-element was sized under the global border-box reset and came out as a sliver sitting up and left of centre
+- Zoom now scales the whole rendered document: code blocks, tables, the language badge and copy button, and the paddings around code, quotes and cells were pinned in pixels and stayed put while the text grew. Task-list boxes follow the zoom too
+- Code, keyboard hints and the editor render in a monospace font on Linux. WebKitGTK replaced the missing "Cascadia Code" family with fontconfig's default sans instead of trying the next one, so every code span was proportional
+- The outline strips trailing heading attributes such as `{#id}`, which the renderer already dropped from the heading itself
+
 ## [4.14.0] - 2026-09-24
 
 ### Added
