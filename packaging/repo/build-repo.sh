@@ -133,9 +133,18 @@ else
   echo "No .deb packages found; skipping pacman repo."
 fi
 
-# ---- Landing page with copy-paste install instructions ----
+# ---- Landing page: screenshots, download links and install instructions ----
+# The download buttons link to release assets by exact filename, so the page
+# needs the newest published version. Take it from the newest .deb (the repo
+# is built from every release), falling back to the checked-out app version.
+latest_ver="$(jq -r .version "$SCRIPT_DIR/../../src-tauri/tauri.conf.json")"
+if (( ${#debs[@]} )); then
+  latest_ver="$(for d in "${debs[@]}"; do dpkg-deb -f "$d" Version; done | sort -V | tail -n 1)"
+fi
 cp "$SCRIPT_DIR/../../src-tauri/icons/128x128.png" "$OUTPUT/icon.png"
+cp -r "$SCRIPT_DIR/shots" "$OUTPUT/shots"
 sed -e "s/__APT_PKG__/$apt_pkg/g" -e "s/__DNF_PKG__/$dnf_pkg/g" -e "s/__GPG_KEY_ID__/$GPG_KEY_ID/g" \
+    -e "s/__VERSION__/$latest_ver/g" \
   "$SCRIPT_DIR/index.html" > "$OUTPUT/index.html"
 
 echo "Repository tree built at: $OUTPUT"
