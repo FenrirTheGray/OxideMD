@@ -9,14 +9,13 @@ import {
 // helpers are only reached when isEditing(), which implies it's loaded.
 // The ?? fallbacks keep a hypothetical miss harmless (zero matches).
 import { editorModule } from "../editor/lazy.ts";
+import { findMatches } from "../lib/text-search.ts";
 
 // The one bar drives two backends: the rendered-content highlight search in
 // read mode, and CodeMirror's search (via editor.ts) in edit mode. Every
-// public op branches on this. Edit-mode match counts come back from the
-// editor helpers and are cached here for the "n / m" readout.
+// public op branches on this. Edit-mode counts are read live from the
+// editor, so typing and undo keep the "n / m" readout current.
 function isEditing() { return document.body.classList.contains('editing'); }
-let editCount = 0;
-let editCurrent = 0;
 
 export function toggleSearch() {
   if (!searchBar.classList.contains('hidden')) { closeSearch(); return; }
@@ -49,38 +48,65 @@ export function clearSearch() {
     matchHighlight.clear();
     currentHighlight.clear();
   }
-  editCount = 0;
-  editCurrent = 0;
   if (isEditing()) editorModule()?.editorClearSearch();
   searchCount.textContent = '';
 }
 
-export function runSearch(query) {
+// Re-run the open bar's query against what is now shown (tab switch, reload,
+// outside change), without scrolling over the view's restored position.
+export function refreshSearch() {
+  if (searchBar.classList.contains('hidden')) { clearSearch(); return; }
+  runSearch((searchInput as HTMLInputElement).value, false);
+}
+
+// Inline elements stay joined so a phrase can span `**bold**` or highlighted
+// code; any other element starts a new block, which a "\n" keeps apart.
+const INLINE_TAGS = new Set(['A', 'ABBR', 'B', 'BDI', 'BDO', 'CITE', 'CODE', 'DEL', 'DFN', 'EM', 'I',
+  'INS', 'KBD', 'MARK', 'Q', 'S', 'SAMP', 'SMALL', 'SPAN', 'STRONG', 'SUB', 'SUP', 'U', 'VAR']);
+function blockOf(n: Node) {
+  let e = n.parentElement;
+  while (e && e !== contentEl && INLINE_TAGS.has(e.tagName)) e = e.parentElement;
+  return e;
+}
+
+export function runSearch(query, scroll = true) {
   if (isEditing()) {
-    editCount = editorModule()?.editorSetSearch(query, state.searchCaseSensitive) ?? 0;
-    editCurrent = 0;
+    editorModule()?.editorSetSearch(query, state.searchCaseSensitive);
     updateSearchCount();
     return;
   }
   clearSearch();
   if (!query) return;
 
-  const needle = state.searchCaseSensitive ? query : query.toLowerCase();
-  const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
-  let tn;
-  while ((tn = walker.nextNode())) {
-    const text = tn.nodeValue;
-    const haystack = state.searchCaseSensitive ? text : text.toLowerCase();
-    let idx = 0;
-    while (idx < text.length) {
-      const pos = haystack.indexOf(needle, idx);
-      if (pos === -1) break;
-      const range = document.createRange();
-      range.setStart(tn, pos);
-      range.setEnd(tn, pos + query.length);
-      state.searchRanges.push(range);
-      idx = pos + query.length;
+  // Match on the rendered text as one string, then map offsets back to nodes.
+  const nodes: Text[] = [];
+  const starts: number[] = [];
+  let text = '';
+  let block: Element | null | undefined;
+  const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    if (n.nodeType !== Node.TEXT_NODE) {
+      if ((n as Element).tagName === 'BR') text += '\n';
+      continue;
     }
+    const b = blockOf(n);
+    if (b !== block) { text += '\n'; block = b; }
+    nodes.push(n as Text);
+    starts.push(text.length);
+    text += (n as Text).data;
+  }
+  let j = 0;
+  const at = (i: number): [Text, number] => {
+    while (starts[j] + nodes[j].length <= i) j++;
+    return [nodes[j], i - starts[j]];
+  };
+  for (const [s, e] of findMatches(text, query, state.searchCaseSensitive)) {
+    const range = document.createRange();
+    range.setStart(...at(s));
+    const [en, eo] = at(e - 1);
+    range.setEnd(en, eo + 1);
+    state.searchRanges.push(range);
   }
 
   if (supportsHighlights) {
@@ -89,17 +115,18 @@ export function runSearch(query) {
 
   if (state.searchRanges.length > 0) {
     state.searchCurrent = 0;
-    highlightCurrent();
+    highlightCurrent(scroll);
   }
   updateSearchCount();
 }
 
-function highlightCurrent() {
+function highlightCurrent(scroll = true) {
   if (!supportsHighlights) return;
   currentHighlight.clear();
   const range = state.searchRanges[state.searchCurrent];
   if (!range) return;
   currentHighlight.add(range);
+  if (!scroll) return;
   const rect = range.getBoundingClientRect();
   const scrollRect = contentScroll.getBoundingClientRect();
   const target =
@@ -113,7 +140,7 @@ function highlightCurrent() {
 
 export function nextMatch() {
   if (isEditing()) {
-    ({ count: editCount, current: editCurrent } = editorModule()?.editorNextMatch() ?? { count: 0, current: 0 });
+    editorModule()?.editorNextMatch();
     updateSearchCount();
     return;
   }
@@ -125,7 +152,7 @@ export function nextMatch() {
 
 export function prevMatch() {
   if (isEditing()) {
-    ({ count: editCount, current: editCurrent } = editorModule()?.editorPrevMatch() ?? { count: 0, current: 0 });
+    editorModule()?.editorPrevMatch();
     updateSearchCount();
     return;
   }
@@ -139,26 +166,27 @@ export function prevMatch() {
 // is hidden there). Driven by app.ts from the replace row's controls.
 export function replaceCurrent() {
   if (!isEditing()) return;
-  ({ count: editCount, current: editCurrent } = editorModule()?.editorReplaceMatch(
+  editorModule()?.editorReplaceMatch(
     (searchInput as HTMLInputElement).value,
     (searchReplaceInput as HTMLInputElement).value,
     state.searchCaseSensitive,
-  ) ?? { count: 0, current: 0 });
+  );
   updateSearchCount();
 }
 
 export function replaceAllMatches() {
   if (!isEditing()) return;
-  ({ count: editCount, current: editCurrent } = editorModule()?.editorReplaceAllMatches(
+  editorModule()?.editorReplaceAllMatches(
     (searchInput as HTMLInputElement).value,
     (searchReplaceInput as HTMLInputElement).value,
     state.searchCaseSensitive,
-  ) ?? { count: 0, current: 0 });
+  );
   updateSearchCount();
 }
 
-function updateSearchCount() {
+export function updateSearchCount() {
   if (isEditing()) {
+    const { count: editCount, current: editCurrent } = editorModule()?.editorMatchInfo() ?? { count: 0, current: 0 };
     searchCount.textContent = editCount
       ? (editCurrent ? `${editCurrent} / ${editCount}` : `${editCount} match${editCount === 1 ? '' : 'es'}`)
       : ((searchInput as HTMLInputElement).value ? 'No matches' : '');

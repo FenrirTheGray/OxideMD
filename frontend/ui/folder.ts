@@ -8,7 +8,7 @@ import {
   sidebarExpandAllBtn, sidebarCollapseAllBtn,
   hasActiveOverlay,
 } from "../core/state.ts";
-import { activeTab, loadFile, renderContent } from "./tabs.ts";
+import { activeTab, loadFile, applyActiveTab } from "./tabs.ts";
 import { saveRecentlyFor, isDirty } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
 import { debounce } from "../lib/timing.ts";
@@ -61,10 +61,12 @@ async function flushFsChanges() {
           tab.raw = result.raw ?? '';
           tab.savedRaw = tab.raw;
           tab.editorState = undefined; // external change — drop stale CM state
-          if (tab.id === state.activeTabId) {
-            const scrollTop = contentScroll.scrollTop;
-            renderContent(result.html);
-            requestAnimationFrame(() => { contentScroll.scrollTop = scrollTop; });
+          // Repaint everything derived from the content (outline, counts,
+          // search, title), keeping the reader where they were. Skipped if
+          // the user entered edit mode during the await: leave their editor be.
+          if (tab.id === state.activeTabId && !tab.editing) {
+            tab.scrollTop = contentScroll.scrollTop;
+            applyActiveTab();
           }
         } catch { /* file vanished; leave tab as-is */ }
       }

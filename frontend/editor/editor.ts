@@ -20,7 +20,7 @@ import {
   activeTab, isDirty, isPreviewVisible, singlePaneMQ, renderContent, hydrateImages,
   setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
-import { closeSearch } from "../features/search.ts";
+import { closeSearch, updateSearchCount } from "../features/search.ts";
 import { updateCounts, updateCountsFrom, countWords } from "../ui/counts.ts";
 import { promptDiscardChanges, promptOverwriteChanged } from "../ui/confirm.ts";
 import { clearReveal, highlightMatchIn } from "../ui/reveal.ts";
@@ -190,6 +190,7 @@ const debouncedEditorCounts = debounce((cmState) => {
   const sel = cmState.selection.main;
   const selectionText = sel.empty ? '' : cmState.sliceDoc(sel.from, sel.to);
   updateCountsFrom(cmState.field(countField), selectionText);
+  updateSearchCount(); // typing and undo move the find bar's matches too
 }, 100);
 
 // Outline refresh re-parses the whole buffer and rebuilds the sidebar
@@ -1344,7 +1345,7 @@ export function revealEditorLine(line, query) {
 
 // Count all matches of the active query and, if the current selection is one
 // of them, its 1-based index — used for the "n / m" readout.
-function editorMatchInfo(): { count: number; current: number } {
+export function editorMatchInfo(): { count: number; current: number } {
   if (!editorView) return { count: 0, current: 0 };
   const q = getSearchQuery(editorView.state);
   if (!q.search) return { count: 0, current: 0 };

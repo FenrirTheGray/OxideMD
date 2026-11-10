@@ -10,7 +10,8 @@ import {
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
 } from "../core/state.ts";
-import { clearSearch, closeSearch } from "../features/search.ts";
+import { closeSearch, refreshSearch } from "../features/search.ts";
+import { tabLabels, nextUntitledTitle } from "../lib/tab-label.ts";
 import { syncWatcher, highlightActiveTreeItem } from "./folder.ts";
 import { editorModule, loadEditorModule } from "../editor/lazy.ts";
 import { promptUnsavedChanges, promptRecoverDraft } from "./confirm.ts";
@@ -123,16 +124,17 @@ export function openInNewTab(path, title, html, raw = null) {
   syncWatcher();
 }
 
-// Snapshot the live editor into the editing tab that owns it, before the
-// view is abandoned for another tab. Every path that moves focus away from
-// an editing tab must call this (tab switch, opening a file into a new tab,
+// Snapshot the active tab's view state (read-mode scroll, or the live
+// editor) before it is abandoned for another tab. Every path that moves
+// focus away from a tab must call this (tab switch, opening a file into a new tab,
 // creating a new file) — a park skipped here leaves tab.editorState stale,
 // and a stale state restored over a newer tab.raw shows the user an old
 // buffer (the "text disappeared" bug). buildView also guards against stale
 // parks as a backstop, but only this path preserves undo history.
 export function parkActiveEditorState() {
   const cur = activeTab();
-  if (!cur?.editing) return;
+  if (!cur) return;
+  if (!cur.editing) { cur.scrollTop = contentScroll.scrollTop; return; }
   const liveValue = editorModule()?.getEditorValue() ?? null;
   if (liveValue != null) {
     cur.raw = liveValue;
@@ -146,18 +148,8 @@ export function parkActiveEditorState() {
 }
 
 export function switchToTab(id) {
-  // Save scroll position of current tab before leaving. When leaving an
-  // editor, capture the current buffer value and both pane scroll
-  // positions so returning to this tab doesn't lose in-flight edits or
-  // jump the scroll state.
-  const cur = activeTab();
-  if (cur) {
-    if (cur.editing) parkActiveEditorState();
-    else cur.scrollTop = contentScroll.scrollTop;
-  }
-
+  parkActiveEditorState();
   state.activeTabId = id;
-  clearSearch();
   renderTabBar();
   applyActiveTab();
   syncToolbar();
@@ -207,13 +199,12 @@ export async function closeTab(id) {
 
   if (tabs.length === 0) {
     state.activeTabId = null;
-    clearSearch();
+    closeSearch();
     syncToolbar();
     renderTabBar();
     showWelcome();
   } else if (id === state.activeTabId) {
     state.activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
-    clearSearch();
     renderTabBar();
     applyActiveTab();
     syncToolbar();
@@ -253,13 +244,12 @@ export function dropTabsForDeletedPath(deletedPath) {
 
   if (tabs.length === 0) {
     state.activeTabId = null;
-    clearSearch();
+    closeSearch();
     syncToolbar();
     renderTabBar();
     showWelcome();
   } else if (activeAffected) {
     state.activeTabId = tabs[tabs.length - 1].id;
-    clearSearch();
     renderTabBar();
     applyActiveTab();
     syncToolbar();
@@ -368,6 +358,8 @@ export function applyActiveTab() {
   // open last session.
   applyOutlineVisibility();
   refreshOutline();
+  // The view was just replaced, so any open search is pointing at the old one.
+  refreshSearch();
 
   if (!tab.editing) {
     requestAnimationFrame(() => {
@@ -447,25 +439,27 @@ export function renderTabBar() {
 
   if (tabs.length === 0) return;
 
-  for (const tab of tabs) {
+  const labels = tabLabels(tabs);
+  for (const [i, tab] of tabs.entries()) {
+    const label = labels[i];
     const isActive = tab.id === state.activeTabId;
     const dirty = isDirty(tab);
     const el = document.createElement('div');
     el.className = 'tab' + (isActive ? ' active' : '') + (dirty ? ' dirty' : '');
     el.setAttribute('role', 'tab');
     el.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    el.setAttribute('aria-label', tab.title);
+    el.setAttribute('aria-label', label);
     el.tabIndex = isActive ? 0 : -1;
     el.dataset.tabId = String(tab.id);
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'tab-title';
-    titleSpan.textContent = tab.title;
-    titleSpan.title = tab.path || tab.title;
+    titleSpan.textContent = label;
+    titleSpan.title = tab.path || label;
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'tab-close';
-    closeBtn.setAttribute('aria-label', `Close ${tab.title}`);
+    closeBtn.setAttribute('aria-label', `Close ${label}`);
     closeBtn.tabIndex = -1;
     closeBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>';
     // Title is set per-binding by renderShortcutsUI() right after this loop.
@@ -831,7 +825,7 @@ export function createNewFile(dir = null) {
   parkActiveEditorState();
   const id = state.nextTabId++;
   tabs.push({
-    id, path: null, title: 'Untitled',
+    id, path: null, title: nextUntitledTitle(tabs.map(t => t.title)),
     html: '', raw: '', savedRaw: '',
     editing: true, isNew: true, newFileDir: dir || null,
     scrollTop: 0, zoom: ZOOM_DEFAULT,
