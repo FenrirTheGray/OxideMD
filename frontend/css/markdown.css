@@ -1,3 +1,10 @@
+/* The scrollers are overflow-x:hidden, so a long URL or word must wrap
+   or it is unreachable. Not `anywhere`: that shrinks min-content and
+   would squeeze table columns. */
+.md-rendered {
+  overflow-wrap: break-word;
+}
+
 /* ── Headings ─────────────────────────────────────────────────────── */
 .md-rendered h1,
 .md-rendered h2,
@@ -189,6 +196,51 @@
   white-space: pre;
   color: inherit;
 }
+
+/* ── Syntax highlighting ─────────────────────────────────────────────
+   highlight.rs emits TextMate scope atoms as `hl-*` classes; unmatched
+   tokens keep the theme's --fg. Atom One palette, light values darkened
+   to keep 4:1+ on the light code backgrounds (#f0f0f0, Solarized #eee8d5). */
+.md-rendered {
+  --hl-comment: #7f848e;
+  --hl-keyword: #c678dd;
+  --hl-operator: #56b6c2;
+  --hl-string: #98c379;
+  --hl-number: #d19a66;
+  --hl-function: #61afef;
+  --hl-type: #e5c07b;
+  --hl-variable: #e06c75;
+}
+body.theme-light .md-rendered,
+body.print-friendly .md-rendered {
+  --hl-comment: #696c77;
+  --hl-keyword: #a626a4;
+  --hl-operator: #0b6e99;
+  --hl-string: #387038;
+  --hl-number: #865b00;
+  --hl-function: #3363cf;
+  --hl-type: #865b00;
+  --hl-variable: #c0392b;
+}
+.md-rendered .hl-comment { color: var(--hl-comment); font-style: italic; }
+.md-rendered .hl-keyword,
+.md-rendered .hl-storage { color: var(--hl-keyword); }
+.md-rendered .hl-keyword.hl-operator { color: var(--hl-operator); }
+.md-rendered .hl-string,
+.md-rendered .hl-markup.hl-inline.hl-raw { color: var(--hl-string); }
+.md-rendered .hl-constant,
+.md-rendered .hl-entity.hl-other.hl-attribute-name { color: var(--hl-number); }
+.md-rendered .hl-entity.hl-name.hl-function,
+.md-rendered .hl-support.hl-function,
+.md-rendered .hl-meta.hl-function-call .hl-variable.hl-function { color: var(--hl-function); }
+.md-rendered .hl-entity.hl-name.hl-type,
+.md-rendered .hl-entity.hl-name.hl-class,
+.md-rendered .hl-support.hl-type,
+.md-rendered .hl-support.hl-class,
+.md-rendered .hl-entity.hl-other.hl-inherited-class { color: var(--hl-type); }
+.md-rendered .hl-variable.hl-parameter,
+.md-rendered .hl-entity.hl-name.hl-tag,
+.md-rendered .hl-markup.hl-heading { color: var(--hl-variable); }
 
 /* ── Blockquotes ──────────────────────────────────────────────────── */
 .md-rendered blockquote {

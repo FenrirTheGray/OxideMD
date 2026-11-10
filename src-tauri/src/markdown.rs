@@ -407,6 +407,13 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             }
 
             // ── Spans ────────────────────────────────────────────────────────
+            // Alt text is plain text: span markup inside `![...]` must not
+            // leak tags into the body.
+            Event::Start(Tag::Emphasis | Tag::Strong | Tag::Strikethrough | Tag::Link { .. })
+            | Event::End(
+                TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Link,
+            ) if in_image.is_some() => {}
+
             Event::Start(Tag::Emphasis) => html.push_str("<em>"),
             Event::End(TagEnd::Emphasis) => html.push_str("</em>"),
 
@@ -498,6 +505,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 }
             }
 
+            Event::Code(code) if in_image.is_some() => image_alt_buf.push_str(&code),
             Event::Code(code) => {
                 html.push_str(&format!("<code>{}</code>", html_escape(&code)));
                 if current_heading.is_some() {
@@ -527,6 +535,7 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     }
                 }
             }
+            Event::HardBreak if in_image.is_some() => image_alt_buf.push(' '),
             Event::HardBreak => html.push_str("<br>"),
 
             Event::Rule => html.push_str(&format!(
@@ -618,14 +627,21 @@ fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
         None => return ResolvedImage::Passthrough(src.to_string()),
     };
 
-    let path = if Path::new(src).is_absolute() {
-        std::path::PathBuf::from(src)
-    } else {
-        base.join(src)
+    let resolve = |s: &str| {
+        if Path::new(s).is_absolute() {
+            std::path::PathBuf::from(s)
+        } else {
+            base.join(s)
+        }
     };
-
+    let mut path = resolve(src);
     if !path.is_file() {
-        return ResolvedImage::Passthrough(src.to_string());
+        // A destination is a URL, so `with%20space.png` names `with space.png`
+        // (links decode the same way). Raw first: a file may really have `%` in its name.
+        path = resolve(&crate::commands::percent_decode(src));
+        if !path.is_file() {
+            return ResolvedImage::Passthrough(src.to_string());
+        }
     }
 
     let canonical = std::fs::canonicalize(&path).unwrap_or(path);
@@ -1115,6 +1131,42 @@ mod tests {
         }
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn resolve_image_percent_encoded_path_finds_the_file() {
+        let dir = std::env::temp_dir().join(format!("oxidemd-pct-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("with space.png"), b"x").unwrap();
+        std::fs::write(dir.join("lit%20eral.png"), b"x").unwrap();
+
+        for src in ["with%20space.png", "with space.png", "lit%20eral.png"] {
+            match resolve_image(src, Some(&dir)) {
+                ResolvedImage::AssetPath(p) => {
+                    let name = std::path::Path::new(&p)
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned();
+                    let want = if src.starts_with("lit") {
+                        "lit%20eral.png"
+                    } else {
+                        "with space.png"
+                    };
+                    assert_eq!(name, want, "{src}");
+                }
+                other => panic!("{src}: expected AssetPath, got {other:?}"),
+            }
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn render_image_alt_keeps_inline_code_and_emits_no_body_markup() {
+        let out = render("![alt with `code` and *em* inside](x.png)", None);
+        assert!(out.contains("alt=\"alt with code and em inside\""), "{out}");
+        assert!(!out.contains("<code>"), "{out}");
+        assert!(!out.contains("<em>"), "{out}");
     }
 
     #[test]

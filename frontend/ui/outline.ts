@@ -6,13 +6,7 @@
 // that same button is repurposed to show/hide the live preview pane —
 // see syncToolbar() in tabs.js and togglePreviewPane() in editor.js.
 //
-// Parsing: scan tab.raw line-by-line tracking fenced-code state so
-// `# foo` inside a ``` block isn't mistaken for a heading. Setext-style
-// headings (text line followed by === or ---) are also picked up so
-// the outline indices stay aligned with the rendered preview's
-// document.querySelectorAll('h1..h6'), which sees both styles. The
-// heading entry's `line` points at the text line (not the underline)
-// so jump-to-editor lands the cursor on the heading itself.
+// Parsing lives in outline-parse.ts, loaded on first paint.
 
 import {
   invoke,
@@ -25,50 +19,8 @@ import { editorModule } from "../editor/lazy.ts";
 import { escapeHtml } from "../lib/escape.ts";
 import { debounce } from "../lib/timing.ts";
 
-const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-// Trailing `{#id .class}` heading attributes (pulldown-cmark's
-// ENABLE_HEADING_ATTRIBUTES); the renderer strips them, so the outline must too.
-const HEADING_ATTRS_RE = /\s*\{[^{}]*\}\s*$/;
-const FENCE_RE   = /^\s*(```|~~~)/;
-// Setext underline: 1+ = or - chars, optionally indented up to 3 spaces,
-// optional trailing whitespace. Per CommonMark the underline must
-// follow a non-blank text line with no blank line between.
-const SETEXT_RE  = /^[ \t]{0,3}(=+|-+)[ \t]*$/;
-
-export function parseOutline(text) {
-  if (!text) return [];
-  const lines = text.split('\n');
-  const out = [];
-  let inFence = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (FENCE_RE.test(line)) { inFence = !inFence; continue; }
-    if (inFence) continue;
-    const atx = HEADING_RE.exec(line);
-    if (atx) {
-      out.push({ level: atx[1].length, text: atx[2].replace(HEADING_ATTRS_RE, '').trim(), line: i + 1 });
-      continue;
-    }
-    // Setext: this line is === or ---, previous line is non-blank text
-    // that isn't itself an ATX heading. A bare `---` between paragraphs
-    // is a thematic break, not a heading — the prev-line-non-blank
-    // requirement filters that out.
-    const setext = SETEXT_RE.exec(line);
-    if (setext && i > 0) {
-      const prev = lines[i - 1];
-      if (prev && prev.trim() && !HEADING_RE.test(prev)) {
-        const level = setext[1][0] === '=' ? 1 : 2;
-        out.push({ level, text: prev.replace(HEADING_ATTRS_RE, '').trim(), line: i });
-      }
-    }
-  }
-  return out;
-}
-
-
-// View-mode jump: the rendered preview's heading order matches the
-// outline's (we generate both from the same source), so we can index
-// directly without needing anchor IDs from the renderer.
+// View-mode jump: outline-parse.ts finds the same headings, in the same
+// order, as the renderer, so the Nth entry is the Nth rendered heading.
 function jumpToHeadingInPreview(index) {
   const headings = contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
   const target = headings[index];
@@ -98,11 +50,13 @@ function renderOutline(entries) {
   // ellipsises, like the tree rows' path tooltip.
   const items = entries.map((e, i) => {
     const indent = (e.level - minLevel) * 12;
+    // An empty `#` still renders an <hN>; keep its row so indexes line up.
+    const label = e.text || '#'.repeat(e.level);
     return `<button class="outline-item outline-h${e.level}" type="button"
                     data-index="${i}" data-line="${e.line}" tabindex="-1"
-                    title="${escapeHtml(e.text)}"
+                    title="${escapeHtml(label)}"
                     style="padding-left: ${12 + indent}px;">
-              ${escapeHtml(e.text)}
+              ${escapeHtml(label)}
             </button>`;
   }).join('');
   return `<div class="outline-list">${items}</div>`;
@@ -119,8 +73,10 @@ export function isOutlineOpen() {
 // (debounced) doc edit — skips entirely while the sidebar is hidden.
 export function refreshOutline(opts: { idle?: boolean } = {}) {
   if (!isOpen) return;
-  const paint = () => {
+  const paint = async () => {
     if (!isOpen) return; // may have closed during the idle wait
+    const { parseOutline } = await import('./outline-parse.ts');
+    if (!isOpen) return;
     const tab = activeTab();
     const entries = tab ? parseOutline(tab.raw ?? '') : [];
     outlineSidebarBody.innerHTML = renderOutline(entries);

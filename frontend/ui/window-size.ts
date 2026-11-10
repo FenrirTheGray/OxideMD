@@ -147,14 +147,17 @@ const LABEL_RESERVE = 48;
 const OVERFLOW_RESERVE = 16;
 
 // Pull every relocated button back into the toolbar, in natural order,
-// ahead of the trailing "⋯" trigger.
+// ahead of the trailing "⋯" trigger. Walking backwards, each one goes in
+// front of its natural successor; buttons that never left are not moved,
+// so a focused one keeps focus.
 function restoreToolbarButtons() {
   if (!toolbarButtons) return;
-  for (const id of TOOLBAR_ORDER) {
+  let anchor = btnMore;
+  for (const id of [...TOOLBAR_ORDER].reverse()) {
     const btn = document.getElementById(id);
-    if (btn && btn.parentElement !== toolbarButtons) {
-      toolbarButtons.insertBefore(btn, btnMore);
-    }
+    if (!btn) continue;
+    if (btn.parentElement !== toolbarButtons) toolbarButtons.insertBefore(btn, anchor);
+    anchor = btn;
   }
 }
 

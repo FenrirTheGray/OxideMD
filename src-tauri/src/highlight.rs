@@ -1,29 +1,21 @@
 use crate::util::html_escape;
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{Theme, ThemeSet};
-use syntect::html::{IncludeBackground, styled_line_to_highlighted_html};
+use syntect::html::{ClassStyle, ClassedHTMLGenerator};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
 pub struct Highlighter {
     ss: SyntaxSet,
-    theme: Theme,
 }
 
 impl Highlighter {
     pub fn new() -> Self {
-        // Hold the one theme we render with. Fall back to the default theme
-        // if a future syntect drops it, so the renderer can't go down.
-        let theme = ThemeSet::load_defaults()
-            .themes
-            .remove("base16-ocean.dark")
-            .unwrap_or_default();
         Highlighter {
             ss: SyntaxSet::load_defaults_newlines(),
-            theme,
         }
     }
 
+    /// Scope classes (`hl-keyword`, `hl-string`, ...) rather than inline
+    /// colours, so markdown.css can colour them per light/dark theme.
     pub fn highlight(&self, code: &str, lang: &str) -> String {
         let syntax = self
             .ss
@@ -31,23 +23,34 @@ impl Highlighter {
             .or_else(|| self.ss.find_syntax_by_extension(lang))
             .unwrap_or_else(|| self.ss.find_syntax_plain_text());
 
-        let mut h = HighlightLines::new(syntax, &self.theme);
-        let mut html = String::new();
-
+        let mut out = ClassedHTMLGenerator::new_with_class_style(
+            syntax,
+            &self.ss,
+            ClassStyle::SpacedPrefixed { prefix: "hl-" },
+        );
         for line in LinesWithEndings::from(code) {
-            let ranges = match h.highlight_line(line, &self.ss) {
-                Ok(r) => r,
-                Err(_) => {
-                    html.push_str(&html_escape(line));
-                    continue;
-                }
-            };
-            match styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No) {
-                Ok(line_html) => html.push_str(&line_html),
-                Err(_) => html.push_str(&html_escape(line)),
+            if out
+                .parse_html_for_line_which_includes_newline(line)
+                .is_err()
+            {
+                return html_escape(code);
             }
         }
+        out.finalize()
+    }
+}
 
-        html
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn highlight_emits_scope_classes_not_inline_colours() {
+        let out = Highlighter::new().highlight("let s = \"a<b\"; // c\n", "rust");
+        assert!(out.contains("class=\"hl-"), "{out}");
+        assert!(out.contains("hl-string"), "{out}");
+        assert!(out.contains("hl-comment"), "{out}");
+        assert!(!out.contains("style="), "{out}");
+        assert!(out.contains("a&lt;b"), "{out}");
     }
 }

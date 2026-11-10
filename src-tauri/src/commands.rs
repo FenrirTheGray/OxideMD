@@ -769,7 +769,7 @@ pub async fn search_project(query: String, root: String) -> Result<SearchResults
     .map_err(|e| e.to_string())?
 }
 
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -1238,6 +1238,14 @@ const EXPORT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
   .codeblock { position: relative; }
   .codeblock-copy, .codeblock-lang { display: none; }
   .task-list-checkbox { margin-right: 0.4em; }
+  .hl-comment { color: #696c77; font-style: italic; }
+  .hl-keyword, .hl-storage { color: #a626a4; }
+  .hl-keyword.hl-operator { color: #0b6e99; }
+  .hl-string, .hl-markup.hl-inline.hl-raw { color: #387038; }
+  .hl-constant, .hl-entity.hl-other.hl-attribute-name { color: #865b00; }
+  .hl-entity.hl-name.hl-function, .hl-support.hl-function, .hl-meta.hl-function-call .hl-variable.hl-function { color: #3363cf; }
+  .hl-entity.hl-name.hl-type, .hl-entity.hl-name.hl-class, .hl-support.hl-type, .hl-support.hl-class, .hl-entity.hl-other.hl-inherited-class { color: #865b00; }
+  .hl-variable.hl-parameter, .hl-entity.hl-name.hl-tag, .hl-markup.hl-heading { color: #c0392b; }
   @media print {
     body { max-width: none; margin: 0; padding: 0; color: #000; }
     a { color: #000; text-decoration: underline; }

@@ -1188,7 +1188,11 @@ body:not(.has-tab) #status-bar {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
+  /* Takes only the width left over (basis 0, up to its full text), so the
+     counts never shrink while the path still has room to give. */
+  flex: 1 1 0;
+  min-width: 6em;
+  max-width: max-content;
   font-size: 11px;
   letter-spacing: 0.03em;
   cursor: default;
@@ -1200,6 +1204,9 @@ body:not(.has-tab) #status-bar {
     color var(--dur-sm) var(--ease),
     background var(--dur-sm) var(--ease),
     box-shadow var(--dur-sm) var(--ease);
+}
+#file-path:empty {
+  min-width: 0;
 }
 #file-path.clickable {
   cursor: pointer;
@@ -1240,7 +1247,11 @@ body:not(.has-tab) #status-bar {
    orphaned divider in the status bar. */
 #status-counts {
   color: var(--fg-dim);
-  flex-shrink: 0;
+  /* Shrinks only once the path is at its minimum (#file-path), and then
+     the tail (the selection segment) ellipsizes instead of being clipped. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 11px;
   letter-spacing: 0.02em;
