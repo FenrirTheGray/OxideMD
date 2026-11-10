@@ -1,6 +1,7 @@
 {
 	"type": "module",
 	"scripts": {
+		"prebuild:frontend": "node -e \"require('fs').rmSync('frontend/dist',{recursive:true,force:true})\"",
 		"build:frontend": "esbuild frontend/app.ts --bundle --format=esm --splitting --target=es2025 --minify --outdir=frontend/dist --entry-names=bundle --chunk-names=chunks/[name]-[hash]",
 		"watch:frontend": "esbuild frontend/app.ts --bundle --format=esm --splitting --target=es2025 --outdir=frontend/dist --entry-names=bundle --chunk-names=chunks/[name]-[hash] --watch --sourcemap",
 		"typecheck": "tsc --noEmit",
