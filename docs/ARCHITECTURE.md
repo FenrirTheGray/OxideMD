@@ -72,7 +72,10 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   preview), `pick_file`
   (multi-file open dialog). The IO-heavy commands run on blocking threads; the
   content-loading ones (`open_file` / `save_file` / `save_new_file`) return an
-  `OpenResult { html, title, path, raw }`.
+  `OpenResult { html, title, path, raw }`. `raw` always has LF line breaks,
+  because CodeMirror normalizes them: `open_file` turns CRLF into LF, and
+  `save_file` writes CRLF back when every line break in the file it replaces
+  is CRLF (a file with mixed endings is saved as LF).
 - **Folder browsing** — `pick_folder` (folder dialog, returns the path only),
   `read_folder_tree` (recursive walk → a `FolderTree` of nested `TreeNode`s,
   Markdown only, with a visited-entry safety cap), `resolve_md_path` (resolve a
@@ -127,7 +130,9 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   progress bar.
 - **`prev-tab` / `next-tab`** — **Linux only.** WebKitGTK swallows
   `Ctrl+Tab` / `Ctrl+Shift+Tab` before JS sees them, so `lib.rs` intercepts
-  them at the GTK window level and re-emits them as events.
+  them at the GTK window level and re-emits them as events. These skip the
+  frontend's `keydown` listener, so the listeners in `app.ts` carry the same
+  modal guard: a tab switch is ignored while a `<dialog>` is open.
 
 ## Rust module map (`src-tauri/src/`)
 
@@ -151,7 +156,10 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   footnotes, local-image resolution, raw-HTML escaping, the soft-break
   atomic, and the table-cell width heuristic (`is_short_cell`) described
   under [Rendering](#rendering).
-- **`highlight.rs`** — syntect-based syntax highlighting for fenced code blocks.
+- **`highlight.rs`** — syntect-based syntax highlighting for fenced code
+  blocks. It emits scope classes (`hl-keyword`, `hl-string`, …) rather than
+  inline colors, so the stylesheet decides the palette (see
+  [Rendering](#rendering)).
 - **`watcher.rs`** — a single recursive `notify` watcher behind a mutex, with a
   per-path leading-edge coalesce; emits `fs-changed`.
 - **`util.rs`** — HTML-escaping helpers for text content and attributes.
@@ -176,7 +184,10 @@ document-level input guards: the `body.pointer-nav` modality class (a pointer
 press hides focus rings, a navigation key shows them — WebKitGTK otherwise
 paints `:focus-visible` on programmatic focus after a click) and the modal
 `Tab` wrap, which skips the invisible document stop WebKit inserts after the
-last control in an open `<dialog>`.
+last control in an open `<dialog>`. A dialog's answer acts on the tab it was
+opened for, so files handed in from outside (a second instance, an OS drop)
+go through `openWhenNoModal`: they open one at a time and wait while a
+dialog is up, rather than switching tabs behind it.
 
 **`core/`** — cross-cutting state and pure infrastructure.
 
@@ -218,6 +229,13 @@ co-located `*.test.ts`).
   block formatter drives the always-on live table alignment, a CodeMirror
   `transactionFilter` in `editor/table-align.ts` that re-pads the table under
   the caret inside the keystroke's own transaction.
+- **`tab-label.ts`** — tab-strip labels: a file name shared by several open
+  tabs gets its parent folder appended, and new files are numbered
+  ("Untitled", "Untitled 2", …) with the lowest free number.
+- **`text-search.ts`** — `findMatches`, the literal substring search behind
+  reading-mode search. It folds case per code point and maps offsets back to
+  the original text, because lowercasing can change a string's length (`İ`
+  becomes two code units) and offsets found in a folded copy would drift.
 - **`timing.ts`** — `debounce`, the shared trailing-edge timing helper used
   across the UI modules.
 
@@ -243,6 +261,11 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
 **`features/`** — self-contained user-facing features.
 
 - **`search.ts`** — in-document search (match highlighting, next/prev, counter).
+  In reading mode the text nodes of each block are joined before matching,
+  so a phrase that crosses bold, a link or highlighted code is still found.
+  `applyActiveTab` re-runs an open search whenever the view is replaced (tab
+  switch, reload, outside change), and the edit-mode count is read live from
+  the editor.
 - **`search-project.ts`** — the project-wide content-search panel that lives
   inside the sidebar (calls `search_project`, lists file-grouped results).
 - **`print.ts`** — prints the active document to PDF via the webview's native
@@ -280,13 +303,29 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   load/reload, zoom, the overflow edge fade, anchor-click handling, and
   content mounting.
 - **`folder.ts`** — the sidebar folder tree, name filter, divider resize, and
-  the `syncWatcher` that pushes the watched-path set to the backend.
+  the `syncWatcher` that pushes the watched-path set to the backend. The
+  sidebar can be widened to 40% of the window; `layout.css` applies the same
+  cap, so a saved `sidebar_width` stays in bounds when the window shrinks.
+  Double-clicking the divider fits the sidebar to its widest row, wider or
+  narrower.
 - **`outline.ts`** — the document outline sidebar: the heading list, the
   current-section highlight (recomputed from the scroll position of whichever
   pane is showing, via one capturing `scroll` listener), arrow-key
   navigation over a roving tabindex, jump-to, and its own drag divider
-  (persisted as `outline_width`, the counterpart of `sidebar_width`). In
-  edit mode the same toolbar button is repurposed as the preview toggle.
+  (persisted as `outline_width`, the counterpart of `sidebar_width`).
+  Double-clicking the divider fits the outline to its widest heading; rows
+  are measured at their natural width, because WebKit's `scrollWidth` leaves
+  out the right padding of an ellipsized row. Both dividers read the width
+  on screen, not `aria-valuenow`, which holds the HTML default until the
+  first resize. In edit mode the same toolbar button is repurposed as the
+  preview toggle.
+- **`outline-parse.ts`** — `parseOutline`, the heading parser behind the
+  outline, unit-tested in Node. It is a CommonMark block parser
+  (lezer-markdown, shared with the editor chunk) and is imported
+  dynamically on the outline's first paint. The reading-mode jump picks the
+  Nth rendered heading, so the parser must list exactly the headings
+  pulldown-cmark renders: those in quotes and list items, indented or empty
+  ones, and setext headings only after paragraph text.
 - **`contextmenu.ts`** — context-aware right-click menus for the tree and tab
   bar (the default webview menu is suppressed). The `Menu` key and `Shift+F10`
   synthesize a `contextmenu` event on the focused element, since WebKitGTK
@@ -296,13 +335,17 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   editor module via `editorModule()?.buildEditorContextMenu()`.
 - **`counts.ts`** — the status-bar line/word/char counts. O(doc) over the
   source text; the per-keystroke edit-mode refresh is debounced in `editor.ts`.
+  A label wider than its box (a selection in a narrow window) is cut to the
+  room it measures and ends in "...", with the whole label in the tooltip.
 - **`confirm.ts`** — the shared confirm dialog (unsaved changes, draft
   recovery, settings reset/close prompts, destructive deletes), a native
   `<dialog>` wired to a
   resolve-on-click promise. Like the settings and error modals it uses
   `showModal()` for the focus trap and inert background, with a `cancel`
   handler that routes Escape through the app's close path instead of the
-  native instant-close.
+  native instant-close. The prompts share one overlay, so a prompt that
+  arrives while another is open waits its turn (`showPrompt`) instead of
+  replacing it.
 - **`insert-dialogs.ts`** — the edit toolbar's insert prompts (table, link,
   image, code block), each a form rendered into the shared confirm dialog.
   The code block language is a searchable dropdown in the `custom-select`
@@ -376,7 +419,10 @@ accelerator, and metadata). `effectiveBindings` merges the user's sparse config
 overrides over those defaults, so actions added in an update apply automatically
 without rewriting config. Modules call `registerHandler(id, fn)` to bind
 behavior; `dispatchKey` matches a `KeyboardEvent` against the active bindings
-and invokes the handler; `runAction(id)` invokes one directly. Toolbar buttons
+and invokes the handler; `runAction(id)` invokes one directly. A binding that
+types a character (a bare letter, digit or symbol, with or without Shift) is
+refused by shortcut capture, and `dispatchKey` skips one from an older config
+while focus is in a text field, so it cannot swallow typing. Toolbar buttons
 funnel through the same handlers, so the toolbar, the welcome-screen shortcuts,
 and keyboard accelerators all share one code path.
 
@@ -439,7 +485,11 @@ is "Reset settings" in the Settings dialog.
 
 `markdown.rs::render` turns Markdown source into an HTML **string** on the Rust
 side using pulldown-cmark, with fenced code blocks highlighted by `highlight.rs`
-(syntect). Raw HTML in the source is escaped, not executed. Local image paths
+(syntect). The highlighter writes scope classes, not colors: `markdown.css`
+colors them from `--hl-*` variables with a set for dark and a set for light
+themes, and the `export_html` template carries its own light set, since an
+exported file has no app stylesheet. Raw HTML in the source is escaped, not
+executed. Local image paths
 are emitted as `data-oxide-src` attributes alongside the file's mtime in
 `data-oxide-v`; the frontend rewrites them to `asset://` URLs via
 `convertFileSrc` when it mounts the HTML into the content area, with the mtime
