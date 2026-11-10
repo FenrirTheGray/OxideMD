@@ -77,13 +77,18 @@ if (( ${#rpms[@]} )); then
 
   # Non-interactive detached signing: gpg in loopback mode reading the
   # passphrase from a file, so rpmsign never blocks on a pinentry prompt.
-  # rpm execve()s the sign command without a PATH search, so the first token
-  # must be the absolute path to gpg, not the bare name.
+  # rpm execve()s the sign command without a PATH search, so %__gpg must be
+  # the absolute path to gpg, not the bare name.
+  # Only the arguments are set here, not %__gpg_sign_cmd itself: rpm 6 passes
+  # the file names to that macro as %{1} and %{2}, and no longer expands the
+  # %{__plaintext_filename} an override written for rpm 4 relies on.
   gpg_bin="$(command -v gpg)"
   cat > "$HOME/.rpmmacros" <<EOF
 %_signature gpg
 %_gpg_name $GPG_KEY_ID
-%__gpg_sign_cmd $gpg_bin --batch --no-verbose --no-armor --pinentry-mode loopback --passphrase-file $REPO_PASSPHRASE_FILE --no-secmem-warning --digest-algo sha256 -u "%{_gpg_name}" -sbo %{__signature_filename} %{__plaintext_filename}
+%__gpg $gpg_bin
+%_gpg_digest_algo sha256
+%_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase-file $REPO_PASSPHRASE_FILE
 EOF
   rpmsign --addsign "$OUTPUT"/rpm/*.rpm
 
