@@ -33,16 +33,34 @@ function withSelection(label, selectionText) {
        + `${sel.length} char${sel.length === 1 ? '' : 's'} selected)`;
 }
 
+// The whole label; the status bar shows as much of it as fits.
+let full = '';
+
+// A label wider than its box loses its tail to a literal "...". The cut is
+// measured, because the room depends on the window and the path beside it.
+function show(text) {
+  if (!statusCountsEl) return;
+  full = text;
+  statusCountsEl.textContent = text;
+  let keep = text.length;
+  while (keep > 0 && statusCountsEl.scrollWidth > statusCountsEl.clientWidth) {
+    // Jump close to the fit in one step, then walk back a character at a time.
+    keep = Math.min(keep - 1, Math.floor(keep * statusCountsEl.clientWidth / statusCountsEl.scrollWidth));
+    statusCountsEl.textContent = text.slice(0, keep) + '...';
+  }
+  statusCountsEl.title = keep < text.length ? text : '';
+}
+window.addEventListener('resize', () => show(full));
+
 // String path — read mode and one-shot edit-mode callers (mount / mode
 // switch / discard). O(doc), which is why the live edit path is debounced
 // and uses updateCountsFrom instead (see editor.ts countField).
 export function updateCounts(value: any, selectionText?: any) {
-  if (!statusCountsEl) return;
   const text = value ?? '';
-  statusCountsEl.textContent = withSelection(
+  show(withSelection(
     countsLabel(countLines(text), countWords(text), text.length),
     selectionText,
-  );
+  ));
 }
 
 // Precomputed path — the live editor maintains {lines, words, chars}
@@ -53,13 +71,12 @@ export function updateCountsFrom(
   counts: { lines: number; words: number; chars: number },
   selectionText?: any,
 ) {
-  if (!statusCountsEl) return;
-  statusCountsEl.textContent = withSelection(
+  show(withSelection(
     countsLabel(counts.lines, counts.words, counts.chars),
     selectionText,
-  );
+  ));
 }
 
 export function clearCounts() {
-  if (statusCountsEl) statusCountsEl.textContent = '';
+  show('');
 }

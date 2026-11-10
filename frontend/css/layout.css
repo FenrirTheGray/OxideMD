@@ -1247,8 +1247,9 @@ body:not(.has-tab) #status-bar {
    orphaned divider in the status bar. */
 #status-counts {
   color: var(--fg-dim);
-  /* Shrinks only once the path is at its minimum (#file-path), and then
-     the tail (the selection segment) ellipsizes instead of being clipped. */
+  /* Shrinks only once the path is at its minimum (#file-path). counts.ts
+     then cuts the tail to fit; the ellipsis is the fallback for a squeeze
+     it has not seen yet. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
