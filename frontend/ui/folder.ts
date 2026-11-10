@@ -529,11 +529,15 @@ export function highlightActiveTreeItem() {
 // Drag to resize the file tree; width is clamped and persisted to config
 // on pointer release. Keyboard users get arrow-key nudging + Home/End.
 const SIDEBAR_MIN = 180;
-const SIDEBAR_MAX = 480;
+// At most 40% of the window. layout.css applies the same cap to the docked
+// width, so a saved width stays in bounds when the window shrinks.
+const sidebarMax = () => Math.max(SIDEBAR_MIN, Math.floor(window.innerWidth * 0.4));
 
-function setSidebarWidth(px, maxOverride = SIDEBAR_MAX) {
-  const w = Math.max(SIDEBAR_MIN, Math.min(maxOverride, Math.round(px)));
+function setSidebarWidth(px) {
+  const max = sidebarMax();
+  const w = Math.max(SIDEBAR_MIN, Math.min(max, Math.round(px)));
   document.body.style.setProperty('--sidebar-width', `${w}px`);
+  sidebarDivider.setAttribute('aria-valuemax', String(max));
   sidebarDivider.setAttribute('aria-valuenow', String(w));
   return w;
 }
@@ -571,31 +575,33 @@ function endSidebarDrag(e) {
   sidebarDivider.classList.remove('dragging');
   document.body.classList.remove('resizing-sidebar');
   try { sidebarDivider.releasePointerCapture(e.pointerId); } catch {}
-  const w = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
-  persistSidebarWidth(w);
+  persistSidebarWidth(sidebarEl.offsetWidth);
 }
 sidebarDivider.addEventListener('pointerup', endSidebarDrag);
 sidebarDivider.addEventListener('pointercancel', endSidebarDrag);
 
-// Double-click the divider to fit the sidebar to its widest tree row,
-// capped at 50% of the window's current width.
+// Double-click fits the widest name, wider or narrower. scrollWidth never
+// reports less than the box, so spare room only shows once the tree is
+// squeezed to nothing for the read.
 sidebarDivider.addEventListener('dblclick', (e) => {
   e.preventDefault();
-  const overflow = sidebarTreeEl.scrollWidth - sidebarTreeEl.clientWidth;
-  if (overflow <= 0) return;
-  const cur = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
-  const maxAllowed = Math.max(SIDEBAR_MIN, Math.floor(window.innerWidth * 0.5));
-  const applied = setSidebarWidth(cur + overflow, maxAllowed);
-  persistSidebarWidth(applied);
+  if (!visibleTreeRows().length) return;
+  const room = sidebarTreeEl.clientWidth;
+  sidebarTreeEl.style.width = '0';
+  const need = sidebarTreeEl.scrollWidth;
+  sidebarTreeEl.style.width = '';
+  if (need === room) return;
+  persistSidebarWidth(setSidebarWidth(sidebarEl.offsetWidth + need - room));
 });
 
 sidebarDivider.addEventListener('keydown', (e) => {
-  const cur = parseInt(sidebarDivider.getAttribute('aria-valuenow') || '240', 10);
+  // The width on screen: CSS may be showing less than the saved width.
+  const cur = sidebarEl.offsetWidth;
   let next = cur;
   if (e.key === 'ArrowLeft')       next = cur - 10;
   else if (e.key === 'ArrowRight') next = cur + 10;
   else if (e.key === 'Home')       next = SIDEBAR_MIN;
-  else if (e.key === 'End')        next = SIDEBAR_MAX;
+  else if (e.key === 'End')        next = sidebarMax();
   else return;
   e.preventDefault();
   const applied = setSidebarWidth(next);

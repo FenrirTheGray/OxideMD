@@ -227,26 +227,29 @@ if (outlineDivider) {
     outlineDivider.classList.remove('dragging');
     document.body.classList.remove('resizing-sidebar');
     try { outlineDivider.releasePointerCapture(e.pointerId); } catch {}
-    persistOutlineWidth(parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10));
+    persistOutlineWidth(outlineSidebar.offsetWidth);
   };
   outlineDivider.addEventListener('pointerup', endDrag);
   outlineDivider.addEventListener('pointercancel', endDrag);
-  // Double-click fits the widest heading (folder.ts does the same for the
-  // tree). Each row ellipsizes on its own, so the overflow is per item:
-  // scrollWidth still reports the full text width under overflow:hidden.
+  // Double-click fits the widest heading, wider or narrower (folder.ts does
+  // the same for the tree). Each row is measured at its natural width: the
+  // scrollWidth of an ellipsized row leaves out its right padding in WebKit,
+  // so a fit based on it stops short and the heading stays cut.
   outlineDivider.addEventListener('dblclick', (e) => {
     e.preventDefault();
-    let overflow = 0;
-    outlineSidebarBody.querySelectorAll('.outline-item').forEach((el) => {
-      overflow = Math.max(overflow, el.scrollWidth - el.clientWidth);
-    });
-    if (overflow <= 0) return;
-    const cur = parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10);
+    const items = [...outlineSidebarBody.querySelectorAll('.outline-item')] as HTMLElement[];
+    if (!items.length) return;
+    const shown = items.map((el) => el.getBoundingClientRect().width);
+    items.forEach((el) => { el.style.width = 'max-content'; });
+    const change = Math.ceil(Math.max(...items.map((el, n) => el.getBoundingClientRect().width - shown[n])));
+    items.forEach((el) => { el.style.width = ''; });
+    if (change === 0) return;
+    const cur = outlineSidebar.offsetWidth;
     const maxAllowed = Math.max(OUTLINE_MIN, Math.floor(window.innerWidth * 0.5));
-    persistOutlineWidth(setOutlineWidth(cur + overflow, maxAllowed));
+    persistOutlineWidth(setOutlineWidth(cur + change, maxAllowed));
   });
   outlineDivider.addEventListener('keydown', (e) => {
-    const cur = parseInt(outlineDivider.getAttribute('aria-valuenow') || '260', 10);
+    const cur = outlineSidebar.offsetWidth;
     let next = cur;
     // Mirrored: ← widens the outline (it grows leftward), → narrows.
     if (e.key === 'ArrowLeft')       next = cur + 10;
