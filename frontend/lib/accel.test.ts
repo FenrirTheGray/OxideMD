@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  parseAccel, formatAccelParts, canonicalizeAccel, normalizeKey,
+  parseAccel, formatAccelParts, canonicalizeAccel, normalizeKey, typesText,
 } from "./accel.ts";
 
 test('parseAccel: basic modifier + key', () => {
@@ -90,4 +90,14 @@ test('normalizeKey: named keys, letters, and Plus', () => {
   assert.equal(normalizeKey('+'), 'Plus');
   assert.equal(normalizeKey('b'), 'B');
   assert.equal(normalizeKey(''), '');
+});
+
+test('typesText: printable keys without Mod or Alt', () => {
+  for (const s of ['J', 'Shift+J', '1', '=', 'Shift+Plus', 'Space']) {
+    assert.equal(typesText(parseAccel(s)), true, s);
+  }
+  for (const s of ['Mod+J', 'Alt+J', 'Alt+Shift+F', 'Tab', 'Shift+Tab', 'F5', 'Escape', 'Home']) {
+    assert.equal(typesText(parseAccel(s)), false, s);
+  }
+  assert.equal(typesText(null), false);
 });

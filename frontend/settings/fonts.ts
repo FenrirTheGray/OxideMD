@@ -95,16 +95,18 @@ export function rebuildFontDropdown() {
       const opt = document.createElement("div");
       opt.className = "custom-select-option custom-font-option";
       opt.dataset.value = `custom:${f.filename}`;
-      opt.setAttribute("role", "option");
-
+      // The option role goes on the label, not the row: an option's children
+      // are presentational, which hid the remove button from assistive tech.
       const label = document.createElement("span");
       label.className = "custom-font-label";
+      label.setAttribute("role", "option");
       label.textContent = f.name;
       opt.appendChild(label);
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "custom-font-remove";
       removeBtn.setAttribute("aria-label", `Remove ${f.name}`);
+      removeBtn.setAttribute("aria-keyshortcuts", "Delete");
       removeBtn.title = `Remove ${f.name}`;
       removeBtn.innerHTML = "&#x2715;";
       opt.appendChild(removeBtn);

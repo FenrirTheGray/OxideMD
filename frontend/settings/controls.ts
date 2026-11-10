@@ -51,7 +51,8 @@ export function wireCustomSelect(sel: HTMLElement) {
   trigger.addEventListener("click", () => (isOpen() ? close() : open()));
   trigger.addEventListener("keydown", (e: KeyboardEvent) => {
     const i = opts().findIndex((o) => o.classList.contains("focused"));
-    switch (e.key) {
+    // `code` for Tab: WebKitGTK reports Shift+Tab as key 'Unidentified'.
+    switch (e.code === "Tab" ? "Tab" : e.key) {
       case "Enter":
       case " ":
         e.preventDefault();
@@ -72,6 +73,12 @@ export function wireCustomSelect(sel: HTMLElement) {
       case "Tab":
         if (isOpen()) close();
         break;
+      case "Delete": {
+        // Keyboard path to an imported font/theme row's remove (×) button.
+        const remove = isOpen() && i >= 0 ? opts()[i].querySelector<HTMLElement>(".custom-font-remove") : null;
+        if (remove) { e.preventDefault(); remove.click(); }
+        break;
+      }
     }
   });
   return { open, close };

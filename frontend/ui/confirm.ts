@@ -46,7 +46,7 @@ export function setConfirmContents({ title, bodyHtml, saveLabel, discardLabel, c
 }
 
 export function promptUnsavedChanges(tab) {
-  setConfirmContents({
+  return showPrompt({
     title: 'Unsaved changes',
     bodyHtml: `You have unsaved changes in <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span>. What would you like to do?`,
     saveLabel: 'Save',
@@ -54,11 +54,10 @@ export function promptUnsavedChanges(tab) {
     cancelHidden: false,
     primary: 'save',
   });
-  return openConfirmDialog();
 }
 
 export function promptDiscardChanges(tab) {
-  setConfirmContents({
+  return showPrompt({
     title: 'Discard changes',
     bodyHtml: `Discard unsaved changes to <span class="confirm-file-name">${escapeHtml(tab.title || 'this file')}</span>? This can't be undone.`,
     discardLabel: 'Discard',
@@ -66,7 +65,6 @@ export function promptDiscardChanges(tab) {
     saveHidden: true,
     primary: 'cancel',
   });
-  return openConfirmDialog();
 }
 
 // Warn when the file changed on disk since it was opened (another tool /
@@ -74,7 +72,7 @@ export function promptDiscardChanges(tab) {
 // Resolves 'save' to overwrite, 'cancel' to abort the save. Cancel is
 // primary so a stray Enter/Escape protects the external edit.
 export function promptOverwriteChanged(tab) {
-  setConfirmContents({
+  return showPrompt({
     title: 'File changed on disk',
     bodyHtml: `<span class="confirm-file-name">${escapeHtml(tab.title || 'This file')}</span> has changed on disk since you opened it. Saving now will overwrite those changes.`,
     saveLabel: 'Overwrite',
@@ -83,7 +81,6 @@ export function promptOverwriteChanged(tab) {
     discardHidden: true, // two-button shape: Save(=Overwrite) + Cancel
     primary: 'cancel',
   });
-  return openConfirmDialog();
 }
 
 // Confirm before the Settings "Reset defaults" button clobbers config.
@@ -93,7 +90,7 @@ export function promptOverwriteChanged(tab) {
 // so a stray Enter/Escape leaves the user's settings untouched.
 // Resolves 'discard' to proceed with the reset, 'cancel' otherwise.
 export function promptResetSettings(tabLabel) {
-  setConfirmContents({
+  return showPrompt({
     title: 'Reset to defaults',
     bodyHtml: `Reset the <span class="confirm-file-name">${escapeHtml(tabLabel || 'current')}</span> settings to their defaults? Your other settings tabs are left untouched. This is applied when you Save.`,
     discardLabel: 'Reset',
@@ -101,7 +98,6 @@ export function promptResetSettings(tabLabel) {
     saveHidden: true,
     primary: 'cancel',
   });
-  return openConfirmDialog();
 }
 
 // Generic destructive confirm (remove a font / theme, delete a tree entry).
@@ -110,15 +106,14 @@ export function promptResetSettings(tabLabel) {
 // `confirm()`, which Tauri's dialog plugin shims into an async call — the
 // return value is a Promise, so `!confirm()` was always false.
 export function promptDelete({ title, bodyHtml, actionLabel = 'Delete' }: { title: string, bodyHtml: string, actionLabel?: string }) {
-  setConfirmContents({
+  return showPrompt({
     title,
     bodyHtml,
     discardLabel: actionLabel,
     cancelHidden: false,
     saveHidden: true,
     primary: 'cancel',
-  });
-  return openConfirmDialog().then((decision) => decision === 'discard');
+  }).then((decision) => decision === 'discard');
 }
 
 // Confirm before closing Settings with unsaved changes. Reuses the shared
@@ -127,7 +122,7 @@ export function promptDelete({ title, bodyHtml, actionLabel = 'Delete' }: { titl
 // the footer Close route through closeSettings, so both get this prompt.
 // Resolves 'save' | 'discard' | 'cancel'.
 export function promptDiscardSettings() {
-  setConfirmContents({
+  return showPrompt({
     title: 'Unsaved settings',
     bodyHtml: `You have unsaved changes in <span class="confirm-file-name">Settings</span>. Save them, or discard and close?`,
     saveLabel: 'Save',
@@ -135,7 +130,6 @@ export function promptDiscardSettings() {
     cancelHidden: false,
     primary: 'save',
   });
-  return openConfirmDialog();
 }
 
 // Returns 'save' (restore), 'discard', or 'cancel' (leave draft alone).
@@ -148,7 +142,7 @@ export function promptRecoverDraft(tab, draft, { conflict = false } = {}) {
   const conflictHtml = conflict
     ? ` <strong class="confirm-conflict">The file on disk has changed since this draft was written.</strong> Restoring will overwrite that newer disk content.`
     : ' Restore it, or open the saved version?';
-  setConfirmContents({
+  return showPrompt({
     title: conflict ? 'Recover draft (file changed on disk)' : 'Recover unsaved draft',
     bodyHtml: baseHtml + conflictHtml,
     saveLabel: 'Restore',
@@ -156,7 +150,6 @@ export function promptRecoverDraft(tab, draft, { conflict = false } = {}) {
     cancelHidden: !conflict,
     primary: conflict ? 'cancel' : 'save',
   });
-  return openConfirmDialog();
 }
 
 // Single-field text prompt (rename / new folder) reusing the shared
@@ -202,6 +195,20 @@ function formatDraftTimestamp(ts) {
   try { return new Date(ts).toLocaleString(); } catch { return 'an earlier session'; }
 }
 
+// A prompt that arrives while another is up, or still closing, waits its
+// turn: showing it now would overwrite that prompt's form in the shared
+// overlay and leave its promise unresolved. Callers that open the overlay
+// directly (insert prompts, promptText) are user-initiated from the editor or
+// a menu, which the open modal makes unreachable.
+const waitingPrompts: Array<() => void> = [];
+function showPrompt(contents): Promise<any> {
+  if (state.confirmDialogOpen) {
+    return new Promise((resolve) => waitingPrompts.push(() => resolve(showPrompt(contents))));
+  }
+  setConfirmContents(contents);
+  return openConfirmDialog();
+}
+
 export function openConfirmDialog() {
   // showModal() gives the focus trap + inert background natively, and
   // restores focus to the trigger on close(). It focuses the first control;
@@ -223,6 +230,7 @@ function closeConfirmDialog(decision) {
     confirmOverlay.classList.remove('closing');
     state.confirmDialogOpen = false;
     r(decision);
+    waitingPrompts.shift()?.();
   }, 200);
 }
 

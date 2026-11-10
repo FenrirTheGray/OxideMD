@@ -18,12 +18,12 @@ import { isMac } from "./state.ts";
 import { logWarn } from "./logger.ts";
 import {
   NAMED_KEYS,
-  parseAccel, formatAccelParts, canonicalizeAccel,
+  parseAccel, formatAccelParts, canonicalizeAccel, typesText,
 } from "../lib/accel.ts";
 
 // Re-export the pure accel helpers so existing importers (settings.js,
 // shortcuts-display.js) keep importing them from keybindings.js unchanged.
-export { parseAccel, formatAccelParts, canonicalizeAccel };
+export { parseAccel, formatAccelParts, canonicalizeAccel, typesText };
 
 // Modifier-only keys — during capture, a keydown with one of these as the
 // key should be ignored until the user presses a real key.
@@ -62,7 +62,13 @@ export function matchesAccel(e, accel) {
 export function eventKeyName(e) {
   const k = e.key;
   if (!k) return '';
+  // WebKitGTK reports Shift+Tab (ISO_Left_Tab) as key 'Unidentified'; the
+  // physical key still names it.
+  if (k === 'Unidentified') return NAMED_KEYS.has(e.code) ? e.code : '';
   if (k === '+') return 'Plus';
+  // The accel grammar spells it Space: ' ' doesn't survive parseAccel's trim,
+  // so capturing it used to store an empty (unassigned) binding.
+  if (k === ' ') return 'Space';
   if (NAMED_KEYS.has(k)) return k;
   if (k.length === 1) return k.toUpperCase();
   return k;
@@ -243,12 +249,20 @@ export function runAction(id) {
 // ctx==='editor', the caller should re-dispatch with ctx='global' (so
 // Ctrl+S-while-editing still saves). Returns true if something fired.
 export function dispatchKey(e, bindings, ctx = 'global') {
+  // A bare printable accel (an old config can hold one) must not eat the
+  // character while the user is typing it into the editor or a field.
+  const t = e.target;
+  const typing = !!t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+  const hit = (accelStr) => {
+    const parsed = accelStr ? parseAccel(accelStr) : null;
+    return !!parsed && matchesAccel(e, parsed) && !(typing && typesText(parsed));
+  };
   for (const action of ACTIONS) {
     const actionCtx = action.context || 'global';
     if (actionCtx !== ctx) continue;
     const b = bindings[action.id];
     if (!b) continue;
-    if (!tryMatch(e, b.primary) && !b.aliases.some(a => tryMatch(e, a))) continue;
+    if (!hit(b.primary) && !b.aliases.some(hit)) continue;
     const fn = handlers.get(action.id);
     if (!fn) return false;  // bound but no handler — let the event through
     fn(e);
@@ -257,21 +271,15 @@ export function dispatchKey(e, bindings, ctx = 'global') {
   return false;
 }
 
-function tryMatch(e, accelStr) {
-  if (!accelStr) return false;
-  const parsed = parseAccel(accelStr);
-  return parsed ? matchesAccel(e, parsed) : false;
-}
-
-// Reverse lookup: accel → conflicting action id (primary bindings only —
-// aliases aren't shown in UI so conflicts against them are invisible).
-// Used by the capture UX to show "already bound to X" warnings.
+// Reverse lookup: accel → conflicting action id. Aliases count too: they
+// aren't shown in the UI, but they still dispatch, and of two actions on one
+// key only the first in ACTIONS ever runs. Used by the capture UX for "already bound to X".
 export function findActionByAccel(bindings, accelStr, excludeId = null) {
   const canon = canonicalizeAccel(accelStr);
   if (!canon) return null;
   for (const id of Object.keys(bindings)) {
     if (id === excludeId) continue;
-    if (bindings[id].primary === canon) return id;
+    if (bindings[id].primary === canon || bindings[id].aliases.includes(canon)) return id;
   }
   return null;
 }

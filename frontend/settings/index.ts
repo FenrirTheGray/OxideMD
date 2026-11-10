@@ -4,6 +4,7 @@ import {
   state,
   systemDarkMQ,
   isLinux,
+  isMac,
   tabs,
   statusText,
   statusIndicator,
@@ -32,6 +33,8 @@ import {
   eventToAccel,
   accelToTokens,
   canonicalizeAccel,
+  parseAccel,
+  typesText,
   MODIFIER_ONLY_KEYS,
 } from "../core/keybindings.ts";
 import { renderShortcutsUI } from "../ui/shortcuts-display.ts";
@@ -240,7 +243,9 @@ function themeMatchesControls(colors) {
 function fallback(cmd, value) {
   return (e) => { logWarn("settings", `${cmd} failed`, e); return value; };
 }
-function syncThemeSelectionFromColors() {
+// The theme the stored custom_theme stands for, given the colors now in
+// the controls.
+function themeFromColors() {
   const atoms = defaultConfig
     ? [
         { ...ATOM_ONE_DARK, colors: atomThemeColors("dark") },
@@ -250,7 +255,10 @@ function syncThemeSelectionFromColors() {
   const matches = [...atoms, ...state.builtinThemes, ...state.customThemes]
     .filter((t) => themeMatchesControls(t.colors));
   const stored = state.config?.custom_theme;
-  const pick = matches.find((t) => t.filename === stored) || matches[0];
+  return matches.find((t) => t.filename === stored) || matches[0];
+}
+function syncThemeSelectionFromColors() {
+  const pick = themeFromColors();
   setCustomThemeSelection(pick?.filename || "", pick?.name || "");
 }
 
@@ -287,10 +295,11 @@ function appendThemeOption(theme) {
   const opt = document.createElement("div");
   opt.className = "custom-select-option custom-font-option";
   (opt as HTMLElement).dataset.value = theme.filename;
-  opt.setAttribute("role", "option");
-
+  // The option role goes on the label, not the row: an option's children
+  // are presentational, which hid the remove button from assistive tech.
   const label = document.createElement("span");
   label.className = "custom-font-label";
+  label.setAttribute("role", "option");
   label.textContent = theme.name;
   opt.appendChild(label);
 
@@ -298,6 +307,7 @@ function appendThemeOption(theme) {
     const removeBtn = document.createElement("button");
     removeBtn.className = "custom-font-remove";
     removeBtn.setAttribute("aria-label", `Remove ${theme.name}`);
+  removeBtn.setAttribute("aria-keyshortcuts", "Delete");
     removeBtn.title = `Remove ${theme.name}`;
     removeBtn.innerHTML = "&#x2715;";
     opt.appendChild(removeBtn);
@@ -591,6 +601,13 @@ document.addEventListener(
 
     const action = ACTIONS.find((a) => a.id === capturingId);
     if (!action) return;
+
+    if (typesText(parseAccel(accel))) {
+      showShortcutConflict(
+        `${accelToTokens(accel).join(" ")} types a character, so it would stop that key from typing. Hold ${isMac ? "\u2318 or \u2325" : "Ctrl or Alt"} with it.`,
+      );
+      return;
+    }
 
     const effective = effectiveBindings(pendingOverrides);
     const conflictId = findActionByAccel(effective, accel, capturingId);
@@ -1129,8 +1146,16 @@ function buildCandidateConfig() {
     palette: collectPaletteFromInputs(
       resolvedTheme((document.getElementById("setting-theme") as HTMLInputElement).value),
     ),
-    custom_theme: (customThemeSelect as HTMLElement).dataset.value || "",
+    custom_theme: candidateCustomTheme(),
   };
+}
+
+// A selection the stored value already resolves to (a fresh install's ""
+// is Atom One Dark) is not a change; keep the stored value so Settings
+// doesn't open dirty.
+function candidateCustomTheme() {
+  const picked = (customThemeSelect as HTMLElement).dataset.value || "";
+  return picked === (themeFromColors()?.filename || "") ? state.config.custom_theme : picked;
 }
 
 // Stable JSON used to compare candidate config against state.config:

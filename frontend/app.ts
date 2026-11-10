@@ -131,10 +131,7 @@ async function init() {
   // A second instance of OxideMD was started (e.g. user double-clicked
   // another .md file in the OS); the backend forwards those paths here.
   await listen('open-files-from-instance', (e) => {
-    const paths = Array.isArray(e.payload) ? e.payload : [];
-    for (const path of paths) {
-      if (isMarkdownPath(path)) loadFile(path);
-    }
+    openWhenNoModal(Array.isArray(e.payload) ? e.payload : []);
   });
 
   // The new instance that triggered the single-instance bounce stamped
@@ -179,14 +176,33 @@ async function init() {
       // anything else (or a drop elsewhere) keeps the existing behavior of
       // opening dropped .md files.
       if (await editorModule()?.dropImagesIntoEditor(p.paths, x, y)) return;
-      for (const path of p.paths) {
-        if (isMarkdownPath(path)) loadFile(path);
-      }
+      openWhenNoModal(p.paths);
     }
   });
 
   syncMaximizeIcon();
 }
+
+// Every modal (settings, confirm prompts, error) is a <dialog> opened with
+// showModal(). Its answer acts on the tab it was opened for, so input that
+// switches tabs must not get past it.
+const modalOpen = () => !!document.querySelector('dialog[open]');
+
+// Files handed in from outside (another instance, an OS drop) open one at a
+// time, and wait while a modal is up rather than switching tabs behind it.
+const pendingOpens = [];
+let drainingOpens = false;
+async function openWhenNoModal(paths) {
+  pendingOpens.push(...paths.filter(isMarkdownPath));
+  if (drainingOpens) return;
+  drainingOpens = true;
+  try {
+    while (pendingOpens.length && !modalOpen()) await loadFile(pendingOpens.shift());
+  } finally {
+    drainingOpens = false;
+  }
+}
+document.querySelectorAll('dialog').forEach((d) => d.addEventListener('close', () => openWhenNoModal([])));
 
 // Tauri reports drag-drop coordinates in physical pixels relative to the
 // webview's client area; convert to CSS pixels so they match DOM hit-testing
@@ -515,9 +531,9 @@ searchReplaceInput.addEventListener('keydown', (e) => {
 // accelerator; these functions own the semantics.
 
 function shiftActiveTab(direction) {
-  if (tabs.length < 2) return;
   const idx = tabs.findIndex(t => t.id === state.activeTabId);
-  const target = (idx + direction + tabs.length) % tabs.length;
+  const target = idx + direction;
+  if (idx < 0 || target < 0 || target >= tabs.length) return;
   [tabs[idx], tabs[target]] = [tabs[target], tabs[idx]];
   renderTabBar();
 }
@@ -662,8 +678,9 @@ document.addEventListener('keydown', (e) => {
 // These must call the same action handlers as the Ctrl+Tab path so a
 // rebind of an adjacent action can't leave the GTK-intercepted default
 // firing a stale implementation.
-listen('prev-tab',       () => runAction('prevTab'));
-listen('next-tab',       () => runAction('nextTab'));
+// They skip the keydown listener above, so they need its modal guard here.
+listen('prev-tab', () => { if (!modalOpen()) runAction('prevTab'); });
+listen('next-tab', () => { if (!modalOpen()) runAction('nextTab'); });
 
 // Prevent browser default drag-drop navigation
 document.addEventListener('dragover', (e) => e.preventDefault());

@@ -102,3 +102,11 @@ export function normalizeKey(raw) {
   }
   return raw.toUpperCase();
 }
+
+// True when the accel's key types a character in a text field (letter,
+// digit, symbol, space) and no Mod or Alt is held to turn it into a command.
+// Shift alone still types (Shift+J is "J").
+export function typesText(accel) {
+  if (!accel || accel.mod || accel.alt) return false;
+  return accel.key.length === 1 || accel.key === 'Space' || accel.key === 'Plus';
+}
