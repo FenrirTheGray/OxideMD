@@ -51,12 +51,16 @@ export function saveRecentlyFor(path) {
     && state.lastSavedPath === path;
 }
 
+// layout.css shows one pane at a time at this width; 'split' is editor-only.
+export const singlePaneMQ = window.matchMedia('(max-width: 640px)');
+
 // Whether the live preview pane is currently visible — drives the outline
 // button's edit-mode aria-pressed / tooltip in syncToolbar().
 export function isPreviewVisible() {
   const tab = activeTab();
   if (!tab?.editing) return false;
-  return (tab.splitMode || 'split') !== 'editor';
+  const mode = tab.splitMode || 'split';
+  return singlePaneMQ.matches ? mode === 'preview' : mode !== 'editor';
 }
 
 // ── Image hydration ───────────────────────────────────────────────────────

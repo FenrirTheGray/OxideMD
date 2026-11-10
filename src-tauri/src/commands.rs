@@ -16,9 +16,11 @@ use tauri_plugin_updater::UpdaterExt;
 /// file-producing command shares: strip the Windows `\\?\` verbatim
 /// prefix, render the markdown against the file's own directory (so
 /// relative images resolve), and derive the tab title. `raw` is both the
-/// source rendered and the buffer handed back verbatim.
+/// source rendered and the buffer handed back, with CRLF line breaks turned
+/// into LF (see `to_lf`).
 fn build_open_result(canonical: PathBuf, raw: String) -> OpenResult {
     let canonical = strip_windows_verbatim(canonical);
+    let raw = to_lf(raw);
     let html = markdown::render(&raw, canonical.parent());
     let title = canonical
         .file_name()
@@ -87,11 +89,38 @@ fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The frontend holds every buffer with LF line breaks, because CodeMirror
+/// normalizes them; the file on disk keeps its own style. Without this, a
+/// CRLF buffer never equals the editor's text, and saving rewrites every line.
+fn to_lf(text: String) -> String {
+    if text.contains("\r\n") {
+        text.replace("\r\n", "\n")
+    } else {
+        text
+    }
+}
+
+/// Whether every line break in `bytes` is CRLF. A mixed file is saved as LF.
+fn is_crlf(bytes: &[u8]) -> bool {
+    let lf = bytes.iter().filter(|&&b| b == b'\n').count();
+    lf > 0 && bytes.windows(2).filter(|w| w == b"\r\n").count() == lf
+}
+
+/// `atomic_write` an LF `content`, as CRLF when the file it replaces is CRLF.
+fn write_keeping_line_endings(path: &std::path::Path, content: &str) -> Result<(), String> {
+    if fs::read(path).is_ok_and(|b| is_crlf(&b)) {
+        atomic_write(path, &content.replace('\n', "\r\n"))
+    } else {
+        atomic_write(path, content)
+    }
+}
+
 #[tauri::command]
 pub async fn save_file(path: String, content: String) -> Result<OpenResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let raw = PathBuf::from(&path);
-        atomic_write(&raw, &content)?;
+        let content = to_lf(content);
+        write_keeping_line_endings(&raw, &content)?;
         let canonical = fs::canonicalize(&raw).unwrap_or(raw);
         Ok(build_open_result(canonical, content))
     })
@@ -1781,6 +1810,34 @@ pub struct OpenResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_crlf_needs_every_break_to_be_crlf() {
+        assert!(is_crlf(b"a\r\nb\r\n"));
+        assert!(!is_crlf(b"a\nb\n"));
+        assert!(!is_crlf(b"a\r\nb\n"));
+        assert!(!is_crlf(b"no break"));
+    }
+
+    #[test]
+    fn save_keeps_the_files_line_endings() {
+        let dir = tempfile::tempdir().unwrap();
+        let crlf = dir.path().join("crlf.md");
+        let lf = dir.path().join("lf.md");
+        fs::write(&crlf, "# T\r\nold\r\n").unwrap();
+        fs::write(&lf, "# T\nold\n").unwrap();
+        let content = to_lf("# T\r\nnew\n".to_string());
+        assert_eq!(content, "# T\nnew\n");
+        write_keeping_line_endings(&crlf, &content).unwrap();
+        write_keeping_line_endings(&lf, &content).unwrap();
+        write_keeping_line_endings(&dir.path().join("new.md"), &content).unwrap();
+        assert_eq!(fs::read_to_string(&crlf).unwrap(), "# T\r\nnew\r\n");
+        assert_eq!(fs::read_to_string(&lf).unwrap(), "# T\nnew\n");
+        assert_eq!(
+            fs::read_to_string(dir.path().join("new.md")).unwrap(),
+            "# T\nnew\n"
+        );
+    }
 
     #[test]
     fn percent_decode_basic_space() {

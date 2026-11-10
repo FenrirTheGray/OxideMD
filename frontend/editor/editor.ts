@@ -17,7 +17,7 @@ import {
 import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
 import { syncWatcher } from "../ui/folder.ts";
 import {
-  activeTab, isDirty, renderContent, hydrateImages,
+  activeTab, isDirty, isPreviewVisible, singlePaneMQ, renderContent, hydrateImages,
   setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
 import { closeSearch } from "../features/search.ts";
@@ -42,7 +42,7 @@ import {
   drawSelection, dropCursor, highlightActiveLine, highlightActiveLineGutter, highlightSpecialChars, rectangularSelection,
 } from '@codemirror/view';
 import { EditorState, EditorSelection, Prec, StateField, StateEffect, RangeSetBuilder, Compartment } from '@codemirror/state';
-import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { history, isolateHistory, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle, syntaxTree, bracketMatching, indentOnInput } from '@codemirror/language';
 import { tags, Tag, styleTags } from '@lezer/highlight';
@@ -129,6 +129,10 @@ function applySplitMode(mode, persist) {
   if (persist) {
     const tab = activeTab();
     if (tab) tab.splitMode = m;
+    // A hidden CodeMirror keeps DOM focus in WebKit and would go on taking
+    // keystrokes, so hand focus back and forth with the editor's visibility.
+    if (m === 'preview') editorView?.contentDOM.blur();
+    else if (document.activeElement === document.body) editorView?.focus();
   }
 }
 
@@ -1065,7 +1069,9 @@ export function exitEditMode({ keepHtml = true } = {}) {
 function replaceEditorBuffer(next) {
   if (!editorView) return;
   const splice = diffSplice(editorView.state.doc.toString(), next);
-  if (splice) editorView.dispatch({ changes: splice, scrollIntoView: true });
+  // Its own undo step: without isolation CM merges it into typing from the
+  // last 500 ms, and one Ctrl+Z would undo both.
+  if (splice) editorView.dispatch({ changes: splice, scrollIntoView: true, annotations: isolateHistory.of('full') });
 }
 
 // Run the tidier over the active tab's buffer. Shared by format-on-save
@@ -1760,13 +1766,16 @@ export function togglePreviewPane() {
   const tab = activeTab();
   if (!tab?.editing) return;
   const cur = tab.splitMode || 'split';
-  if (cur === 'editor') {
-    applySplitMode(tab.lastPreviewMode || 'split', true);
-  } else {
+  if (isPreviewVisible()) {
     tab.lastPreviewMode = cur;
     applySplitMode('editor', true);
+  } else {
+    // In the single-pane layout 'split' shows only the editor.
+    applySplitMode(singlePaneMQ.matches ? 'preview' : (tab.lastPreviewMode || 'split'), true);
   }
 }
+// Crossing the single-pane width changes what 'split' shows.
+singlePaneMQ.addEventListener('change', () => syncToolbar());
 
 if (btnPreview) {
   btnPreview.addEventListener('click', (e) => {
