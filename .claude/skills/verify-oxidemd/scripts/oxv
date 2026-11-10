@@ -1,0 +1,400 @@
+#!/usr/bin/env bash
+# oxv: launch, drive and observe an isolated OxideMD instance for verification.
+#
+# The instance runs on a hidden Hyprland workspace with its own config, cache,
+# data and D-Bus session, so it never takes keyboard focus, never appears on
+# screen, and cannot touch the user's settings or a copy of OxideMD they have
+# open. See ../SKILL.md for the workflow.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/../../../.." && pwd)"
+BIN="${CARGO_TARGET_DIR:-$REPO/src-tauri/target}/debug/oxidemd"
+RUN="${OXV_RUN:-/tmp/oxidemd-verify/main}"
+SIZE="${OXV_SIZE:-1280x800}"
+STATE="$RUN/state.env"
+
+die() { echo "oxv: $*" >&2; exit 1; }
+
+usage() {
+  cat <<'EOF'
+usage: oxv <command> [args]
+
+  build                 build the frontend bundle and the debug binary
+  launch [file...]      start an isolated instance, optionally opening files
+  doctor                read-only check that the instance is worth driving
+  open <file>           open a file in the running instance (the "Open with" path)
+  tree [--all]          print the accessibility tree (showing elements only by default)
+  show <name> [opts]    print the elements matching an accessible name
+  press <name> [opts]   press a button, toggle or tab by accessible name
+  text <name> [opts]    print the text of an element (the editor, a paragraph)
+  wait <name> [opts]    wait until an element shows (--gone, --enabled, --timeout S)
+  key <combo>           send one key, e.g. ctrl+s, ctrl+shift+o, Escape, Return
+  type <string>         type text key by key (US layout; read it back with `text`)
+  reveal | hide         put the window on a visible workspace (no focus) or back off screen
+  shot <label>          screenshot the window to evidence/<label>.png
+  snap <label>          save the accessibility tree to evidence/<label>.a11y.txt
+  keep <file> <label>   copy a file into evidence/ as proof of a side effect
+  crash                 kill the app hard (SIGKILL) and keep its state, for recovery tests
+  stop [--keep-state]   stop the instance and delete its scratch state; evidence stays
+
+  name options: --role R, --contains, --text, --hidden
+
+  OXV_RUN   run directory (default /tmp/oxidemd-verify/main); one instance per directory
+  OXV_SIZE  window size (default 1280x800)
+EOF
+}
+
+# The run directory holds a script that gets executed and state that names
+# the processes to signal, and its default lives under world-writable /tmp.
+# So it must be a real directory that only this user can write, inside a
+# parent nobody else can use to swap it out.
+others_can_write() { case "$(stat -c %A "$1")" in ?????w????|????????w?) return 0 ;; *) return 1 ;; esac; }
+
+check_private() {
+  local dir="$1" parent
+  [ -d "$dir" ] && [ ! -L "$dir" ] || die "$dir is not a real directory; refusing to use it"
+  [ -O "$dir" ] || die "$dir belongs to another user; set OXV_RUN to a directory of your own"
+  others_can_write "$dir" && die "$dir is writable by other users; fix its mode or set OXV_RUN"
+  parent="$(dirname "$dir")"
+  if [ -O "$parent" ] && [ ! -L "$parent" ]; then
+    others_can_write "$parent" && die "$parent is writable by other users; fix its mode or set OXV_RUN"
+  elif ! { [ "$(stat -c %u "$parent")" = 0 ] && [ -k "$parent" ]; }; then
+    die "$parent belongs to another user and is not a sticky system directory; set OXV_RUN"
+  fi
+  return 0
+}
+
+make_private() {
+  local parent; parent="$(dirname "$RUN")"
+  (umask 077; [ -e "$parent" ] || mkdir -p "$parent"; [ -e "$RUN" ] || mkdir "$RUN")
+  check_private "$RUN"
+}
+
+# state.env is parsed, never sourced: only these four keys, only these shapes.
+load_state() {
+  [ -e "$RUN" ] && check_private "$RUN"
+  [ -f "$STATE" ] && [ ! -L "$STATE" ] || die "no instance recorded in $RUN (run: oxv launch)"
+  PGID="" PID="" ADDR="" STABLE=""
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      PGID=*)   [[ "${line#*=}" =~ ^[0-9]+$ ]]      && PGID="${line#*=}" ;;
+      PID=*)    [[ "${line#*=}" =~ ^[0-9]+$ ]]      && PID="${line#*=}" ;;
+      ADDR=*)   [[ "${line#*=}" =~ ^0x[0-9a-f]+$ ]] && ADDR="${line#*=}" ;;
+      STABLE=*) [[ "${line#*=}" =~ ^[0-9a-f]+$ ]]   && STABLE="${line#*=}" ;;
+    esac
+  done < "$STATE"
+  [ -n "$PGID" ] && [ -n "$PID" ] && [ -n "$ADDR" ] && [ -n "$STABLE" ] \
+    || die "$STATE is malformed (run: oxv stop, then oxv launch)"
+}
+
+group_alive() { [ -n "${PGID:-}" ] && pgrep -g "$PGID" >/dev/null 2>&1; }
+
+app_alive() {
+  [ -n "${PID:-}" ] && [ -d "/proc/$PID" ] && [ "$(readlink "/proc/$PID/exe" 2>/dev/null)" = "$BIN" ]
+}
+
+need_app() { load_state; app_alive || die "the instance in $RUN is not running (run: oxv doctor)"; }
+
+window_json() { hyprctl clients -j | jq -c --argjson p "$1" '.[] | select(.pid == $p)'; }
+
+a11y() { python3 "$HERE/a11y.py" --pid "$PID" --stable "${STABLE:-}" "$@"; }
+
+# Off screen, the window paints only when it is captured, and CSS transitions,
+# requestAnimationFrame callbacks and the accessibility tree's showing/hidden
+# states all wait for a paint. So every action is followed by a few captured
+# frames, and every read is preceded by one.
+pump() { # frames
+  local i
+  for i in $(seq 1 "${1:-1}"); do
+    grim -T "$STABLE" - >/dev/null 2>&1 || true
+    [ "$i" -lt "${1:-1}" ] && sleep 0.08
+  done
+  return 0
+}
+
+newest_source() {
+  find "$REPO/frontend" "$REPO/src-tauri/src" "$REPO/src-tauri/tauri.conf.json" "$REPO/src-tauri/Cargo.toml" \
+    -path "$REPO/frontend/dist" -prune -o -type f -newer "$BIN" -print -quit
+}
+
+cmd_build() {
+  (cd "$REPO" && npm run build:frontend)
+  (cd "$REPO/src-tauri" && cargo build)
+  echo "built $BIN"
+}
+
+cmd_launch() {
+  [[ "$RUN" =~ ^[A-Za-z0-9_./-]+$ ]] || die "OXV_RUN may only contain letters, digits and _ . / -"
+  [ -x "$BIN" ] || die "no debug build at $BIN (run: oxv build)"
+  for tool in hyprctl jq grim python3 dbus-run-session busctl setsid; do
+    command -v "$tool" >/dev/null || die "missing tool: $tool"
+  done
+  make_private
+  if [ -f "$STATE" ]; then
+    load_state
+    group_alive && die "an instance is already running in $RUN (oxv stop, or set OXV_RUN to another directory)"
+  fi
+  umask 077
+  mkdir -p "$RUN/xdg/config" "$RUN/xdg/cache" "$RUN/xdg/data" "$RUN/evidence"
+  rm -f "$STATE" "$RUN/pgid" "$RUN/spawn.sh"
+
+  local a11y_bus files="" f
+  a11y_bus="$(busctl --user call org.a11y.Bus /org/a11y/bus org.a11y.Bus GetAddress | sed -E 's/^s "(.*)"$/\1/')"
+  [ -n "$a11y_bus" ] || die "could not find the accessibility bus (is at-spi2-core running?)"
+  for f in "$@"; do
+    [ -f "$f" ] || die "no such file: $f"
+    files+=" $(printf '%q' "$(realpath "$f")")"
+  done
+
+  # The app talks to a private D-Bus session, so the single-instance plugin
+  # cannot forward into a copy of OxideMD the user has open. The accessibility
+  # bus is passed through by address so the UI stays readable from outside.
+  cat > "$RUN/spawn.sh" <<EOF
+#!/bin/sh
+echo \$\$ > $(printf '%q' "$RUN/pgid")
+exec env XDG_CONFIG_HOME=$(printf '%q' "$RUN/xdg/config") XDG_CACHE_HOME=$(printf '%q' "$RUN/xdg/cache") \\
+  XDG_DATA_HOME=$(printf '%q' "$RUN/xdg/data") AT_SPI_BUS_ADDRESS=$(printf '%q' "$a11y_bus") \\
+  dbus-run-session -- $(printf '%q' "$BIN")$files >> $(printf '%q' "$RUN/app.log") 2>&1
+EOF
+  chmod +x "$RUN/spawn.sh"
+
+  # Launch rules: own workspace without switching to it, never take focus at
+  # map time, and ignore the app's own focus requests. OxideMD asks for focus
+  # whenever a file is handed to a running instance (`oxv open`); without the
+  # last two rules Hyprland would switch the user's monitor to this workspace.
+  local ws="oxv-$(basename "$RUN")"
+  hyprctl -q dispatch "hl.dsp.exec_cmd(\"setsid $RUN/spawn.sh\", { workspace = \"name:$ws silent\", float = true, size = \"${SIZE%x*} ${SIZE#*x}\", no_initial_focus = true, focus_on_activate = false, suppress_event = \"activate activatefocus\" })"
+
+  local pgid="" pid="" win="" i
+  for i in $(seq 1 80); do
+    sleep 0.25
+    pgid="$(cat "$RUN/pgid" 2>/dev/null || true)"
+    [[ "$pgid" =~ ^[0-9]+$ ]] || continue
+    pid="$(pgrep -g "$pgid" -x oxidemd | head -1 || true)"
+    [ -n "$pid" ] || continue
+    win="$(window_json "$pid")"
+    [ -n "$win" ] && break
+  done
+  [ -n "$win" ] || die "the app window did not appear within 20s (see $RUN/app.log)"
+
+  local addr stable
+  addr="$(jq -r .address <<<"$win")"
+  stable="$(jq -r .stableId <<<"$win")"
+  printf 'PGID=%s\nPID=%s\nADDR=%s\nSTABLE=%s\n' "$pgid" "$pid" "$addr" "$stable" > "$STATE"
+  PGID="$pgid" PID="$pid" ADDR="$addr" STABLE="$stable"
+
+  # Ready means the web UI is up, not just that the process has a window.
+  a11y ready --timeout 20 \
+    || die "the window opened but the UI never became readable (see $RUN/app.log)"
+  # A hidden window only paints when it is captured, so pump a few frames.
+  cmd_shot _launch >/dev/null && rm -f "$RUN/evidence/_launch.png"
+  echo "launched pid $pid on hidden workspace $ws ($SIZE), run dir $RUN"
+}
+
+cmd_doctor() {
+  local ok=0
+  say() { printf '%-9s %s\n' "$1" "$2"; [ "$1" = FAIL ] && ok=1; return 0; }
+  [ -x "$BIN" ] && say ok "debug build exists: $BIN" || say FAIL "no debug build (run: oxv build)"
+  if [ -x "$BIN" ]; then
+    local stale; stale="$(newest_source)"
+    [ -z "$stale" ] && say ok "build is newer than every source file" \
+      || say FAIL "build is older than ${stale#"$REPO"/} (run: oxv build, then relaunch)"
+  fi
+  if [ ! -f "$STATE" ]; then
+    say FAIL "no instance recorded in $RUN (run: oxv launch)"; return 1
+  fi
+  load_state
+  say ok "run directory $RUN is private to this user"
+  if app_alive; then
+    say ok "pid $PID is this repo's debug build"
+  else
+    say FAIL "pid $PID is not running this repo's debug build"; return 1
+  fi
+  local env; env="$(tr '\0' '\n' < "/proc/$PID/environ")"
+  grep -qx "XDG_CONFIG_HOME=$RUN/xdg/config" <<<"$env" && say ok "config, cache and data live under $RUN/xdg" \
+    || say FAIL "the instance is not using the run directory for its config"
+  local bus; bus="$(grep '^DBUS_SESSION_BUS_ADDRESS=' <<<"$env" | cut -d= -f2-)"
+  [ -n "$bus" ] && [ "$bus" != "${DBUS_SESSION_BUS_ADDRESS:-}" ] && say ok "private D-Bus session (cannot forward into another OxideMD)" \
+    || say FAIL "the instance shares the user's D-Bus session"
+  local win; win="$(window_json "$PID")"
+  if [ -n "$win" ] && [ "$(jq -r .address <<<"$win")" = "$ADDR" ]; then
+    say ok "window $ADDR on workspace $(jq -r .workspace.name <<<"$win"), size $(jq -r '.size | join("x")' <<<"$win")"
+  else
+    say FAIL "the recorded window $ADDR is gone"
+  fi
+  local shown; shown="$(hyprctl monitors -j | jq -r --arg ws "$(jq -r .workspace.name <<<"${win:-{\}}")" '.[] | select(.activeWorkspace.name == $ws) | .name')"
+  [ -z "$shown" ] && say ok "the instance's workspace is not showing on any monitor" \
+    || say FAIL "the instance's workspace is showing on $shown; the user can see the test window"
+  [ "$(hyprctl activewindow -j | jq -r .address)" != "$ADDR" ] && say ok "the instance does not hold keyboard focus" \
+    || say FAIL "the instance holds keyboard focus; the user's typing would land in it"
+  a11y ready 2>/dev/null && say ok "UI is readable through the accessibility tree" \
+    || say FAIL "UI is not readable through the accessibility tree"
+  return $ok
+}
+
+cmd_open() {
+  need_app
+  [ -f "${1:-}" ] || die "usage: oxv open <file>"
+  local bus; bus="$(tr '\0' '\n' < "/proc/$PID/environ" | grep '^DBUS_SESSION_BUS_ADDRESS=' | cut -d= -f2-)"
+  # A second launch on the instance's own bus hands the path to the running
+  # app and exits, exactly like opening a file from a file manager.
+  env DBUS_SESSION_BUS_ADDRESS="$bus" XDG_CONFIG_HOME="$RUN/xdg/config" XDG_CACHE_HOME="$RUN/xdg/cache" \
+    XDG_DATA_HOME="$RUN/xdg/data" "$BIN" "$(realpath "$1")" >> "$RUN/app.log" 2>&1
+  pump 4
+}
+
+send_key() { # mods key
+  local s
+  for s in down up; do
+    hyprctl -q dispatch "hl.dsp.send_key_state({ mods = \"$1\", key = \"$2\", state = \"$s\", window = \"address:$ADDR\" })"
+  done
+}
+
+cmd_key() {
+  need_app
+  [ -n "${1:-}" ] || die "usage: oxv key <combo>, e.g. ctrl+s"
+  local combo="$1" mods="" key part
+  IFS='+' read -ra parts <<<"$combo"
+  key="${parts[-1]}"
+  for part in "${parts[@]:0:${#parts[@]}-1}"; do
+    case "${part,,}" in
+      ctrl|control) mods+=" CTRL" ;;
+      shift) mods+=" SHIFT" ;;
+      alt) mods+=" ALT" ;;
+      super|meta) mods+=" SUPER" ;;
+      *) die "unknown modifier: $part" ;;
+    esac
+  done
+  send_key "${mods# }" "$key"
+  pump 4
+}
+
+cmd_type() {
+  need_app
+  local str="${1:-}" i ch
+  for ((i = 0; i < ${#str}; i++)); do
+    ch="${str:i:1}"
+    case "$ch" in
+      [a-z0-9]) send_key "" "$ch" ;;
+      [A-Z]) send_key "SHIFT" "${ch,,}" ;;
+      ' ') send_key "" space ;;
+      $'\n') send_key "" Return ;;
+      '-') send_key "" minus ;;
+      '.') send_key "" period ;;
+      ',') send_key "" comma ;;
+      '/') send_key "" slash ;;
+      '#') send_key "SHIFT" 3 ;;
+      '!') send_key "SHIFT" 1 ;;
+      '*') send_key "SHIFT" 8 ;;
+      '_') send_key "SHIFT" minus ;;
+      *) die "type: unsupported character '$ch' (put exact content in the file on disk instead)" ;;
+    esac
+  done
+  pump 4
+}
+
+cmd_shot() {
+  need_app
+  [ -n "${1:-}" ] || die "usage: oxv shot <label>"
+  local out="$RUN/evidence/$1.png" tmp="$RUN/.shot" i
+  # The hidden window paints only when captured, so the first frames are
+  # stale. Capture until two frames in a row are identical. grim 1.5 can
+  # crash when the window repaints mid-capture; a failed capture is retried.
+  rm -f "$tmp".*.png
+  local last="" stable=0
+  for i in $(seq 1 14); do
+    if grim -T "$STABLE" "$tmp.$i.png" 2>/dev/null; then
+      if [ -n "$last" ] && cmp -s "$tmp.$i.png" "$last"; then stable=$((stable + 1)); else stable=0; fi
+      last="$tmp.$i.png"
+      [ "$stable" -ge 1 ] && [ "$i" -ge 3 ] && break
+    fi
+    sleep 0.15
+  done
+  [ -n "$last" ] || die "could not capture the window (grim failed 14 times)"
+  mv "$last" "$out"
+  rm -f "$tmp".*.png
+  echo "$out"
+}
+
+cmd_snap() {
+  need_app
+  [ -n "${1:-}" ] || die "usage: oxv snap <label>"
+  pump 2
+  a11y tree > "$RUN/evidence/$1.a11y.txt"
+  echo "$RUN/evidence/$1.a11y.txt"
+}
+
+cmd_keep() {
+  [ -f "${1:-}" ] && [ -n "${2:-}" ] || die "usage: oxv keep <file> <label>"
+  make_private
+  (umask 077; mkdir -p "$RUN/evidence")
+  cp -- "$1" "$RUN/evidence/$2"
+  echo "$RUN/evidence/$2"
+}
+
+cmd_place() { # reveal | hide
+  need_app
+  local ws
+  if [ "$1" = reveal ]; then
+    # Put the window on the workspace the user is not typing in, still
+    # without focus, so it paints at full frame rate (animation work).
+    ws="$(hyprctl monitors -j | jq -r '[.[] | select(.focused | not)][0].activeWorkspace.name // empty')"
+    [ -n "$ws" ] || ws="$(hyprctl monitors -j | jq -r '.[0].activeWorkspace.name')"
+  else
+    ws="name:oxv-$(basename "$RUN")"
+  fi
+  hyprctl -q dispatch "hl.dsp.window.move({ workspace = \"$ws\", follow = false, window = \"address:$ADDR\" })"
+  echo "window is now on workspace ${ws#name:}"
+}
+
+kill_group() { # signal
+  load_state
+  if group_alive; then
+    # Only ever signal the process group this run started.
+    pgrep -g "$PGID" -x oxidemd >/dev/null || pgrep -g "$PGID" -x dbus-run-session >/dev/null \
+      || die "process group $PGID does not look like an oxv instance; refusing to signal it"
+    kill "-$1" -- "-$PGID" 2>/dev/null || true
+    local i
+    for i in $(seq 1 20); do group_alive || break; sleep 0.15; done
+    group_alive && kill -KILL -- "-$PGID" 2>/dev/null || true
+  fi
+}
+
+cmd_crash() {
+  kill_group KILL
+  rm -f "$STATE" "$RUN/pgid"
+  echo "killed; state kept in $RUN/xdg (relaunch with: oxv launch <file>)"
+}
+
+cmd_stop() {
+  [ -e "$RUN" ] || { echo "nothing to stop in $RUN"; return 0; }
+  check_private "$RUN"
+  [ -f "$STATE" ] && kill_group TERM
+  rm -f "$STATE" "$RUN/pgid" "$RUN/spawn.sh"
+  if [ "${1:-}" != "--keep-state" ]; then
+    rm -rf "$RUN/xdg"
+  fi
+  echo "stopped; evidence kept in $RUN/evidence"
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  build) cmd_build ;;
+  launch) cmd_launch "$@" ;;
+  doctor) cmd_doctor ;;
+  open) cmd_open "$@" ;;
+  tree|show|text|wait) need_app; pump 2; a11y "$cmd" "$@" ;;
+  press) need_app; pump 2; a11y press "$@"; pump 4 ;;
+  reveal|hide) cmd_place "$cmd" ;;
+  key) cmd_key "$@" ;;
+  type) cmd_type "$@" ;;
+  shot) cmd_shot "$@" ;;
+  snap) cmd_snap "$@" ;;
+  keep) cmd_keep "$@" ;;
+  crash) cmd_crash ;;
+  stop) cmd_stop "$@" ;;
+  ""|-h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
