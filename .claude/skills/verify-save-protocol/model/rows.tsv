@@ -1,0 +1,17 @@
+# id	kind	invariant	expected	overrides	what it says
+G1	gate	NoSilentOverwrite	holds	-	A save never silently replaces an outside change.
+G2	gate	NoLostEdits	holds	-	Typed text is never dropped.
+G3	gate	NoSilentOverwrite	holds	OtherTabs=TRUE,ExtRename=TRUE	The same, when other tabs change and other programs save by rename.
+G4	gate	NoLostEdits	holds	Reopen=TRUE,OtherTabs=TRUE,ExtRename=TRUE,ExtRestore=TRUE	The same, with every human-speed action allowed.
+G5	gate	NoLostEdits	holds	RaceExternal=TRUE	Outside writes at any instant never drop typed text.
+G6	gate	WatcherStaysArmed	holds	FolderOpen=TRUE,ExtRename=TRUE	With the file's folder open, the watch survives saves and renames.
+F1	finding	NoSilentOverwrite	breaks	Reopen=TRUE	Re-opening the open file disarms the overwrite warning.
+F2	finding	NoSilentOverwrite	breaks	RaceExternal=TRUE	An outside write inside one save or open slips past the warning.
+F3	finding	NoLostEdits	breaks	RaceUser=TRUE	Typing while a reload is in flight loses the typed text.
+F4	finding	NoFalseWarning	breaks	-	The overwrite warning appears with nothing to overwrite.
+F5	finding	TabNotStale	breaks	-	A clean reading-mode tab can show old content.
+F6	finding	WatcherStaysArmed	breaks	-	The file watch dies while the file is open.
+F7	finding	NoSilentOverwrite	breaks	ExtRestore=TRUE	A file put back to its earlier content is overwritten without warning.
+M1	mutant	NoSilentOverwrite	breaks	GuardHash=FALSE	Without the hash check in saveActiveFile.
+M2	mutant	NoLostEdits	breaks	GuardDirty=FALSE	Without the unsaved-edits guard in flushFsChanges.
+M3	mutant	NoLostEdits	breaks	GuardReload=FALSE	Without the unsaved-edits guard in reloadFile.

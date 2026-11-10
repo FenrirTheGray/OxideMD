@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""Model-check OxideMD's save / reload / outside-change protocol.
+
+    check                 run every gate and recorded finding, compare with the record
+    check --self-test     also run the mutants: each switched-off guard must be caught
+    check --trace F1      print the shortest path for one row, in plain words
+    check --only G1,F3    run a subset
+    check --raw F1        print TLC's own output for one row
+    check --with GuardDirty=FALSE
+                          rerun the rows with constants overridden, to ask "what if";
+                          verdicts are printed but nothing is compared with the record
+
+Exit status: 0 when every verdict matches model/rows.tsv and the covered code
+has not changed since model/sync; 1 on a verdict mismatch, or when a --with
+run breaks a gate; 3 when only the covered code changed (the model needs a
+look before its verdicts mean anything).
+See ../SKILL.md.
+"""
+import argparse
+import hashlib
+import os
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+
+HERE = pathlib.Path(__file__).resolve().parent
+SKILL = HERE.parent
+MODEL = SKILL / "model"
+REPO = SKILL.parents[2]
+
+TLA_VERSION = "1.7.4"
+TLA_URL = f"https://github.com/tlaplus/tlaplus/releases/download/v{TLA_VERSION}/tla2tools.jar"
+TLA_SHA256 = "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+JAVA = "java@temurin-jre-21.0.13+9.0.LTS"
+
+# Today's code, with the user and the outside world on their best behaviour.
+BASELINE = {
+    "MaxEdits": "3", "MaxExt": "3",
+    "Reopen": "FALSE", "OtherTabs": "FALSE", "FolderOpen": "FALSE", "ExtRename": "FALSE",
+    "ExtRestore": "FALSE",
+    "RaceExternal": "FALSE", "RaceUser": "FALSE",
+    "GuardHash": "TRUE", "GuardDirty": "TRUE", "GuardReload": "TRUE",
+}
+
+# The code each action stands for. A change to any of these files since the
+# sync commit means the model must be re-read against the code.
+COVERED = [
+    "frontend/app.ts",
+    "frontend/editor/editor.ts",
+    "frontend/ui/tabs.ts",
+    "frontend/ui/folder.ts",
+    "frontend/ui/confirm.ts",
+    "frontend/core/tab-state.ts",
+    "src-tauri/src/commands.rs",
+    "src-tauri/src/watcher.rs",
+]
+
+WORDS = {
+    "Init": "You open the file. OxideMD has asked for its hash but not received it yet.",
+    "EnterEdit": "You switch to edit mode.",
+    "Type": "You type.",
+    "ExitEdit": "You leave edit mode.",
+    "Discard": "You discard your changes.",
+    "UserReload": "You press Reload.",
+    "ReopenSameFile": "You open the same file again (sidebar, recent list, file manager).",
+    "OtherTabChanges": "You open or close another tab or folder, which re-arms the file watcher.",
+    "SaveStart": "You press Save.",
+    "SaveHashRead": "OxideMD reads the file's current hash.",
+    "SaveCompare": "OxideMD compares that hash with the one it remembers.",
+    "PromptOverwrite": "The 'File changed on disk' warning is up; you choose Overwrite.",
+    "PromptCancel": "The 'File changed on disk' warning is up; you choose Cancel.",
+    "SaveWrite": "OxideMD writes your buffer over the file.",
+    "SaveDone": "OxideMD marks the tab saved and asks for the file's new hash.",
+    "SuppressExpires": "1.5 seconds pass since the last save.",
+    "HashReads": "A pending hash request reads the file.",
+    "HashApplies": "That hash arrives and OxideMD remembers it as the file's hash.",
+    "OutsideWrite": "Another program rewrites the file in place.",
+    "OutsideRename": "Another program saves the file by renaming a new one over it.",
+    "OutsideRestore": "Another program puts back the content the file had when you opened it.",
+    "FsFlush": "OxideMD handles the 'file changed' notification.",
+    "ReloadReads": "A pending reload reads the file.",
+    "ReloadApplies": "The reload lands: the tab now holds what was read.",
+}
+
+
+def die(msg, code=2):
+    print(f"check: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def jar_path():
+    cache = pathlib.Path(os.environ.get("XDG_CACHE_HOME", pathlib.Path.home() / ".cache")) / "oxidemd-verify"
+    jar = cache / f"tla2tools-{TLA_VERSION}.jar"
+    if not jar.exists():
+        cache.mkdir(parents=True, exist_ok=True)
+        print(f"check: downloading TLA+ tools {TLA_VERSION} (first run only)", file=sys.stderr)
+        tmp = jar.with_suffix(".part")
+        urllib.request.urlretrieve(TLA_URL, tmp)
+        tmp.rename(jar)
+    digest = hashlib.sha256(jar.read_bytes()).hexdigest()
+    if digest != TLA_SHA256:
+        die(f"{jar} has sha256 {digest}, expected {TLA_SHA256}; delete it and rerun")
+    return jar
+
+
+def java_cmd():
+    if shutil.which("mise"):
+        return ["mise", "x", JAVA, "--", "java"]
+    if shutil.which("java"):
+        return ["java"]
+    die("need mise (preferred, pins the Java version) or a java on PATH")
+
+
+def read_rows():
+    rows = []
+    for line in (MODEL / "rows.tsv").read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        rid, kind, inv, expected, overrides, words = line.split("\t")
+        consts = dict(BASELINE)
+        if overrides != "-":
+            for pair in overrides.split(","):
+                k, v = pair.split("=")
+                if k not in consts:
+                    die(f"rows.tsv {rid}: unknown constant {k}")
+                consts[k] = v
+        rows.append({"id": rid, "kind": kind, "inv": inv, "expected": expected,
+                     "consts": consts, "overrides": overrides, "words": words})
+    return rows
+
+
+def run_row(row, jar, java):
+    with tempfile.TemporaryDirectory(prefix="oxidemd-tlc-") as tmp:
+        tmp = pathlib.Path(tmp)
+        shutil.copy(MODEL / "SaveProtocol.tla", tmp)
+        cfg = ["SPECIFICATION Spec", "CHECK_DEADLOCK FALSE", "CONSTANTS"]
+        cfg += [f"    {k} = {v}" for k, v in row["consts"].items()]
+        cfg += [f"INVARIANT {row['inv']}"]
+        (tmp / "run.cfg").write_text("\n".join(cfg) + "\n")
+        # One worker: breadth-first search then reports a shortest path.
+        cmd = java + ["-XX:+UseParallelGC", "-cp", str(jar), "tlc2.TLC", "-workers", "1",
+                      "-config", "run.cfg", "SaveProtocol.tla"]
+        out = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True).stdout
+    if f"Invariant {row['inv']} is violated" in out:
+        verdict = "breaks"
+    elif "Model checking completed. No error has been found." in out:
+        verdict = "holds"
+    else:
+        verdict = "error"
+    steps = re.findall(r"^State \d+: <(\w+)", out, flags=re.M)
+    steps = ["Init" if s == "Initial" else s for s in steps]
+    states = re.search(r"(\d+) distinct states found", out)
+    return verdict, steps, int(states.group(1)) if states else 0, out
+
+
+def drift():
+    sync = (MODEL / "sync").read_text().split()[0]
+    r = subprocess.run(["git", "-C", str(REPO), "diff", "--name-only", sync, "--"] + COVERED,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        die(f"git could not diff against the sync commit {sync}: {r.stderr.strip()}")
+    return sync, [f for f in r.stdout.splitlines() if f]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--only")
+    ap.add_argument("--trace")
+    ap.add_argument("--raw")
+    ap.add_argument("--with", dest="override")
+    args = ap.parse_args()
+
+    rows = read_rows()
+    pick = args.trace or args.raw or args.only
+    if pick:
+        ids = set(pick.split(","))
+        unknown = ids - {r["id"] for r in rows}
+        if unknown:
+            die(f"no such row: {', '.join(sorted(unknown))}")
+        rows = [r for r in rows if r["id"] in ids]
+    elif not args.self_test:
+        rows = [r for r in rows if r["kind"] != "mutant"]
+
+    if args.override:
+        for pair in args.override.split(","):
+            k, _, v = pair.partition("=")
+            if k not in BASELINE or not v:
+                die(f"--with: unknown constant or missing value in '{pair}'")
+            for r in rows:
+                r["consts"][k] = v
+                r["overrides"] = (r["overrides"] + "," if r["overrides"] != "-" else "") + pair
+
+    sync, changed = drift()
+    if changed and not args.override:
+        print(f"STALE: covered code changed since the sync commit {sync}:")
+        for f in changed:
+            print(f"  {f}")
+        print("The rows below check the model as it was. They say nothing about that change\n"
+              "until you follow 'When the covered code changed' in SKILL.md.\n")
+
+    jar, java = jar_path(), java_cmd()
+    bad = 0
+    broken_gates = 0
+    for row in rows:
+        verdict, steps, states, out = run_row(row, jar, java)
+        if args.raw:
+            print(out)
+            continue
+        ok = verdict == row["expected"]
+        bad += not ok and not args.override
+        broken_gates += row["kind"] == "gate" and verdict != "holds"
+        mark = "what-if" if args.override else ("ok  " if ok else "DIFF")
+        depth = f", {len(steps)} steps" if verdict == "breaks" else ""
+        print(f"{mark} {row['id']:<3} {row['kind']:<7} {row['inv']:<18} {verdict:<6} "
+              f"(recorded: {row['expected']}{depth}, {states} states)  {row['words']}")
+        if verdict == "error":
+            print(out[-1500:])
+        if args.trace or (verdict == "breaks" and (not ok or args.override) and row["expected"] == "holds"):
+            switches = "baseline" if row["overrides"] == "-" else row["overrides"]
+            print(f"     shortest path to breaking {row['inv']} ({switches}):")
+            for n, s in enumerate(steps, 1):
+                print(f"     {n:>2}. {WORDS.get(s, s)}")
+    if args.raw:
+        return 0
+    if args.override:
+        if broken_gates:
+            print(f"\nWhat-if {args.override}: {broken_gates} gate(s) break. A change that does this is unsafe.")
+            return 1
+        print(f"\nWhat-if {args.override}: every gate still holds.")
+        return 0
+
+    if bad:
+        print(f"\n{bad} verdict(s) differ from model/rows.tsv.")
+        return 1
+    if changed:
+        print("\nNOT A PASS: the verdicts match the record, but the covered code changed (see STALE above).")
+        return 3
+    print("\nAll verdicts match the record, and the covered code is unchanged since the sync commit.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
