@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   toggleOrderedBlock, buildHrInsert, buildTableInsert, buildLink, buildCodeBlockInsert, codeSpan, unpadCode, codeFence, stripCodeSpan,
   splitIndent, diffSplice, blockLineSpan, wrapChunks, unwrapChunks,
+  togglePrefixBlock, blockMarkerLength, LIST_PREFIX_RE, HEADING_RE, H1_EXACT, BULLET_EXACT, TASK_EXACT,
 } from './md-transform.ts';
 import { formatTableBlock } from '../lib/md-table.ts';
 
@@ -41,7 +42,65 @@ test('toggleOrderedBlock: toggle-off preserves blank separators', () => {
 
 test('toggleOrderedBlock: numbers nested items after their indentation', () => {
   // Anchored regexes used to double-prefix indented lines (`1.   - b`).
-  assert.equal(toggleOrderedBlock('- a\n  - b'), '1. a\n  2. b');
+  assert.equal(toggleOrderedBlock('- a\n  - b'), '1. a\n   1. b');
+});
+
+test('toggleOrderedBlock: keeps nesting, one counter per level, children under the wider marker', () => {
+  assert.equal(toggleOrderedBlock('- fruit\n  - apple\n  - pear\n- veg'),
+    '1. fruit\n   1. apple\n   2. pear\n2. veg');
+  // Three levels, and an already-indented block keeps its base indent.
+  assert.equal(toggleOrderedBlock('  - a\n    - b\n      - c\n  - d'),
+    '  1. a\n     1. b\n        1. c\n  2. d');
+  // A two-digit parent pushes its children one column further.
+  const ten = Array.from({ length: 10 }, (_, i) => `- i${i}`).join('\n') + '\n  - child';
+  assert.ok(toggleOrderedBlock(ten).endsWith('10. i9\n    1. child'));
+});
+
+test('togglePrefixBlock: applies and strips, skipping blank lines', () => {
+  assert.equal(togglePrefixBlock('alpha\n\nbeta', '- ', BULLET_EXACT, LIST_PREFIX_RE), '- alpha\n\n- beta');
+  assert.equal(togglePrefixBlock('- alpha\n\n- beta', '- ', BULLET_EXACT, LIST_PREFIX_RE), 'alpha\n\nbeta');
+  assert.equal(togglePrefixBlock('a\n  \nb', '- [ ] ', TASK_EXACT, LIST_PREFIX_RE), '- [ ] a\n  \n- [ ] b');
+  assert.equal(togglePrefixBlock('a\n\nb', '# ', H1_EXACT, HEADING_RE), '# a\n\n# b');
+});
+
+test('togglePrefixBlock: a quote marks blank lines so it stays one quote', () => {
+  assert.equal(togglePrefixBlock('a\n\nb', '> ', /^>\s/, /^>\s/, true), '> a\n> \n> b');
+  assert.equal(togglePrefixBlock('> a\n> \n> b', '> ', /^>\s/, /^>\s/, true), 'a\n\nb');
+});
+
+test('toggleOrderedBlock: an all-blank block keeps its line count', () => {
+  assert.equal(toggleOrderedBlock('\n'), '1. \n');
+});
+
+test('togglePrefixBlock: an empty line still gets the marker', () => {
+  assert.equal(togglePrefixBlock('', '## ', /^##\s/, HEADING_RE), '## ');
+  assert.equal(togglePrefixBlock('  ', '- ', BULLET_EXACT, LIST_PREFIX_RE), '- ');
+});
+
+test('togglePrefixBlock: converts within a family and keeps the indent', () => {
+  assert.equal(togglePrefixBlock('## sub', '# ', H1_EXACT, HEADING_RE), '# sub');
+  assert.equal(togglePrefixBlock('  - [ ] x', '- ', BULLET_EXACT, LIST_PREFIX_RE), '  - x');
+});
+
+test('togglePrefixBlock: `*` and `+` bullets, and bullets whose text starts with `[`', () => {
+  assert.equal(togglePrefixBlock('* star item', '- ', BULLET_EXACT, LIST_PREFIX_RE), 'star item');
+  assert.equal(togglePrefixBlock('+ plus', '- ', BULLET_EXACT, LIST_PREFIX_RE), 'plus');
+  assert.equal(togglePrefixBlock('- [docs](http://x.io) here', '- ', BULLET_EXACT, LIST_PREFIX_RE), '[docs](http://x.io) here');
+  // A real task box is not a bullet: Bullet list re-tags it instead.
+  assert.equal(togglePrefixBlock('- [x] done', '- ', BULLET_EXACT, LIST_PREFIX_RE), '- done');
+  assert.equal(togglePrefixBlock('* [ ] t', '- [ ] ', TASK_EXACT, LIST_PREFIX_RE), 't');
+});
+
+test('blockMarkerLength: indent plus quote, list, task or heading marker', () => {
+  assert.equal(blockMarkerLength('- one'), 2);
+  assert.equal(blockMarkerLength('  * [ ] t'), 8);
+  assert.equal(blockMarkerLength('12. x'), 4);
+  assert.equal(blockMarkerLength('> - q'), 4);
+  assert.equal(blockMarkerLength('## h'), 3);
+  assert.equal(blockMarkerLength('plain'), 0);
+  assert.equal(blockMarkerLength('  indented'), 0);
+  assert.equal(blockMarkerLength('*em*'), 0);
+  assert.equal(blockMarkerLength('#tag'), 0);
 });
 
 test('toggleOrderedBlock: toggles indented numbered lines back off', () => {
@@ -185,6 +244,11 @@ test('codeSpan / stripCodeSpan: wrapping then unwrapping round-trips', () => {
 test('stripCodeSpan: returns null when not a code span', () => {
   assert.equal(stripCodeSpan('not code'), null);
   assert.equal(stripCodeSpan('`unbalanced'), null);
+  // Two spans, not one: the inner single backticks close the first span.
+  assert.equal(stripCodeSpan('`a` and `b`'), null);
+  assert.equal(stripCodeSpan('``a```'), null);
+  assert.equal(stripCodeSpan('```a``'), null);
+  assert.equal(stripCodeSpan('``a ` b``'), 'a ` b');
 });
 
 test('buildTableInsert: aligned table split off by blank lines at a mid-line cursor', () => {
@@ -222,6 +286,14 @@ test('buildLink: plain link and image', () => {
 test('buildLink: brackets in the text are escaped, already-escaped ones kept', () => {
   assert.equal(buildLink('a [b] c', 'u'), '[a \\[b\\] c](u)');
   assert.equal(buildLink('x\\]', 'u'), '[x\\]](u)');
+  // `\\]` is an escaped backslash then a bare bracket.
+  assert.equal(buildLink('x\\\\]', 'u'), '[x\\\\\\]](u)');
+  assert.equal(buildLink('[]', 'u'), '[\\[\\]](u)');
+});
+
+test('buildLink: a trailing unescaped backslash is escaped so it cannot eat the `]`', () => {
+  assert.equal(buildLink('C:\\temp\\', 'x.org'), '[C:\\temp\\\\](x.org)');
+  assert.equal(buildLink('a\\\\', 'u'), '[a\\\\](u)');
 });
 
 test('buildLink: spaces or parens wrap the destination in angle brackets', () => {
@@ -239,4 +311,8 @@ test('buildCodeBlockInsert: new block tagged, caret on the empty body line', () 
 test('buildCodeBlockInsert: wraps a selection, backticks dropped from the language', () => {
   assert.deepEqual(buildCodeBlockInsert('', 'a ``` b', 'j`s'), { text: '````js\na ``` b\n````\n', caret: null });
   assert.equal(buildCodeBlockInsert('x\n', 'y', '').text, '```\ny\n```\n');
+});
+
+test('buildCodeBlockInsert: whole selected lines get no extra blank line in the fence', () => {
+  assert.equal(buildCodeBlockInsert('x\n', 'alpha\nbeta\n', '').text, '```\nalpha\nbeta\n```\n');
 });

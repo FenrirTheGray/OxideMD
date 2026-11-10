@@ -82,8 +82,11 @@ export function promptTable(): Promise<{ rows: number, headers: string[] } | nul
   };
   syncHeaders();
   cols.addEventListener('input', syncHeaders);
-  // The −/+ buttons rewrite the text without an input event.
+  // The −/+ buttons, and the stepper's own commit on blur / Enter (which
+  // rounds or rejects a typed value), rewrite the text without an input
+  // event. The commit is a `change` listener registered before this one.
   document.getElementById('table-cols').addEventListener('click', syncHeaders);
+  cols.addEventListener('change', syncHeaders);
   return promise.then((decision) => decision === 'save'
     ? { rows: size(rows), headers: Array.from(headers).slice(0, size(cols)).map((h) => h.value) }
     : null);

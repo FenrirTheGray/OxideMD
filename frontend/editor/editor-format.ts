@@ -7,9 +7,10 @@
 import { EditorSelection } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import {
-  toggleOrderedBlock, buildHrInsert, buildTableInsert, buildLink, buildCodeBlockInsert, LIST_PREFIX_RE, splitIndent,
-  codeSpan, unpadCode, stripCodeSpan,
+  toggleOrderedBlock, togglePrefixBlock, buildHrInsert, buildTableInsert, buildLink, buildCodeBlockInsert, LIST_PREFIX_RE,
+  codeSpan, unpadCode, stripCodeSpan, diffSplice, blockMarkerLength,
   blockLineSpan, wrapChunks, unwrapChunks,
+  H1_EXACT, H2_EXACT, H3_EXACT, HEADING_RE, BULLET_EXACT, TASK_EXACT, QUOTE_RE,
 } from './md-transform.ts';
 import { promptTable, promptLink, promptImage, promptCodeBlock } from '../ui/insert-dialogs.ts';
 import { invoke } from '../core/state.ts';
@@ -73,14 +74,69 @@ function edit(view: any, from: any, to: any, insert: any, selFrom?: any, selTo?:
   view.focus();
 }
 
-// Block-op helper: expand the current selection to cover whole lines.
-// The column-0 edge case (a selection ending at a line start must not pull
-// the touched line into the block) lives in blockLineSpan, unit-tested.
-function expandToLines(view) {
-  const v = getDoc(view);
-  const { s, e } = getSel(view);
-  const { lineStart, lineEnd } = blockLineSpan(v, s, e);
-  return { lineStart, lineEnd, block: v.slice(lineStart, lineEnd) };
+// Block-op helper: run `fn` over the whole lines every selection range
+// touches (once per line, in document order, joined with `\n`), and write
+// back only the characters that changed on each line. The column-0 edge case
+// (a selection ending at a line start must not pull the touched line into the
+// block) lives in blockLineSpan, unit-tested. Selections are mapped through
+// the edit so they stay on the same text; with `caretToEnd` a bare caret goes
+// to the end of its line, ready to type. Never selecting the rewritten lines
+// matters: a selection there is replaced by the next keystroke.
+function editLines(view, fn: (block: string) => string, caretToEnd = true) {
+  const { state } = view;
+  const v = state.doc.toString();
+  const nums = new Set<number>();
+  for (const r of state.selection.ranges) {
+    const { lineStart, lineEnd } = blockLineSpan(v, r.from, r.to);
+    const last = state.doc.lineAt(lineEnd).number;
+    for (let n = state.doc.lineAt(lineStart).number; n <= last; n++) nums.add(n);
+  }
+  const lines = [...nums].sort((a, b) => a - b).map(n => state.doc.line(n));
+  const next = fn(lines.map(l => l.text).join('\n')).split('\n');
+  const changes = lines.flatMap((l, i) => {
+    const d = diffSplice(l.text, next[i]);
+    return d ? [{ from: l.from + d.from, to: l.from + d.to, insert: d.insert }] : [];
+  });
+  if (!changes.length) return;
+  const cs = state.changes(changes);
+  const selection = EditorSelection.create(state.selection.ranges.map(r => {
+    if (!r.empty || !caretToEnd) return r.map(cs, 1);
+    return EditorSelection.cursor(cs.mapPos(state.doc.lineAt(r.head).to, 1));
+  }), state.selection.mainIndex);
+  view.dispatch({ changes: cs, selection, userEvent: 'input', scrollIntoView: true });
+  view.focus();
+}
+
+// Inline formats act per line when a multi-line range crosses block markers
+// (list items, quotes, headings): emphasis can't span two blocks, and
+// wrapping the raw range would put `**` before a list marker. Such a range is
+// split into one range per non-blank line, each starting after its line's
+// marker, and the format then runs over every range like a multi-cursor
+// edit. Other ranges pass through, so a paragraph's soft-wrapped lines still
+// wrap as one span (wrapChunks).
+function blockAwareState(state) {
+  let split = false;
+  const ranges = state.selection.ranges.flatMap((r) => {
+    const first = state.doc.lineAt(r.from);
+    const last = state.doc.lineAt(r.to);
+    let crossesBlock = false;
+    for (let n = first.number + 1; n <= last.number; n++) {
+      if (blockMarkerLength(state.doc.line(n).text) > 0) { crossesBlock = true; break; }
+    }
+    if (!crossesBlock) return [r];
+    const out = [];
+    for (let n = first.number; n <= last.number; n++) {
+      const line = state.doc.line(n);
+      const from = Math.max(r.from, line.from + blockMarkerLength(line.text));
+      const to = Math.min(r.to, line.to);
+      if (state.sliceDoc(from, to).trim()) out.push(EditorSelection.range(from, to));
+    }
+    if (!out.length) return [r];
+    split = true;
+    return out;
+  });
+  if (!split) return state;
+  return state.update({ selection: EditorSelection.create(ranges) }).state;
 }
 
 // ── Inline wrappers (bold / italic / strike / code) ───────────────────
@@ -90,7 +146,7 @@ function expandToLines(view) {
 // three toggle cases match the previous single-selection behavior exactly.
 function wrapInline(view, marker, placeholder, nodeName?) {
   const mLen = marker.length;
-  const { state } = view;
+  const state = blockAwareState(view.state);
   // Star runs adjacent to a boundary decide the italic/bold context there:
   // an odd run carries an italic layer (`*`, `***`), an even one is bold
   // only (`**`) — stripping one star from it would corrupt the bold marker
@@ -179,7 +235,7 @@ function wrapInline(view, marker, placeholder, nodeName?) {
       range: EditorSelection.range(from, from + wrapped.length),
     };
   });
-  view.dispatch(state.update(tr, { userEvent: 'input', scrollIntoView: true }));
+  view.dispatch(view.state.update(tr, { userEvent: 'input', scrollIntoView: true }));
   view.focus();
 }
 
@@ -188,7 +244,7 @@ function wrapInline(view, marker, placeholder, nodeName?) {
 // backtick run in the content, with edge backticks padded by a space. Toggle
 // detection therefore works against a backtick fence of any length.
 function wrapCode(view) {
-  const { state } = view;
+  const state = blockAwareState(view.state);
   // A code fence can't be longer than a handful of backticks in practice;
   // bound the before-cursor look-back so Case A stays O(1) instead of slicing
   // the whole prefix on every call.
@@ -224,13 +280,18 @@ function wrapCode(view) {
       };
     }
     // Case A: matching backtick fences sit just outside the selection — strip.
-    const before = sel ? /(`+)$/.exec(state.sliceDoc(Math.max(0, from - LOOKBACK), from)) : null;
-    if (before && state.sliceDoc(to, to + before[1].length) === before[1]) {
-      const fence = before[1];
-      const stripped = unpadCode(sel);
+    // Content touching a backtick sits inside a space of padding (codeSpan),
+    // so for it the fences may be one space further out. The fences must be
+    // one code span's own: in `a`b`c` they are two neighbouring spans.
+    const padRe = /^`|`$/.test(sel) ? ' ?' : '';
+    const before = sel ? new RegExp(`(\`+)(${padRe})$`).exec(state.sliceDoc(Math.max(0, from - LOOKBACK), from)) : null;
+    const outer = before ? before[0].length : 0;
+    if (before && state.sliceDoc(to, to + outer) === before[2] + before[1]
+        && isExactInlineSpan(state, from - outer, to + outer, 'InlineCode', '`')) {
+      const stripped = before[2] ? sel : unpadCode(sel);
       return {
-        changes: { from: from - fence.length, to: to + fence.length, insert: stripped },
-        range: EditorSelection.range(from - fence.length, from - fence.length + stripped.length),
+        changes: { from: from - outer, to: to + outer, insert: stripped },
+        range: EditorSelection.range(from - outer, from - outer + stripped.length),
       };
     }
     // Case C: wrap, sizing the fence to the content and padding edge backticks.
@@ -242,31 +303,17 @@ function wrapCode(view) {
       range: EditorSelection.range(start, start + content.length),
     };
   });
-  view.dispatch(state.update(tr, { userEvent: 'input', scrollIntoView: true }));
+  view.dispatch(view.state.update(tr, { userEvent: 'input', scrollIntoView: true }));
   view.focus();
 }
 
 // ── Line prefix toggles (headings / list / quote / task) ──────────────
-function togglePrefix(view, prefix, exactRe, familyRe = exactRe) {
-  const { lineStart, lineEnd, block } = expandToLines(view);
-  const lines = block.length === 0 ? [''] : block.split('\n');
-  // Match and toggle after the leading indentation so nested list items and
-  // indented headings toggle in place instead of getting a second marker at
-  // column 0 (`  - item` used to become `-   - item`).
-  const parts = lines.map(splitIndent);
-  const allExact = parts.every(([, rest]) => exactRe.test(rest));
-
-  const next = allExact
-    ? parts.map(([ind, rest]) => ind + rest.replace(exactRe, ''))
-    : parts.map(([ind, rest]) => ind + prefix + rest.replace(familyRe, ''));
-  const result = next.join('\n');
-  edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
+function togglePrefix(view, prefix, exactRe, familyRe = exactRe, markBlank = false) {
+  editLines(view, block => togglePrefixBlock(block, prefix, exactRe, familyRe, markBlank));
 }
 
 function toggleOrdered(view) {
-  const { lineStart, lineEnd, block } = expandToLines(view);
-  const result = toggleOrderedBlock(block);
-  edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
+  editLines(view, toggleOrderedBlock);
 }
 
 // ── Block inserts (link / image / code block / hr) ────────────────────
@@ -288,11 +335,25 @@ async function clipboardUrl() {
 // prefills the link text / alt text and is replaced by the result.
 async function insertLink(view) {
   const { s, e } = getSel(view);
-  const spec = await promptLink({ text: view.state.sliceDoc(s, e), url: (await clipboardUrl()) ?? '' });
+  const spec = await promptLink({ text: selectionLabel(view, s, e), url: (await clipboardUrl()) ?? '' });
   if (!view.dom.isConnected) return;
   if (!spec) { view.focus(); return; }
-  const { s: from, e: to } = getSel(view);
-  const out = buildLink(spec.text || spec.url, spec.url);
+  replaceSelectionCore(view, buildLink(spec.text || spec.url, spec.url));
+}
+
+// The selection as one line of text for a link or alt text field: an
+// <input> silently drops line breaks, which would glue `alpha` and `beta`
+// together, so a break becomes the space it renders as.
+const selectionLabel = (view, s, e) => view.state.sliceDoc(s, e).trim().replace(/\s*\n\s*/g, ' ');
+
+// Replace the selection with `out`, leaving the selection's edge whitespace
+// outside it (the link text field is trimmed, and `first second` with
+// ` second` selected must stay two words).
+function replaceSelectionCore(view, out) {
+  const { s, e } = getSel(view);
+  const sel = view.state.sliceDoc(s, e);
+  const from = s + /^\s*/.exec(sel)![0].length;
+  const to = Math.max(from, e - /\s*$/.exec(sel)![0].length);
   edit(view, from, to, out, from + out.length);
 }
 
@@ -304,7 +365,7 @@ async function insertImage(view) {
   const { s, e } = getSel(view);
   const basePath = activeTab()?.path;
   const spec = await promptImage({
-    alt: view.state.sliceDoc(s, e),
+    alt: selectionLabel(view, s, e),
     url: (await clipboardUrl()) ?? '',
     canUpload: !!basePath,
   });
@@ -321,9 +382,7 @@ async function insertImage(view) {
     }
     if (!view.dom.isConnected) return;
   }
-  const { s: from, e: to } = getSel(view);
-  const out = buildLink(spec.alt, src, true);
-  edit(view, from, to, out, from + out.length);
+  replaceSelectionCore(view, buildLink(spec.alt, src, true));
 }
 
 async function insertCodeBlock(view) {
@@ -340,7 +399,10 @@ async function insertCodeBlock(view) {
 function insertHr(view) {
   const v = getDoc(view);
   const { s } = getSel(view);
-  edit(view, s, s, buildHrInsert(v.slice(0, s)));
+  const text = buildHrInsert(v.slice(0, s));
+  // Caret after the rule: left in front of it, the next text typed would sit
+  // right above the `---` and turn into a setext heading.
+  edit(view, s, s, text, s + text.length);
 }
 
 // Asks for the size and header texts in the modal, then inserts at the
@@ -377,30 +439,16 @@ function indent(view) {
     return;
   }
   // A selection (single- or multi-line): indent every line it spans rather
-  // than replacing the selected text with spaces, and keep the lines selected
+  // than replacing the selected text with spaces, and keep the text selected
   // so the action can be repeated or reversed with outdent.
-  const { lineStart, lineEnd, block } = expandToLines(view);
-  const result = block.split('\n').map(l => INDENT + l).join('\n');
-  edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
+  editLines(view, block => block.split('\n').map(l => INDENT + l).join('\n'));
 }
 
 function outdent(view) {
-  const { lineStart, lineEnd, block } = expandToLines(view);
-  const lines = block.split('\n');
-  const result = lines.map(l => l.replace(OUTDENT_RE, '')).join('\n');
-  if (result === block) return;
-  edit(view, lineStart, lineEnd, result, lineStart, lineStart + result.length);
+  editLines(view, block => block.split('\n').map(l => l.replace(OUTDENT_RE, '')).join('\n'), false);
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────
-const H1_EXACT   = /^#\s/;
-const H2_EXACT   = /^##\s/;
-const H3_EXACT   = /^###\s/;
-const HEADING_RE = /^#{1,6}\s/;
-const BULLET_EXACT = /^-\s(?!\[)/;
-const TASK_EXACT   = /^-\s\[[ xX]\]\s/;
-const QUOTE_RE   = /^>\s/;
-
 export function applyFormat(view, action) {
   if (!view) return;
   switch (action) {
@@ -413,7 +461,7 @@ export function applyFormat(view, action) {
     case 'h3':        return togglePrefix(view, '### ',   H3_EXACT, HEADING_RE);
     case 'ul':        return togglePrefix(view, '- ',     BULLET_EXACT, LIST_PREFIX_RE);
     case 'task':      return togglePrefix(view, '- [ ] ', TASK_EXACT,   LIST_PREFIX_RE);
-    case 'quote':     return togglePrefix(view, '> ',     QUOTE_RE);
+    case 'quote':     return togglePrefix(view, '> ',     QUOTE_RE, QUOTE_RE, true);
     case 'ol':        return toggleOrdered(view);
     case 'link':      return insertLink(view);
     case 'image':     return insertImage(view);

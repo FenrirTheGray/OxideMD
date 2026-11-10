@@ -6,10 +6,20 @@
 import { formatTableBlock } from '../lib/md-table.ts';
 
 // The marker of any list item (bullet, task, or ordered) at the start of a
-// line, so a line can be re-tagged from one list type to another. Both
-// CommonMark ordered delimiters (`1.` and `1)`) are recognized on input;
-// generation always emits `1.`.
-export const LIST_PREFIX_RE = /^(?:-\s\[[ xX]\]\s|-\s|\d+[.)]\s)/;
+// line, so a line can be re-tagged from one list type to another. All
+// CommonMark bullets (`-`, `*`, `+`) and ordered delimiters (`1.`, `1)`) are
+// recognized on input; generation always emits `-` and `1.`.
+export const LIST_PREFIX_RE = /^(?:[-*+]\s\[[ xX]\]\s|[-*+]\s|\d+[.)]\s)/;
+
+// The line toggles' own markers, matched after the indent (see splitIndent).
+export const H1_EXACT = /^#\s/;
+export const H2_EXACT = /^##\s/;
+export const H3_EXACT = /^###\s/;
+export const HEADING_RE = /^#{1,6}\s/;
+export const TASK_EXACT = /^[-*+]\s\[[ xX]\]\s/;
+// A bullet that isn't a task item; text starting with `[` (a link) is still a bullet.
+export const BULLET_EXACT = /^[-*+]\s(?!\[[ xX]\]\s)/;
+export const QUOTE_RE = /^>\s/;
 
 const ORDERED_RE = /^(\d+)[.)]\s/;
 
@@ -106,6 +116,26 @@ export function diffSplice(
   return { from, to: endOld, insert: newStr.slice(from, endNew) };
 }
 
+// Toggle a line marker (heading, bullet, task, quote) over a block of lines:
+// strip it when every content line already has it (`exactRe`), else put
+// `prefix` on every content line, replacing any marker of the same family.
+// Markers go after the indent so nested items toggle in place. Blank lines
+// are separators and stay blank, as in toggleOrderedBlock, unless
+// `markBlank`: a quote marks them so its paragraphs stay one quote. An
+// all-blank block (caret on an empty line) gets the marker so typing
+// continues after it.
+export function togglePrefixBlock(block: string, prefix: string, exactRe: RegExp, familyRe: RegExp = exactRe, markBlank = false): string {
+  const lines = block.split('\n');
+  const content = markBlank ? lines : lines.filter(l => l.trim() !== '');
+  if (content.length === 0) return prefix + block.replace(/^[ \t]*/, '');
+  const allExact = content.every(l => exactRe.test(splitIndent(l)[1]));
+  return lines.map(l => {
+    if (!markBlank && l.trim() === '') return l;
+    const [ind, rest] = splitIndent(l);
+    return allExact ? ind + rest.replace(exactRe, '') : ind + prefix + rest.replace(familyRe, '');
+  }).join('\n');
+}
+
 // Toggle an ordered list over a block of lines.
 //
 // Markdown ordered lists render like an HTML <ol>: only the first item's
@@ -120,11 +150,15 @@ export function diffSplice(
 // CHANGELOG.md into a mess. The counter only advances on real content lines,
 // so the numbering has no gaps. When the block has no content at all (caret on
 // an empty line) we start a fresh list with `1. `.
+//
+// Nesting is kept: each indent level counts on its own, and a nested line is
+// re-indented to its parent's new content column — `1. ` is wider than `- `,
+// and a child left at the bullet's two spaces would fall out of the list.
 export function toggleOrderedBlock(block: string): string {
   const lines = block.length === 0 ? [''] : block.split('\n');
   const contentLines = lines.filter(l => l.trim() !== '');
 
-  if (contentLines.length === 0) return `1. ${lines[0]}`;
+  if (contentLines.length === 0) return `1. ${block}`;
 
   const allNumbered = contentLines.every(l => ORDERED_RE.test(splitIndent(l)[1]));
   if (allNumbered) {
@@ -135,11 +169,21 @@ export function toggleOrderedBlock(block: string): string {
     }).join('\n');
   }
 
-  let n = 0;
+  // Open levels, outermost first: source indent width, emitted indent, count.
+  // shortcut: a tab counts as one column of indent, fine for space-indented lists.
+  const levels: { src: number, ind: string, n: number }[] = [];
   return lines.map(l => {
     if (l.trim() === '') return l;
     const [ind, rest] = splitIndent(l);
-    return `${ind}${(n += 1)}. ${rest.replace(LIST_PREFIX_RE, '')}`;
+    while (levels.length && levels[levels.length - 1].src > ind.length) levels.pop();
+    let top = levels[levels.length - 1];
+    if (!top || top.src < ind.length) {
+      const childInd = top ? top.ind + ' '.repeat(`${top.n}. `.length) : ind;
+      top = { src: ind.length, ind: childInd, n: 0 };
+      levels.push(top);
+    }
+    top.n += 1;
+    return `${top.ind}${top.n}. ${rest.replace(LIST_PREFIX_RE, '')}`;
   }).join('\n');
 }
 
@@ -191,12 +235,14 @@ export function buildTableInsert(before: string, after: string, headers: string[
 }
 
 // `[text](url)`, or `![alt](url)` with `image`. Unescaped brackets in the
-// text are escaped so they can't end the label early. A destination with
+// text, and a trailing unescaped backslash (it would escape the closing `]`),
+// get a backslash so they can't end or break the label. A character is
+// unescaped when an even number of backslashes precedes it. A destination with
 // whitespace or parentheses is wrapped in `<…>`, the CommonMark form that
 // allows them (a bare space would end the URL); `<`/`>` can't appear inside
 // that form, so they're percent-encoded.
 export function buildLink(text: string, url: string, image = false): string {
-  const label = text.replace(/(?<!\\)[[\]]/g, '\\$&');
+  const label = text.replace(/(?<=(?:^|[^\\])(?:\\\\)*)(?:[[\]]|\\$)/g, '\\$&');
   const dest = url.replace(/</g, '%3C').replace(/>/g, '%3E');
   return `${image ? '!' : ''}[${label}](${/[\s()]/.test(dest) ? `<${dest}>` : dest})`;
 }
@@ -210,7 +256,9 @@ export function buildCodeBlockInsert(before: string, sel: string, lang: string):
   const info = lang.trim().split(/\s+/)[0].replace(/`/g, '');
   const pre = before === '' || before.endsWith('\n') ? '' : '\n';
   const fence = codeFence(sel);  // ≥3 backticks, longer than any run inside
-  const text = `${pre}${fence}${info}\n${sel}\n${fence}\n`;
+  // Whole selected lines already end in a newline; don't add a blank body line.
+  const body = sel.endsWith('\n') ? sel : `${sel}\n`;
+  const text = `${pre}${fence}${info}\n${body}${fence}\n`;
   return { text, caret: sel ? null : pre.length + fence.length + info.length + 1 };
 }
 
@@ -238,10 +286,21 @@ export function unpadCode(s: string): string {
 }
 
 // Strip an inline code span back to its content — the inverse of wrapping with
-// `codeSpan`. Returns null when `s` isn't a single fenced code span.
+// `codeSpan`. Returns null when `s` isn't a single fenced code span: a run of
+// the fence's length inside would close the span early (`a` and `b` is two).
 export function stripCodeSpan(s: string): string | null {
   const m = /^(`+)([\s\S]+?)\1$/.exec(s);
-  return m ? unpadCode(m[2]) : null;
+  if (!m || m[2].startsWith('`') || m[2].endsWith('`') || (m[2].match(/`+/g) ?? []).some(r => r.length === m[1].length)) return null;
+  return unpadCode(m[2]);
+}
+
+// Length of a line's block marker — indent, then any `>` quote markers, then
+// a list, task or heading marker — or 0 when it has no quote, list or heading
+// marker. Inline formats over several such lines wrap each line's text after
+// its marker, since emphasis can't span two list items or headings.
+export function blockMarkerLength(line: string): number {
+  const m = /^[ \t]*((?:>[ \t]?)*)[ \t]*([-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+|#{1,6}[ \t]+)?/.exec(line)!;
+  return m[1] || m[2] ? m[0].length : 0;
 }
 
 // The fence for a fenced code block: at least three backticks, and longer than
