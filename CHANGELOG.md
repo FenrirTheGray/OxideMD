@@ -4,6 +4,60 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.15.0] - 2026-11-10
+
+### Added
+
+- The left panel can be widened to 40% of the window; it used to stop at 480 px. A saved width that no longer fits a smaller window is shown narrower and comes back when the window grows
+- `Delete` removes the highlighted imported theme or font from its dropdown, and the remove button is exposed to screen readers. Removing one used to need a mouse hover
+
+### Changed
+
+- Double-clicking a panel divider fits the panel to its widest row in both directions. It only widened before
+- New files are numbered ("Untitled 2", "Untitled 3"), and tabs that share a file name show their parent folder, so they can be told apart
+- Code blocks take their syntax colours from the theme, so light themes get a light palette instead of the dark one. Exported HTML carries a matching set of colours
+- Shortcut capture refuses a key that types a character, such as a bare letter. A binding like that left in an existing config no longer fires while you type
+- A file opened from outside the app (a second launch, a drop) waits while a dialog is open and opens once it closes
+
+### Fixed
+
+- `Ctrl+Tab`, `Ctrl+Shift+Tab` and files opened from outside switched tabs behind an open dialog, which then acted on the wrong tab: Discard copied one file's text into another tab, Save in "Unsaved changes" closed the edited tab without saving it, and Insert link dropped its link
+- A prompt that arrived while another was open replaced it and threw away what had been typed into it. Prompts now wait their turn
+- Saving a file with CRLF line endings converted every line to LF. CRLF files now stay CRLF; a file with mixed endings is still saved as LF
+- Typing in the preview-only layout edited the hidden source
+- `Ctrl+Z` after Format document, or after format-on-save, also undid the text typed just before it
+- `Shift+Tab` outdents in the editor. On Linux it did nothing and moved focus to the toolbar
+- Heading, list, task and quote toggles left the whole line selected, so the next keystroke replaced it
+- Numbered list over a nested bullet list flattened the nesting
+- Inline code over a selection holding two code spans stripped the outer backticks
+- Bullet list stacked a second marker on a `*` item, and could not remove the marker from an item whose text starts with `[`
+- Bullet, task and heading toggles no longer put markers on the blank lines inside a selection
+- With several cursors, heading and list toggles changed only the first line
+- Horizontal rule left the caret above the rule, so the next line typed became a heading
+- Bold, italic and the other inline styles across two list items wrapped the list markers and broke the list
+- Insert link joined the lines of a two-line selection, dropped a leading space, and produced a broken link when the text ended in a backslash
+- Insert table: the Columns box and the header fields disagreed after the box corrected a typed value
+- Code block over whole selected lines added an empty line inside the fence
+- The outline lists the same headings the document renders. A `~~~` line inside a ``` block hid every later heading, a four-backtick fence listed code comments as headings, a list or quote followed by `---` added a phantom entry, and headings inside quotes and list items were missing, so jumps landed on the wrong heading
+- The outline shows a heading's text, not its raw Markdown, keeps a closing `#` that belongs to the text ("Learn C#"), and finds underlined headings in CRLF files
+- The outline and the status-bar counts update after a file changes on disk
+- Search runs again after a tab switch, a reload or an outside change. The bar used to keep its query with no count and no highlights
+- The search counter in edit mode follows typing and undo
+- Reading-mode search finds phrases that cross bold, links or highlighted code, and highlights the right characters in text containing "İ"
+- Closing the last tab closes the search bar
+- Opening another file, or `Ctrl+N`, lost the current tab's scroll position
+- Moving the last tab right, or the first tab left, swapped it with the tab at the other end
+- On a fresh install Settings opened with Save enabled and asked to save or discard on Close
+- Binding an action to a key held by a hidden default, such as `Ctrl+=` for zoom, gave no conflict warning
+- The shortcut conflict warning stays in view; it used to render below the list, off screen
+- Long words and URLs wrap at the reading column instead of being clipped
+- Inline code in image alt text rendered as a stray chip next to the image
+- Local images written with `%20` in the path did not load
+- Toolbar buttons that moved into the overflow menu came back in the wrong order
+- At 640 px wide or less the Preview toggle did nothing in edit mode
+- In a narrow window the status-bar path collapsed to "/", and the selection counts ran under the zoom buttons. The counts are now cut to the room they have and end in "...", with the whole label in the tooltip
+- The outline's double-click fit left the longest heading cut off, and the first resize after launch started from the default width instead of the saved one
+
 ## [4.14.1] - 2026-09-30
 
 ### Fixed
