@@ -11,7 +11,7 @@
 import {
   invoke,
   state,
-  contentEl, contentScroll,
+  contentEl, contentScroll, MD_HEADINGS,
   btnOutline, outlineSidebar, outlineSidebarBody, outlineSidebarCloseBtn,
 } from "../core/state.ts";
 import { activeTab, syncToolbar } from "./tabs.ts";
@@ -22,7 +22,7 @@ import { debounce } from "../lib/timing.ts";
 // View-mode jump: outline-parse.ts finds the same headings, in the same
 // order, as the renderer, so the Nth entry is the Nth rendered heading.
 function jumpToHeadingInPreview(index) {
-  const headings = contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  const headings = contentEl.querySelectorAll(MD_HEADINGS);
   const target = headings[index];
   if (!target) return;
   // contentScroll is the actual scrollable container in view mode.
@@ -135,7 +135,7 @@ function updateActiveHeading() {
       index = items.length - 1;
     } else {
       const edge = scroller.getBoundingClientRect().top + ACTIVE_TOLERANCE;
-      contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((h, i) => {
+      contentEl.querySelectorAll(MD_HEADINGS).forEach((h, i) => {
         if (i < items.length && h.getBoundingClientRect().top <= edge) index = i;
       });
     }

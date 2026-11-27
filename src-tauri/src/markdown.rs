@@ -161,8 +161,30 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     // While inside a definition: (its number, the `html` offset its body
     // started at).
     let mut footnote_def: Option<(usize, usize)> = None;
+    // The document's own HTML (see raw_html.rs). A block of it arrives one
+    // line per event, so it is collected and filtered whole: a tag may span
+    // lines. `open_html` is the inline elements it has opened and not closed.
+    let mut html_block: Option<String> = None;
+    let mut open_html: Vec<&'static str> = Vec::new();
+    let image_attrs = |src: &str| image_src_attrs(src, base_dir);
 
     for (event, range) in parser.into_offset_iter() {
+        // An inline element the document left open ends with its block.
+        // Before the match, because a heading or a cell splits its content
+        // back off `html` and the closing tags belong inside it.
+        if matches!(
+            event,
+            Event::End(
+                TagEnd::Paragraph
+                    | TagEnd::Heading(_)
+                    | TagEnd::Item
+                    | TagEnd::TableCell
+                    | TagEnd::BlockQuote(_)
+                    | TagEnd::FootnoteDefinition
+            )
+        ) {
+            crate::raw_html::close_all(&mut open_html, &mut html);
+        }
         match event {
             // ── Blocks ──────────────────────────────────────────────────────
             Event::Start(Tag::Heading { level, id, .. }) => {
@@ -449,35 +471,9 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             }
             Event::End(TagEnd::Image) => {
                 if let Some((src, title)) = in_image.take() {
-                    // Remote images get a neutral `data-oxide-remote-src`
-                    // (never a live `src`) plus a class the frontend and
-                    // CSS key off — so an untrusted doc can't phone home on
-                    // render. The frontend promotes them to `src` only when
-                    // the user has opted into remote images.
-                    // Local images also carry their mtime: the frontend
-                    // appends it to the asset URL so a reload after the file
-                    // changed on disk gets past the webview's image cache,
-                    // while an untouched file keeps the same URL (the edit
-                    // preview relies on that to leave its <img> in place).
-                    let (attr, value, class, version) = match resolve_image(&src, base_dir) {
-                        ResolvedImage::AssetPath(p) => {
-                            let v = image_version(&p);
-                            ("data-oxide-src", p, "", v)
-                        }
-                        ResolvedImage::Passthrough(u) => ("src", u, "", String::new()),
-                        ResolvedImage::RemoteGated(u) => (
-                            "data-oxide-remote-src",
-                            u,
-                            " class=\"md-remote-image\"",
-                            String::new(),
-                        ),
-                    };
                     html.push_str(&format!(
-                        "<img{} {}=\"{}\"{} alt=\"{}\" title=\"{}\" loading=\"lazy\">",
-                        class,
-                        attr,
-                        html_escape_attr(&value),
-                        version,
+                        "<img{} alt=\"{}\" title=\"{}\" loading=\"lazy\">",
+                        image_src_attrs(&src, base_dir),
                         html_escape(&image_alt_buf),
                         html_escape_attr(&title)
                     ));
@@ -543,19 +539,28 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                 data_line(block_depth, line_of(range.start))
             )),
 
-            // Raw HTML in the source is rendered as literal text, not
-            // executed. Passing it through unchanged is an XSS vector:
-            // a malicious .md file could embed `<script>` or an
-            // `onerror=` handler. Covers both block-level Html and
-            // inline HTML spans (e.g. `<br>` within a paragraph).
-            // Inside a heading the escaped text gets drained into the
-            // <hN> via `split_off`; we deliberately do NOT contribute
-            // raw HTML tokens to the slug buffer so IDs stay clean.
+            // HTML in the source. Passed through unchanged it would be an
+            // XSS vector (`<script>`, an `onerror=` handler), so it goes
+            // through raw_html::filter: a fixed subset is rewritten, the
+            // rest is shown as text. Covers block-level HTML and inline
+            // spans (e.g. `<br>` within a paragraph). Inside a heading the
+            // result is drained into the <hN> via `split_off`; raw HTML
+            // deliberately does NOT contribute to the slug buffer, so IDs
+            // stay clean.
+            Event::Start(Tag::HtmlBlock) => html_block = Some(String::new()),
+            Event::End(TagEnd::HtmlBlock) => {
+                if let Some(block) = html_block.take() {
+                    crate::raw_html::filter(&block, &mut open_html, &mut html, &image_attrs);
+                }
+                crate::raw_html::close_all(&mut open_html, &mut html);
+            }
             Event::Html(raw) | Event::InlineHtml(raw) => {
                 if in_image.is_some() {
                     image_alt_buf.push_str(&raw);
+                } else if let Some(block) = html_block.as_mut() {
+                    block.push_str(&raw);
                 } else {
-                    html.push_str(&html_escape(&raw));
+                    crate::raw_html::filter(&raw, &mut open_html, &mut html, &image_attrs);
                 }
             }
 
@@ -607,24 +612,48 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
 /// Missing files fall back to passthrough so the browser renders a
 /// broken-image icon rather than a blank area.
 fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
-    // The gate is a security boundary, so scheme detection can't be naive:
-    // URL schemes are case-insensitive (`HTTP://` loads just like `http://`),
-    // and the webview ignores leading whitespace/control chars in a `src`.
-    // Match on a trimmed, lowercased copy so `HTTP://`, `\thttp://`, etc. are
-    // still gated rather than slipping through to the live-passthrough
-    // fallback below.
-    let probe = src.trim_start_matches(|c: char| c.is_ascii_whitespace() || c.is_control());
+    // The gate is a security boundary, so it has to read the address the way
+    // the webview will, not the way it is spelled:
+    //  - schemes are case-insensitive (`HTTP://` loads like `http://`);
+    //  - tabs and newlines are dropped from anywhere in an address, and
+    //    spaces / control characters from its start (`ht\ttps://…`, which a
+    //    Markdown destination can spell `ht&#9;tps://…`);
+    //  - after `http:` or `https:` the slashes are optional and may be
+    //    backslashes (`https:example.com`, `https:\\example.com`);
+    //  - two leading slashes of either kind name a host (`/\example.com`),
+    //    at least where the page itself is served over http (Windows).
+    let probe: String = src
+        .chars()
+        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
+        .collect();
+    let probe = probe.trim_start_matches(|c: char| c.is_ascii_whitespace() || c.is_control());
     let lower = probe.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") || probe.starts_with("//") {
+    if lower.starts_with("http:") || lower.starts_with("https:") || probe.starts_with("//") {
         return ResolvedImage::RemoteGated(src.to_string());
     }
     if lower.starts_with("data:") {
         return ResolvedImage::Passthrough(src.to_string());
     }
+    // `\\server\share\a.png` is a real local path on Windows, so the
+    // backslash forms are tried as files first; one that is no file is a
+    // host name to the webview and must not come out as a live `src`.
+    let names_a_host = probe
+        .chars()
+        .take(2)
+        .filter(|c| matches!(c, '/' | '\\'))
+        .count()
+        == 2;
+    let not_a_file = || {
+        if names_a_host {
+            ResolvedImage::RemoteGated(src.to_string())
+        } else {
+            ResolvedImage::Passthrough(src.to_string())
+        }
+    };
 
     let base = match base_dir {
         Some(d) => d,
-        None => return ResolvedImage::Passthrough(src.to_string()),
+        None => return not_a_file(),
     };
 
     let resolve = |s: &str| {
@@ -640,13 +669,42 @@ fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
         // (links decode the same way). Raw first: a file may really have `%` in its name.
         path = resolve(&crate::commands::percent_decode(src));
         if !path.is_file() {
-            return ResolvedImage::Passthrough(src.to_string());
+            return not_a_file();
         }
     }
 
     let canonical = std::fs::canonicalize(&path).unwrap_or(path);
     let stripped = crate::commands::strip_windows_verbatim(canonical);
     ResolvedImage::AssetPath(stripped.to_string_lossy().into_owned())
+}
+
+/// The attributes that carry an image's address, with a leading space.
+/// Shared by Markdown images and `<img>` in the document's own HTML, so
+/// neither can produce a remote image with a live `src`.
+///
+/// Remote images get a neutral `data-oxide-remote-src` (never a live `src`)
+/// plus a class the frontend and CSS key off, so an untrusted doc can't
+/// phone home on render; the frontend promotes them to `src` only when the
+/// user has opted into remote images. Local images also carry their mtime:
+/// the frontend appends it to the asset URL so a reload after the file
+/// changed on disk gets past the webview's image cache, while an untouched
+/// file keeps the same URL (the edit preview relies on that to leave its
+/// <img> in place).
+fn image_src_attrs(src: &str, base_dir: Option<&Path>) -> String {
+    let (attr, value, class, version) = match resolve_image(src, base_dir) {
+        ResolvedImage::AssetPath(p) => {
+            let v = image_version(&p);
+            ("data-oxide-src", p, "", v)
+        }
+        ResolvedImage::Passthrough(u) => ("src", u, "", String::new()),
+        ResolvedImage::RemoteGated(u) => (
+            "data-oxide-remote-src",
+            u,
+            " class=\"md-remote-image\"",
+            String::new(),
+        ),
+    };
+    format!("{class} {attr}=\"{}\"{version}", html_escape_attr(&value))
 }
 
 /// ` data-oxide-v="<mtime ms>"` for a resolved local image, or empty when
@@ -731,13 +789,10 @@ mod tests {
     }
 
     #[test]
-    fn render_escapes_inline_html() {
-        // Raw HTML is never passed through — inline tags stay escaped text.
+    fn render_inline_html_keeps_the_tag_and_drops_the_handler() {
         let out = render("<u onclick=\"x\">b</u> <b>c</b>", None);
-        assert!(out.contains("&lt;u onclick"), "got: {out}");
-        assert!(out.contains("&lt;b&gt;"), "got: {out}");
-        assert!(!out.contains("<b>"), "got: {out}");
-        assert!(!out.contains("<u"), "got: {out}");
+        assert!(out.contains("<u>b</u> <b>c</b>"), "got: {out}");
+        assert!(!out.contains("onclick"), "got: {out}");
     }
 
     #[test]
@@ -1245,20 +1300,144 @@ mod tests {
     }
 
     #[test]
-    fn raw_block_html_img_onerror_is_escaped() {
+    fn raw_block_html_img_loses_its_handler() {
         let out = render("<img src=x onerror=\"alert(1)\">\n", None);
-        // The neutralized form must not contain a raw <img tag with onerror.
-        assert!(!out.contains("<img src=x onerror"));
-        assert!(out.contains("&lt;img"));
+        assert!(out.contains("<img"), "the image itself renders: {out}");
+        assert!(!out.contains("onerror"), "its handler does not: {out}");
     }
 
     #[test]
-    fn raw_inline_html_is_escaped() {
+    fn raw_inline_html_renders() {
         // A `<b>` inside a paragraph is emitted as Event::InlineHtml by
-        // pulldown-cmark; it must not pass through as raw markup.
+        // pulldown-cmark, one event per tag, with the text between as Text.
         let out = render("paragraph with <b>bold</b> html\n", None);
-        assert!(!out.contains("<b>bold</b>"));
-        assert!(out.contains("&lt;b&gt;"));
+        assert!(out.contains("paragraph with <b>bold</b> html"), "{out}");
+    }
+
+    #[test]
+    fn raw_html_block_wraps_markdown() {
+        // The README pattern: an HTML container, a blank line, Markdown.
+        let out = render(
+            "<div align=\"center\">\n\n# Title\n\n</div>\n\n<details>\n<summary>More</summary>\n\n- item\n\n</details>\n",
+            None,
+        );
+        let div = out.find("<div align=\"center\">").expect("div opens");
+        let h1 = out.find("<h1 id=\"title\"").expect("heading renders");
+        let close = out.find("</div>").expect("div closes");
+        assert!(
+            div < h1 && h1 < close,
+            "the heading sits inside the div: {out}"
+        );
+        assert!(
+            out.contains("<details>") && out.contains("<summary>More</summary>"),
+            "{out}"
+        );
+        assert!(out.contains("<li>item</li>"), "{out}");
+    }
+
+    #[test]
+    fn raw_html_tag_spanning_lines_is_one_tag() {
+        let out = render(
+            "<p align=\"center\">\n<img\n  src=\"https://example.com/a.png\"\n  width=\"120\">\n</p>\n",
+            None,
+        );
+        assert!(out.contains("width=\"120\""), "{out}");
+        assert!(!out.contains("&lt;img"), "{out}");
+    }
+
+    #[test]
+    fn raw_html_remote_image_is_gated_like_a_markdown_one() {
+        let out = render("<img src=\"https://example.com/a.png\">\n", None);
+        assert!(
+            out.contains("data-oxide-remote-src=\"https://example.com/a.png\""),
+            "{out}"
+        );
+        assert!(!out.contains(" src=\""), "no live src: {out}");
+        // The document cannot write the renderer's own image attributes.
+        let forged = render(
+            "<img data-oxide-src=\"/etc/passwd\" data-oxide-remote-src=\"https://x.y\">\n",
+            None,
+        );
+        assert!(!forged.contains("data-oxide"), "{forged}");
+    }
+
+    #[test]
+    fn raw_html_unclosed_link_ends_with_its_paragraph() {
+        let out = render("one <a href=\"https://example.com\">link\n\ntwo\n", None);
+        let close = out.find("</a>").expect("the link is closed");
+        assert!(
+            close < out.find("two").unwrap(),
+            "before the next paragraph: {out}"
+        );
+    }
+
+    #[test]
+    fn raw_html_hostile_document_end_to_end() {
+        // What `open_file`, the preview and `export_html` all receive. The
+        // exported file has no CSP and no click handler, so this output is
+        // its only defence.
+        let out = render(
+            "# T <img src=x onerror=alert(1)>\n\n<script>alert(1)</script>\n\n<div onclick=\"alert(1)\" style=\"position:fixed\" id=\"content\">\n\ntext <a href=\"&#106;avascript&#58;alert(1)\">x</a> <iframe src=\"https://evil.example\"></iframe>\n\n</div>\n\n| a |\n| - |\n| <svg onload=alert(1)> |\n",
+            None,
+        );
+        let lower = out.to_ascii_lowercase();
+        for bad in [
+            "<script",
+            "<iframe",
+            "<svg",
+            "onerror=",
+            "onclick=",
+            "style=\"position",
+            "id=\"content\"",
+            "javascript:",
+            "href=\"&#",
+        ] {
+            assert!(!lower.contains(bad), "{bad} survived: {out}");
+        }
+        // A tag that is not allowed is still there, as text the reader sees.
+        assert!(out.contains("&lt;svg onload=alert(1)&gt;"), "{out}");
+        assert!(out.contains("<div>"), "the container itself renders: {out}");
+    }
+
+    #[test]
+    fn remote_image_is_gated_however_its_address_is_spelled() {
+        // Every one of these loads from example.com in a webview.
+        for src in [
+            "https:example.com/a.png",
+            "https:/example.com/a.png",
+            "HTTPS:\\\\example.com\\a.png",
+            "http:example.com/a.png",
+            "ht\ttps://example.com/a.png",
+            "//example.com/a.png",
+            "/\\example.com/a.png",
+            "\\/example.com/a.png",
+            "\\\\example.com\\a.png",
+        ] {
+            assert!(
+                matches!(resolve_image(src, None), ResolvedImage::RemoteGated(_)),
+                "{src:?} is not gated"
+            );
+            let html = render(&format!("<img src=\"{src}\">\n"), None);
+            assert!(!html.contains(" src=\""), "{src:?} as html: {html}");
+        }
+        // The same through Markdown, where a reference can spell the tab.
+        for md in [
+            "![](https:example.com/a.png)",
+            "![](<https:\\\\example.com\\a.png>)",
+            "![](ht&#9;tps://example.com/a.png)",
+            "![](</\\example.com/a.png>)",
+        ] {
+            let html = render(md, None);
+            assert!(!html.contains(" src=\""), "{md:?}: {html}");
+        }
+    }
+
+    #[test]
+    fn raw_html_heading_gets_no_id() {
+        // The outline counts headings by their id; a raw one must not shift it.
+        let out = render("<h1 align=\"center\" id=\"x\">Raw</h1>\n\n# Real\n", None);
+        assert!(out.contains("<h1 align=\"center\">Raw</h1>"), "{out}");
+        assert_eq!(out.matches(" id=\"").count(), 1, "{out}");
     }
 
     #[test]

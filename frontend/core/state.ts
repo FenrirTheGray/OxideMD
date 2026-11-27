@@ -160,6 +160,11 @@ export const btnReload       = document.getElementById('btn-reload');
 export const btnModeToggle   = document.getElementById('btn-mode-toggle');
 export const btnSave         = document.getElementById('btn-save');
 export const btnDiscard      = document.getElementById('btn-discard');
+// The headings the renderer made from Markdown, which are the ones the
+// outline lists. Each carries an id; a heading written as HTML in the
+// document (`<h1 align="center">`) gets none, so it is not counted and
+// cannot shift the outline's "Nth heading" lookups.
+export const MD_HEADINGS = 'h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]';
 export const btnSourceMode   = document.getElementById('btn-source-mode');
 export const editToolbar     = document.getElementById('edit-toolbar');
 export const btnSearch       = document.getElementById('btn-search');

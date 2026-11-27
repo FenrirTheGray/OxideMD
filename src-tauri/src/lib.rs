@@ -3,6 +3,7 @@ mod config;
 mod errorlog;
 mod highlight;
 mod markdown;
+mod raw_html;
 mod util;
 mod watcher;
 

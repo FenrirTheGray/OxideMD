@@ -421,6 +421,29 @@ body.print-friendly .md-rendered {
   box-shadow: var(--shadow-md);
 }
 
+/* A row of images stays a row: badges, usually each inside its own link.
+   A lone image keeps the centred block above. */
+.md-rendered :has(> img ~ img, > img ~ a > img, > a ~ a > img, > a ~ img) > img,
+.md-rendered :has(> img ~ img, > img ~ a > img, > a ~ a > img, > a ~ img) > a > img {
+  display: inline-block;
+  margin: 0.15em 0.1em;
+  vertical-align: middle;
+  border-radius: 4px;
+  box-shadow: none;
+}
+/* The link's underline would run under the image. */
+.md-rendered a:has(> img) {
+  border-bottom: none;
+}
+/* `<img align="right">`: the attribute floats it, the block margins above
+   would centre it instead. */
+.md-rendered img[align="left"],
+.md-rendered img[align="right"] {
+  margin: 0.3em 0 1em;
+}
+.md-rendered img[align="left"] { margin-right: 1.4em; }
+.md-rendered img[align="right"] { margin-left: 1.4em; }
+
 /* Remote images are inert until the user enables "Load remote images"
    (Settings → Reading): the renderer emits them with no `src`, just
    `.md-remote-image`. Style that empty state as a dashed box instead of a
@@ -479,6 +502,36 @@ body.print-friendly .md-rendered {
 }
 .md-rendered .footnote-backref:hover {
   color: var(--link-hover);
+}
+
+/* ── HTML written in the document ─────────────────────────────────── */
+/* The renderer lets a fixed subset of HTML through (raw_html.rs). Most of
+   it needs nothing here; these three have no useful default look. */
+.md-rendered kbd {
+  font-family: monospace, monospace;
+  font-size: 0.84em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+}
+.md-rendered summary {
+  cursor: pointer;
+}
+/* The table rules below set text-align, which outranks the attribute. */
+.md-rendered td[align="center"],
+.md-rendered th[align="center"] {
+  text-align: center;
+}
+.md-rendered td[align="right"],
+.md-rendered th[align="right"] {
+  text-align: right;
+}
+.md-rendered mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 2px;
 }
 
 /* ── GFM task lists ───────────────────────────────────────────────── */

@@ -14,7 +14,7 @@ import {
   modKey, state,
   tabs,
   sidebarTreeEl, tabBarEl,
-  previewPane, contentEl,
+  previewPane, contentEl, MD_HEADINGS,
   outlineSidebar, sidebarSearchResultsEl,
 } from "../core/state.ts";
 import {
@@ -511,7 +511,7 @@ function buildOutlineMenu(itemEl) {
   const index = parseInt(itemEl.dataset.index, 10);
   const root = activeTab()?.editing ? previewPane : contentEl;
   const id = Number.isFinite(index)
-    ? root?.querySelectorAll('h1,h2,h3,h4,h5,h6')[index]?.id
+    ? root?.querySelectorAll(MD_HEADINGS)[index]?.id
     : null;
   if (id) items.push({ label: 'Copy Link to Heading', action: () => copyText(`#${id}`) });
   return items;
