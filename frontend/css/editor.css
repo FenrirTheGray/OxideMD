@@ -736,7 +736,7 @@ body.resizing-split * {
 .cm-editor.md-editor.cm-live .cm-lp-bullet {
   position: relative;
 }
-.cm-editor.md-editor.cm-live .cm-lp-bullet:not(.cm-lp-bullet-blank)::before {
+.cm-editor.md-editor.cm-live .cm-lp-bullet::before {
   content: "•";
   position: absolute;
   left: 0;

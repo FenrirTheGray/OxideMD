@@ -46,15 +46,18 @@ test('livePreview: a link hides its target, bare brackets stay literal', () => {
   assert.deepEqual(replaced(doc, doc.length).out, ['[', ']', '(', 'https://example.com', ')', '<', '>']);
 });
 
-test('livePreview: a task box is drawn even on the caret line; a bullet only off it', () => {
-  const doc = '- [ ] todo\n- [x] done\n- plain\n\nend';
+test('livePreview: a task box takes the bullet\'s place; the marker shows only under the caret', () => {
+  const doc = '- [ ] todo\n- [x] done\n- plain\n1. [ ] numbered\n\nend';
   const away = replaced(doc, doc.length);
-  assert.deepEqual(away.boxes, ['[ ]false', '[x]true']);
-  assert.deepEqual(away.out, []);
-  assert.deepEqual(away.bullets, ['-', '-', '-']);
-  const on = replaced(doc, 8); // caret in "todo"
-  assert.deepEqual(on.boxes, ['[ ]false', '[x]true']);
-  assert.deepEqual(on.bullets, ['-', '-']); // the caret line shows its dash
+  assert.deepEqual(away.boxes, ['[ ]false', '[x]true', '[ ]false']);
+  assert.deepEqual(away.out, ['- ', '- ']);   // a task's dash and gap are hidden
+  assert.deepEqual(away.bullets, ['-']);      // a plain item gets its dot; a number stays
+  // Caret in the task's text: nothing changes, so typing does not flicker.
+  assert.deepEqual(replaced(doc, 8).out, ['- ', '- ']);
+  // Caret on the marker itself (line start): that line shows it as written.
+  assert.deepEqual(replaced(doc, 0).out, ['- ']);
+  assert.deepEqual(replaced(doc, 22).bullets, []); // start of "- plain"
+  assert.deepEqual(replaced(doc, 24).bullets, ['-']); // in "plain"
 });
 
 test('livePreview: nothing inside a table or a code block is hidden', () => {

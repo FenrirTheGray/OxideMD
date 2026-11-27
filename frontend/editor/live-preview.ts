@@ -47,10 +47,8 @@ const PREFIX = Decoration.mark({ class: 'cm-lp-prefix' });
 const INLINE_CODE = Decoration.mark({ class: 'cm-lp-code' });
 const CODE_INFO = Decoration.mark({ class: 'cm-lp-codeinfo' });
 const LITERAL = Decoration.mark({ class: 'cm-lp-literal' });
-// The dash stays in the DOM and CSS paints over it: a `•`, or nothing on a
-// task item, where the box stands in for the bullet.
+// The dash stays in the DOM and CSS paints a `•` over it.
 const BULLET = Decoration.mark({ class: 'cm-lp-bullet' });
-const BULLET_BLANK = Decoration.mark({ class: 'cm-lp-bullet cm-lp-bullet-blank' });
 // The `[ ]` stays as text under a painted box. The role makes it a checkbox
 // to assistive technology, whose press arrives as the same click.
 const BOX = [false, true].map((on) => Decoration.mark({
@@ -120,19 +118,27 @@ export function buildLivePreview(state: EditorState, visible: readonly { from: n
           const l = doc.lineAt(n.from);
           const task = n.node.nextSibling?.firstChild;
           const isTask = task?.name === 'TaskMarker';
+          const bullet = /^[-*+]$/.test(doc.sliceString(n.from, n.to));
           let end = isTask ? task.to : n.to;
           while (end < l.to && /[ \t]/.test(doc.sliceString(end, end + 1))) end++;
+          // The marker shows as written only while the caret is on it (the
+          // indent, the dash, the gap before a task box), not while it is in
+          // the item's text: typing an item must not make its marker flicker.
+          const onMarker = touched(l.from, isTask ? task.from : n.to);
+          // A task's box takes the bullet's place, as it does in the read
+          // view and on GitHub, so its dash and the gap after it are hidden.
+          const hidden = bullet && isTask && !onMarker ? task.from - n.from : 0;
+          if (hidden) deco.push(hide.range(n.from, task.from));
+          else if (bullet && !onMarker) deco.push(BULLET.range(n.from, n.to));
           // A hanging indent, so wrapped text lines up under the item's
           // first word. Not inside a quote: its `>` prefix is not columns.
           if (/^[ \t]*$/.test(l.text.slice(0, n.from - l.from))) {
-            const cols = end - l.from;
+            const cols = end - l.from - hidden;
             deco.push(
               Decoration.line({ class: 'cm-lp-li', attributes: { style: `--lp-hang:${cols}` } }).range(l.from),
               PREFIX.range(l.from, end),
             );
           }
-          const bullet = /^[-*+]$/.test(doc.sliceString(n.from, n.to));
-          if (bullet && !touched(l.from, l.to)) deco.push((isTask ? BULLET_BLANK : BULLET).range(n.from, n.to));
           return;
         }
         // `#` and `>` come back for the whole line (a heading for its whole
