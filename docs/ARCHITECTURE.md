@@ -274,7 +274,12 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   until the selection touches the node it belongs to (the line, for `#` and
   `>`), headings / quotes / code blocks / tables get line classes, a
   bullet's dash is painted over with a `•`, and a task marker's `[ ]` sits
-  invisible under a painted box with `role="checkbox"`.
+  invisible under a painted box with `role="checkbox"`. The box takes the
+  bullet's place, as in the read view and on GitHub: a task's dash and the
+  gap after it are hidden. A list marker shows as written only while the
+  caret is on the marker itself (the indent, the dash, the gap before the
+  box), not while it is in the item's text, so typing an item does not make
+  its marker flicker.
   Nothing is replaced and there are no widgets, on purpose: a replaced range
   (and equally a `display: inline-block` span) is an atomic box in the
   editable text, and WebKitGTK aborts its web process when an assistive
