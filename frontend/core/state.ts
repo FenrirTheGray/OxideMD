@@ -160,6 +160,7 @@ export const btnReload       = document.getElementById('btn-reload');
 export const btnModeToggle   = document.getElementById('btn-mode-toggle');
 export const btnSave         = document.getElementById('btn-save');
 export const btnDiscard      = document.getElementById('btn-discard');
+export const btnSourceMode   = document.getElementById('btn-source-mode');
 export const editToolbar     = document.getElementById('edit-toolbar');
 export const btnSearch       = document.getElementById('btn-search');
 export const btnOutline      = document.getElementById('btn-outline');

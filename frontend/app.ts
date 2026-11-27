@@ -594,6 +594,13 @@ registerHandler('toggleEdit', (e) => {
   if (tab.editing) editorModule()?.exitEditMode();
   else loadEditorModule().then((m) => m.enterEditMode());
 });
+// Registered here, not in the lazy editor module: an action without a
+// handler lets its key through to the webview, and this one (Ctrl+Shift+R)
+// is a browser reload there. No editor yet means nothing to switch.
+registerHandler('toggleSourceMode', (e) => {
+  e?.preventDefault();
+  editorModule()?.toggleSourceMode();
+});
 registerHandler('toggleSearch', (e) => {
   e?.preventDefault();
   toggleSearch();

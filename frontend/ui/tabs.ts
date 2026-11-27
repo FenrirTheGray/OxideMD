@@ -5,7 +5,7 @@ import {
   tabBarEl, tabPrevEl, tabNextEl, contentEl, contentScroll,
   editorPane, previewPane,
   btnReload, btnSearch, btnOutline, btnPreview, btnZoomIn, btnZoomOut, zoomLabel,
-  btnModeToggle, btnSave, btnDiscard, btnPrint, editToolbar,
+  btnModeToggle, btnSourceMode, btnSave, btnDiscard, btnPrint, editToolbar,
   filePathEl,
   pickerBackdrop, WELCOME_HTML,
   hasActiveOverlay,
@@ -17,7 +17,7 @@ import { editorModule, loadEditorModule } from "../editor/lazy.ts";
 import { promptUnsavedChanges, promptRecoverDraft } from "./confirm.ts";
 import { updateCounts, clearCounts } from "./counts.ts";
 import {
-  activeTab, isDirty, isPreviewVisible,
+  activeTab, isDirty, isPreviewVisible, isRenderedEditing,
   renderContent, setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
 // Re-export the seam primitives that other modules still import from
@@ -46,7 +46,7 @@ export function syncToolbar() {
   // outline button). Preview is edit-mode only; Outline is always usable
   // while a tab is loaded. aria-pressed drives the active-state styling.
   if (btnPreview) {
-    (btnPreview as HTMLButtonElement).disabled = !editing;
+    (btnPreview as HTMLButtonElement).disabled = !editing || isRenderedEditing();
     const previewing = editing && isPreviewVisible();
     btnPreview.setAttribute('aria-pressed', previewing ? 'true' : 'false');
     btnPreview.setAttribute('aria-label', previewing ? 'Hide preview pane' : 'Show preview pane');
@@ -78,6 +78,7 @@ export function syncToolbar() {
   const canToggle = hasTab && !!tab?.path;
   (btnModeToggle as HTMLButtonElement).disabled = !canToggle;
   btnModeToggle.setAttribute('aria-pressed', editing ? 'true' : 'false');
+  btnSourceMode?.setAttribute('aria-pressed', isRenderedEditing() ? 'false' : 'true');
 
   (btnSave as HTMLButtonElement).disabled = !dirty;
   if (btnDiscard) (btnDiscard as HTMLButtonElement).disabled = !dirty;

@@ -147,6 +147,8 @@ export const ACTIONS = [
   { id: 'exportHtml',    category: 'File', label: 'Export as HTML…', defaultAccel: 'Mod+Shift+E' },
 
   { id: 'toggleEdit',    category: 'View', label: 'Toggle edit mode', defaultAccel: 'Mod+E' },
+  // Not Mod+/ (CodeMirror's comment toggle would run as well).
+  { id: 'toggleSourceMode', category: 'View', label: 'Toggle source mode', defaultAccel: 'Mod+Shift+R' },
   { id: 'cycleSplitMode',category: 'View', label: 'Cycle split layout', defaultAccel: 'Mod+\\' },
   // Single Mod+F binding for both contexts. The unified #search-bar
   // (features/search.ts) self-routes on isEditing(): in edit mode it drives

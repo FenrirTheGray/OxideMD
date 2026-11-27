@@ -69,6 +69,10 @@ pub struct Config {
     // Preview island on the left, editor on the right (default is editor
     // left). Layout only; the split fraction still describes the editor.
     pub editor_preview_first: bool,
+    // Edit mode draws the document rendered (markup hidden, see
+    // frontend/editor/live-preview.ts) instead of as Markdown source with a
+    // preview beside it. Flipped by the edit toolbar's Source toggle.
+    pub editor_rendered: bool,
     // File extensions (lowercased, no leading dot) the folder browser
     // treats as Markdown. Normalized on save by the frontend; an empty
     // list falls back to MD_EXTS_DEFAULT at the read sites.
@@ -141,6 +145,7 @@ impl Default for Config {
             editor_line_numbers: true,
             editor_format_on_save: false,
             editor_preview_first: false,
+            editor_rendered: true,
             md_extensions: MD_EXTS_DEFAULT.iter().map(|e| e.to_string()).collect(),
             recent_files: Vec::new(),
         }

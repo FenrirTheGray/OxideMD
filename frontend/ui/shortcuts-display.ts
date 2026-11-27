@@ -12,7 +12,7 @@ import {
   state,
   shortcutsPopover, contentEl,
   btnNew, btnOpen, btnOpenFolder, btnReload, btnSearch, btnPrint,
-  btnModeToggle, btnSave,
+  btnModeToggle, btnSourceMode, btnSave,
   btnZoomOut, btnZoomIn, zoomLabel, sidebarCloseBtn, tabBarEl, tabPrevEl, tabNextEl,
 } from "../core/state.ts";
 
@@ -38,7 +38,8 @@ const TOOLBAR_LABELS = {
   reload:       'Reload file',
   print:        'Print to PDF',
   toggleSearch: 'Search',
-  toggleEdit:   'Edit Markdown source',
+  toggleEdit:   'Edit document',
+  toggleSourceMode: 'Edit as Markdown source',
   save:         'Save file',
   zoomOut:      'Zoom out',
   zoomIn:       'Zoom in',
@@ -151,6 +152,7 @@ function renderToolbarTooltips() {
     [btnPrint,        'print'],
     [btnSearch,       'toggleSearch'],
     [btnModeToggle,   'toggleEdit'],
+    [btnSourceMode,   'toggleSourceMode'],
     [btnSave,         'save'],
     [btnZoomOut,      'zoomOut'],
     [btnZoomIn,       'zoomIn'],

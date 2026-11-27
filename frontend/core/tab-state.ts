@@ -54,11 +54,18 @@ export function saveRecentlyFor(path) {
 // layout.css shows one pane at a time at this width; 'split' is editor-only.
 export const singlePaneMQ = window.matchMedia('(max-width: 640px)');
 
+// Edit mode draws the document rendered (the default) rather than as source
+// beside a preview. One app-wide choice, kept in config.
+export function isRenderedEditing() {
+  return state.config?.editor_rendered !== false;
+}
+
 // Whether the live preview pane is currently visible — drives the outline
-// button's edit-mode aria-pressed / tooltip in syncToolbar().
+// button's edit-mode aria-pressed / tooltip in syncToolbar(). Rendered
+// editing has no preview pane.
 export function isPreviewVisible() {
   const tab = activeTab();
-  if (!tab?.editing) return false;
+  if (!tab?.editing || isRenderedEditing()) return false;
   const mode = tab.splitMode || 'split';
   return singlePaneMQ.matches ? mode === 'preview' : mode !== 'editor';
 }
@@ -141,13 +148,11 @@ export function applyZoom(zoom) {
   // theme sets `font-size: inherit`, so the pane's size cascades into it.
   if (previewPane) previewPane.style.fontSize = fontSize;
   if (editorPane) editorPane.style.fontSize = fontSize;
-  // The editor takes the full viewport width; reading-width constraints
-  // are a rendered-markdown concern only.
-  if (tab?.editing) {
-    contentEl.style.maxWidth = 'none';
-  } else {
-    contentEl.style.maxWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
-  }
+  const readingWidth = `${Math.round((state.config?.reading_width ?? 800) * zoom)}px`;
+  // The rendered editor keeps the reading column (editor.css reads this);
+  // the source editor takes the full width.
+  editorPane?.style.setProperty('--reading-width', readingWidth);
+  contentEl.style.maxWidth = tab?.editing ? 'none' : readingWidth;
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
   (btnZoomOut as HTMLButtonElement).disabled = zoom <= ZOOM_MIN;
   (btnZoomIn as HTMLButtonElement).disabled  = zoom >= ZOOM_MAX;

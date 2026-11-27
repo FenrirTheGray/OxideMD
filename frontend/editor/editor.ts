@@ -9,7 +9,7 @@ import {
   state,
   contentEl, contentScroll,
   editorSplit, editorPane, previewPane, splitDivider,
-  btnSave, btnDiscard, btnPreview,
+  btnSave, btnDiscard, btnPreview, btnSourceMode,
   statusIndicator, statusText,
   modKey,
   pathExtension, IMAGE_EXTS,
@@ -17,7 +17,7 @@ import {
 import { syncToolbar, renderTabBar, rerender, applyActiveTab } from "../ui/tabs.ts";
 import { syncWatcher } from "../ui/folder.ts";
 import {
-  activeTab, isDirty, isPreviewVisible, singlePaneMQ, renderContent, hydrateImages,
+  activeTab, isDirty, isPreviewVisible, isRenderedEditing, singlePaneMQ, renderContent, hydrateImages,
   setLoading, clearStatus, applyZoom, updateSaveStatus,
 } from "../core/tab-state.ts";
 import { closeSearch, updateSearchCount } from "../features/search.ts";
@@ -34,6 +34,7 @@ import { showToast } from "../ui/toast.ts";
 import { formatMarkdownBuffer } from "../lib/md-table.ts";
 import { liveTableAlign } from "./table-align.ts";
 import { lineSelection } from "./line-selection.ts";
+import { livePreview } from "./live-preview.ts";
 import { diffSplice } from "./md-transform.ts";
 import { debounce } from "../lib/timing.ts";
 
@@ -46,6 +47,7 @@ import { history, isolateHistory, defaultKeymap, historyKeymap } from '@codemirr
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle, syntaxTree, bracketMatching, indentOnInput } from '@codemirror/language';
 import { tags, Tag, styleTags } from '@lezer/highlight';
+import { GFM } from '@lezer/markdown';
 import {
   search, SearchQuery, setSearchQuery, getSearchQuery,
   findNext, findPrevious, replaceNext, replaceAll,
@@ -65,7 +67,9 @@ let editorView = null;
 // view at build time (so a toggle only took effect on the next full remount).
 // Wrapping them lets reconfigureEditorSettings() apply a Settings change to
 // the live editor while preserving undo history and selection. Reused across
-// mounts — only one view exists at a time.
+// mounts — only one view exists at a time. The fourth holds rendered editing
+// (live-preview.ts), flipped by the Source toggle.
+const liveCompartment = new Compartment();
 const wrapCompartment = new Compartment();
 const gutterCompartment = new Compartment();
 const attrsCompartment = new Compartment();
@@ -124,8 +128,11 @@ function setSplitFrac(percent, persist) {
 
 function applySplitMode(mode, persist) {
   const m = SPLIT_MODES.includes(mode) ? mode : 'split';
+  // Rendered editing is its own preview: the editor island alone. The tab
+  // keeps its split for when source mode comes back.
+  const shown = isRenderedEditing() ? 'editor' : m;
   editorSplit.classList.remove('split-mode-editor', 'split-mode-preview');
-  if (m !== 'split') editorSplit.classList.add(`split-mode-${m}`);
+  if (shown !== 'split') editorSplit.classList.add(`split-mode-${shown}`);
   if (persist) {
     const tab = activeTab();
     if (tab) tab.splitMode = m;
@@ -576,7 +583,9 @@ function buildView(tab) {
       ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap,
       { key: 'Mod-d', run: selectNextOccurrence, preventDefault: true },
     ]),
-    markdown({ extensions: [oxideMarkdownExt] }),
+    // GFM on top of the CommonMark base: tables, task markers and
+    // strikethrough become nodes, as the renderer (pulldown-cmark) has them.
+    markdown({ extensions: [GFM, oxideMarkdownExt] }),
     liveTableAlign,
     syntaxHighlighting(oxideHighlightStyle),
     // VS Code-style editing surface, all from packages already installed.
@@ -601,16 +610,21 @@ function buildView(tab) {
     rectangularSelection({ eventFilter: (e) => e.altKey && e.shiftKey && e.button === 0 }),
     revealHighlightField,
     countField,
-    // These three are wrapped in Compartments so a Settings change can
+    // These are wrapped in Compartments so a Settings change can
     // reconfigure them on the live editor (see reconfigureEditorSettings)
     // without destroying the view — preserving undo history and selection.
+    liveCompartment.of(isRenderedEditing() ? livePreview : []),
     attrsCompartment.of(EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab.title}`,
       'spellcheck': spellCheck ? 'true' : 'false',
     })),
     wrapCompartment.of(wordWrap ? EditorView.lineWrapping : []),
-    gutterCompartment.of(showLineNumbers ? [lineNumbers(), highlightActiveLineGutter()] : []),
+    gutterCompartment.of(showLineNumbers && !isRenderedEditing() ? [lineNumbers(), highlightActiveLineGutter()] : []),
     oxideCmTheme,
+    // The hook for editor.css. An editor attribute, not classList.add: CM
+    // rewrites the root's class on every focus or selection change and
+    // would drop a class it does not know about.
+    EditorView.editorAttributes.of({ class: 'md-editor' }),
     updateListener,
   ];
 
@@ -641,7 +655,6 @@ function buildView(tab) {
   }
 
   const view = new EditorView({ state: editorState });
-  view.dom.classList.add('md-editor');
   view.scrollDOM.addEventListener('scroll', () => mirrorScroll(view.scrollDOM, previewPane), { passive: true });
   installPasteHandler(view);
   return view;
@@ -841,16 +854,19 @@ function unmountEditor() {
   previewPane.innerHTML = '';
 }
 
-// Set the three editor-setting compartments on `view` to match `cfg` in one
+// Set the editor-setting compartments on `view` to match `cfg` in one
 // dispatch. Idempotent — reconfiguring to the same value is a cheap no-op —
 // so it doubles as the "resync a restored state's stale compartments" call
-// in buildView and the live-toggle path from Settings.
+// in buildView and the live-toggle path from Settings and the Source toggle.
 function applyEditorSettings(view, cfg) {
   if (!view) return;
   const tab = activeTab();
+  const rendered = isRenderedEditing();
   view.dispatch({ effects: [
+    liveCompartment.reconfigure(rendered ? livePreview : []),
     wrapCompartment.reconfigure((cfg?.editor_word_wrap !== false) ? EditorView.lineWrapping : []),
-    gutterCompartment.reconfigure(cfg?.editor_line_numbers ? [lineNumbers(), highlightActiveLineGutter()] : []),
+    // A rendered page has no line numbers.
+    gutterCompartment.reconfigure(cfg?.editor_line_numbers && !rendered ? [lineNumbers(), highlightActiveLineGutter()] : []),
     attrsCompartment.reconfigure(EditorView.contentAttributes.of({
       'aria-label': `Edit ${tab?.title ?? ''}`,
       'spellcheck': cfg?.editor_spell_check ? 'true' : 'false',
@@ -1741,12 +1757,43 @@ if (splitDivider && editorSplit) {
   });
 }
 
+// ── Rendered ↔ source editing ────────────────────────────────────────
+// One app-wide choice (config.editor_rendered, rendered by default). The
+// switch reconfigures the live view, so the buffer, undo history and
+// selection carry over untouched.
+const saveEditorMode = debounce(() => {
+  invoke('save_config_cmd', { config: state.config }).catch(() => {});
+}, 150);
+
+export function toggleSourceMode() {
+  const tab = activeTab();
+  const view = editorView;
+  if (!tab?.editing || !view || !state.config) return;
+  state.config.editor_rendered = !isRenderedEditing();
+  // The modes give lines different heights; keep the same line at the top
+  // (an unscrolled view stays unscrolled, above its top padding).
+  const scrolled = view.scrollDOM.scrollTop > 0;
+  const top = view.lineBlockAtHeight(view.scrollDOM.scrollTop - view.documentPadding.top).from;
+  applyEditorSettings(view, state.config);
+  applySplitToTab(tab);
+  if (scrolled) view.dispatch({ effects: EditorView.scrollIntoView(top, { y: 'start' }) });
+  // Source mode can come back in this tab's preview-only split, where the
+  // editor is hidden; a hidden editor must not hold focus and take typing.
+  if (!isRenderedEditing() && tab.splitMode === 'preview') view.contentDOM.blur();
+  else view.focus();
+  saveEditorMode();
+  syncToolbar();
+}
+// The shortcut's handler is in app.ts: it must swallow the key even before
+// this (lazy) module has loaded.
+btnSourceMode?.addEventListener('click', toggleSourceMode);
+
 // Cycle split → editor → preview → split. Only applies when an editor
 // is mounted; we never mutate a tab that has no split state to track.
 registerHandler('cycleSplitMode', (e) => {
   e?.preventDefault();
   const tab = activeTab();
-  if (!tab?.editing) return;
+  if (!tab?.editing || isRenderedEditing()) return; // no split to cycle
   const cur = tab.splitMode || 'split';
   const next = SPLIT_MODES[(SPLIT_MODES.indexOf(cur) + 1) % SPLIT_MODES.length];
   applySplitMode(next, true);

@@ -478,6 +478,7 @@ body.resizing-split * {
   align-items: center;
   gap: 4px;
 }
+#edit-toolbar #btn-source-mode,
 #edit-toolbar #btn-discard,
 #edit-toolbar #btn-save {
   display: inline-flex;
@@ -498,6 +499,7 @@ body.resizing-split * {
     color var(--dur-sm) var(--ease),
     opacity var(--dur-sm) var(--ease);
 }
+#edit-toolbar #btn-source-mode svg,
 #edit-toolbar #btn-discard svg,
 #edit-toolbar #btn-save svg {
   width: 15px;
@@ -560,6 +562,233 @@ body.resizing-split * {
 #edit-toolbar #btn-discard:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* Source toggle: the same quiet secondary as Discard at rest; pressed
+   (source mode on) takes the Edit toggle's accent treatment. */
+#edit-toolbar #btn-source-mode {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-toolbar);
+}
+#edit-toolbar #btn-source-mode:hover {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+}
+#edit-toolbar #btn-source-mode[aria-pressed="true"] {
+  background: var(--bg-btn-hover);
+  color: var(--accent);
+  border-color: var(--border-focus);
+}
+#edit-toolbar #btn-source-mode:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* ── Rendered editing (editor/live-preview.ts) ───────────────────────
+   The CodeMirror surface drawn like the read view: reading font and
+   column, headings at their rendered size, quotes and code as panels.
+   `.cm-live` is on the editor root only while the mode is on. Specificity
+   is raised (.cm-editor.md-editor…) to beat the oxideCmTheme rules.
+   The 2em gutter stays on the lines, as in the source editor: CM measures
+   selections from the line padding and knows nothing of padding on
+   .cm-content. So everything below is inset inside a full-width line. */
+.cm-editor.md-editor.cm-live {
+  font-family: var(--font-family);
+}
+.cm-editor.md-editor.cm-live .cm-content {
+  max-width: var(--reading-width, 800px);
+  margin: 0 auto;
+}
+.cm-editor.md-editor.cm-live .cm-lp-mono {
+  font-family: monospace, monospace;
+}
+
+/* Headings. Padding is in the line's own (larger) em, so the 2em gutter
+   is divided by the font scale to keep the text on the body's left edge.
+   The rules are background images, inset to the text column; longhands,
+   so the active-line wash (a background-color) still shows. */
+.cm-editor.md-editor.cm-live .cm-lp-h {
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  padding-top: 0.6em;
+  padding-bottom: 0.3em;
+  background-repeat: no-repeat;
+  background-position: center bottom;
+}
+.cm-editor.md-editor.cm-live .cm-lp-h1 {
+  font-size: 2em;
+  padding-left: 1em;
+  padding-right: 1em;
+  background-image: linear-gradient(var(--border), var(--border));
+  background-size: calc(100% - 2em) 2px;
+}
+.cm-editor.md-editor.cm-live .cm-lp-h2 {
+  font-size: 1.5em;
+  padding-left: 1.333em;
+  padding-right: 1.333em;
+  background-image: linear-gradient(var(--border-subtle), var(--border-subtle));
+  background-size: calc(100% - 2.667em) 1px;
+}
+.cm-editor.md-editor.cm-live .cm-lp-h3 {
+  font-size: 1.2em;
+  padding-left: 1.667em;
+  padding-right: 1.667em;
+}
+
+/* Panels sit on a pseudo-element under the selection layer (z-index -1
+   and below in the scroller's stacking context); a background on the line
+   itself would paint over the selection. They start 1.5em in, half an em
+   outside the text column. */
+.cm-editor.md-editor.cm-live .cm-lp-codeblock,
+.cm-editor.md-editor.cm-live .cm-lp-table,
+.cm-editor.md-editor.cm-live .cm-lp-quote {
+  position: relative;
+}
+.cm-editor.md-editor.cm-live .cm-lp-codeblock::before,
+.cm-editor.md-editor.cm-live .cm-lp-table::before,
+.cm-editor.md-editor.cm-live .cm-lp-quote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1.5em;
+  right: 1.5em;
+  z-index: -10;
+  pointer-events: none;
+}
+.cm-editor.md-editor.cm-live .cm-lp-codeblock,
+.cm-editor.md-editor.cm-live .cm-lp-table {
+  font-size: 0.9em;
+  padding: 0 2.8em;
+}
+.cm-editor.md-editor.cm-live .cm-lp-codeblock::before,
+.cm-editor.md-editor.cm-live .cm-lp-table::before {
+  left: 1.667em; /* 1.5em of the body, in this line's 0.9em */
+  right: 1.667em;
+}
+.cm-editor.md-editor.cm-live .cm-lp-codeblock::before {
+  background: var(--code-bg, var(--bg-code));
+  border-left: 3px solid var(--code-accent, var(--accent));
+}
+.cm-editor.md-editor.cm-live .cm-lp-codeblock-first::before { border-radius: 10px 10px 0 0; }
+.cm-editor.md-editor.cm-live .cm-lp-codeblock-last::before { border-radius: 0 0 10px 10px; }
+.cm-editor.md-editor.cm-live .cm-lp-codeblock-first.cm-lp-codeblock-last::before { border-radius: 10px; }
+.cm-editor.md-editor.cm-live .cm-lp-codeinfo {
+  font-size: 0.75em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cm-editor.md-editor.cm-live .cm-lp-table::before {
+  background: var(--bg-code);
+}
+.cm-editor.md-editor.cm-live .cm-lp-quote {
+  padding-left: 2.9em;
+}
+.cm-editor.md-editor.cm-live .cm-lp-quote::before {
+  background: var(--note-bg, var(--accent-glow));
+  border-left: 3px solid var(--note-accent, var(--quote-border));
+}
+/* Translucent, so a selection under the chip still shows. */
+.cm-editor.md-editor.cm-live .cm-lp-code {
+  font-family: monospace, monospace;
+  font-size: 0.84em;
+  background: color-mix(in srgb, var(--code-bg, var(--bg-code)) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15em 0.45em;
+}
+/* `[text]` with no target: the line's colour, not the link's. Headings
+   carry their colour on the line for this (the highlighter also sets it). */
+.cm-editor.md-editor.cm-live .cm-lp-literal,
+.cm-editor.md-editor.cm-live .cm-lp-literal * {
+  color: inherit !important;
+}
+.cm-editor.md-editor.cm-live .cm-lp-h1 { color: var(--h1-color, var(--accent)); }
+.cm-editor.md-editor.cm-live .cm-lp-h2 { color: var(--h2-color, var(--accent)); }
+.cm-editor.md-editor.cm-live .cm-lp-h3,
+.cm-editor.md-editor.cm-live .cm-lp-h4,
+.cm-editor.md-editor.cm-live .cm-lp-h5,
+.cm-editor.md-editor.cm-live .cm-lp-h6 { color: var(--h3-color, var(--accent)); }
+.cm-editor.md-editor.cm-live .cm-lp-hr {
+  background-image: linear-gradient(var(--border), var(--border));
+  background-size: calc(100% - 4em) 2px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* List items hang: --lp-hang is the marker's width in monospace columns
+   (set per line by live-preview.ts), so wrapped text starts under the
+   item's first word. The marker is monospace to make columns a width. */
+.cm-editor.md-editor.cm-live .cm-lp-li {
+  padding-left: calc(2em + var(--lp-hang) * 0.6em);
+  text-indent: calc(var(--lp-hang) * -0.6em);
+}
+.cm-editor.md-editor.cm-live .cm-lp-prefix {
+  font-family: monospace, monospace;
+}
+/* The list dash keeps its place and its width; a `•` is painted over it. */
+.cm-editor.md-editor.cm-live .cm-lp-bullet,
+.cm-editor.md-editor.cm-live .cm-lp-bullet * {
+  color: transparent !important;
+}
+.cm-editor.md-editor.cm-live .cm-lp-bullet {
+  position: relative;
+}
+.cm-editor.md-editor.cm-live .cm-lp-bullet:not(.cm-lp-bullet-blank)::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  text-indent: 0;
+  color: var(--bullet-color, var(--accent));
+}
+/* A task marker: the three characters `[ ]` keep their place, invisible,
+   under a box drawn like the read view's (markdown.css .task-list-checkbox). */
+.cm-editor.md-editor.cm-live .cm-lp-task,
+.cm-editor.md-editor.cm-live .cm-lp-task * {
+  color: transparent !important;
+}
+.cm-editor.md-editor.cm-live .cm-lp-task {
+  position: relative;
+  cursor: pointer;
+}
+.cm-editor.md-editor.cm-live .cm-lp-task::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.875em;
+  height: 0.875em;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 0.2em;
+  background: var(--bg-elevated);
+}
+.cm-editor.md-editor.cm-live .cm-lp-task-done::before {
+  background: var(--accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2.5 7.5l3 3L11.5 4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 100% no-repeat;
+  border-color: var(--accent);
+}
+
+/* Hidden markup: still plain inline text in the DOM, drawn in no width.
+   Each character is monospace with its own advance taken back off, and
+   transparent. The obvious ways all failed here:
+   - a replaced range, or `display: inline-block; width: 0`, is an atomic
+     box in the editable text and brings back the WebKitGTK abort (see the
+     note at the top of live-preview.ts);
+   - `font-size: 0` and `display: none` leave boxes with no height, and
+     CodeMirror places a click by the boxes it finds: a click past a link
+     jumped before it, and End ran on to the next line. */
+.cm-editor.md-editor.cm-live .cm-lp-hide,
+.cm-editor.md-editor.cm-live .cm-lp-hide * {
+  font-family: monospace, monospace !important;
+  letter-spacing: -1ch !important;
+  color: transparent !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
