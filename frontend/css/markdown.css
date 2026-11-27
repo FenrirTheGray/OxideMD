@@ -539,7 +539,7 @@ body.print-friendly .md-rendered {
    <input type="checkbox" disabled>. The checkbox sits at start-of-line
    with negative margin so the bullet position aligns with non-task
    list items above and below. */
-.md-rendered ul li:has(> .task-list-checkbox) {
+.md-rendered ul li:has(> .task-list-checkbox:not(.task-inline)) {
   list-style: none;
   margin-left: -1.4em;
 }
@@ -563,6 +563,11 @@ body.print-friendly .md-rendered {
 /* The tick is an inline SVG background so the browser centres it; a rotated
    pseudo-element sized under the global border-box reset came out as a
    2x6 sliver sitting up and left of centre. */
+/* One written in the text of a bullet or a table cell (OxideMD's own
+   extension): the words around it bring their own spaces. */
+.md-rendered .task-list-checkbox.task-inline {
+  margin-right: 0;
+}
 .md-rendered .task-list-checkbox:checked {
   background: var(--accent)
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M2.5 7.5l3 3L11.5 4' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")

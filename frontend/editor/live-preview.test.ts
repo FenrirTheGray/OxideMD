@@ -85,3 +85,12 @@ test('a click that lands before trailing hidden markup goes to the line end', ()
   assert.equal(click(doc.length, 22), 22); // after "link": " more" follows the target
   assert.equal(click(9, 12), 12);          // caret already in the bold: its marks are showing
 });
+
+test('livePreview: a checkbox can sit in a bullet\'s text or a table cell', () => {
+  const list = '- milk [x] and eggs [ ]\n- [ ] lead [X] later\n- no: `[x]` \\[x] a[x] [x](u)\n\npara [x]\n\nend';
+  assert.deepEqual(replaced(list, list.length).boxes, ['[x]true', '[ ]false', '[ ]false', '[X]true']);
+  const table = '| a [x] | [ ] |\n| - | - |\n| q [X] z | `[x]` |\n\nend';
+  const drawn = replaced(table, table.length);
+  assert.deepEqual(drawn.boxes, ['[x]true', '[ ]false', '[X]true']);
+  assert.deepEqual(drawn.out, []); // nothing in a table is hidden: its columns are source
+});

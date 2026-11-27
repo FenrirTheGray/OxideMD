@@ -2,6 +2,7 @@ use crate::highlight::Highlighter;
 use crate::util::{html_escape, html_escape_attr};
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use std::collections::{HashMap, HashSet};
+use std::ops::Range;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -168,7 +169,16 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
     let mut open_html: Vec<&'static str> = Vec::new();
     let image_attrs = |src: &str| image_src_attrs(src, base_dir);
 
-    for (event, range) in parser.into_offset_iter() {
+    // Collected first: an inline checkbox is three text events in a row, so
+    // the text arm has to see the two after it. `skip` passes over them.
+    let events: Vec<(Event, Range<usize>)> = parser.into_offset_iter().collect();
+    let mut skip = 0usize;
+    let mut item_depth = 0usize;
+    for (i, (event, range)) in events.iter().cloned().enumerate() {
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
         // An inline element the document left open ends with its block.
         // Before the match, because a heading or a cell splits its content
         // back off `html` and the closing tags belong inside it.
@@ -321,9 +331,11 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
             Event::Start(Tag::Item) => {
                 html.push_str("<li>");
                 block_depth += 1;
+                item_depth += 1;
             }
             Event::End(TagEnd::Item) => {
                 block_depth = block_depth.saturating_sub(1);
+                item_depth = item_depth.saturating_sub(1);
                 html.push_str("</li>\n");
             }
 
@@ -490,6 +502,17 @@ fn render_with(source: &str, base_dir: Option<&Path>, preserve_line_breaks: bool
                     code_buf.push_str(&text);
                 } else if in_image.is_some() {
                     image_alt_buf.push_str(&text);
+                } else if let Some(checked) = (item_depth > 0 || in_table_cell)
+                    .then(|| inline_checkbox(source, &events[i..]))
+                    .flatten()
+                {
+                    // `task-inline` tells it from an item's leading marker,
+                    // which takes the bullet's place; this one sits in text.
+                    html.push_str(&format!(
+                        "<input type=\"checkbox\" class=\"task-list-checkbox task-inline\" disabled{}>",
+                        if checked { " checked" } else { "" }
+                    ));
+                    skip = 2;
                 } else {
                     html.push_str(&html_escape(&text));
                     if current_heading.is_some() {
@@ -676,6 +699,41 @@ fn resolve_image(src: &str, base_dir: Option<&Path>) -> ResolvedImage {
     let canonical = std::fs::canonicalize(&path).unwrap_or(path);
     let stripped = crate::commands::strip_windows_verbatim(canonical);
     ResolvedImage::AssetPath(stripped.to_string_lossy().into_owned())
+}
+
+/// A checkbox written in running text: `[ ]`, `[x]` or `[X]` standing alone
+/// (whitespace, a table's `|`, or the edge of the text on both sides). Only
+/// asked about inside a list item or a table cell; standard Markdown has a
+/// checkbox only at the start of a list item, so this is OxideMD's own
+/// extension and other programs show the brackets.
+///
+/// `at` starts at the candidate `[`. The parser reports an unescaped bracket
+/// as a text event of its own, so the three events are checked as written;
+/// `\[x]` arrives as `[x` and never matches, and code is not text at all.
+fn inline_checkbox(source: &str, at: &[(Event, Range<usize>)]) -> Option<bool> {
+    let [
+        (Event::Text(open), a),
+        (Event::Text(mark), b),
+        (Event::Text(close), c),
+        ..,
+    ] = at
+    else {
+        return None;
+    };
+    if &**open != "[" || &**close != "]" || a.len() != 1 || a.end != b.start || b.end != c.start {
+        return None;
+    }
+    let checked = match &**mark {
+        " " => false,
+        "x" | "X" => true,
+        _ => return None,
+    };
+    let bytes = source.as_bytes();
+    let edge = |b: Option<&u8>| b.is_none_or(|b| b.is_ascii_whitespace() || *b == b'|');
+    let before = a.start.checked_sub(1).and_then(|p| bytes.get(p));
+    (a.start == 0 || edge(before))
+        .then_some(checked)
+        .filter(|_| edge(bytes.get(c.end)))
 }
 
 /// The attributes that carry an image's address, with a leading space.
@@ -1430,6 +1488,49 @@ mod tests {
             let html = render(md, None);
             assert!(!html.contains(" src=\""), "{md:?}: {html}");
         }
+    }
+
+    #[test]
+    fn inline_checkboxes_in_list_items_and_table_cells() {
+        let boxes = |md: &str| {
+            let out = render(md, None);
+            (
+                out.matches("task-inline\" disabled>").count(),
+                out.matches("task-inline\" disabled checked>").count(),
+                out,
+            )
+        };
+        // In a bullet's text: the bullet stays, the boxes sit in the text.
+        let (open, done, out) = boxes("- milk [x] and eggs [ ] and\n");
+        assert_eq!((open, done), (1, 1), "{out}");
+        assert!(out.contains("<li>milk <input"), "{out}");
+        // A leading marker is still the standard task item, not an inline box.
+        let (open, done, out) = boxes("- [ ] lead [X] later\n");
+        assert_eq!((open, done), (0, 1), "{out}");
+        assert_eq!(
+            out.matches("class=\"task-list-checkbox\" disabled>")
+                .count(),
+            1,
+            "{out}"
+        );
+        // In table cells, with or without spaces around, in head and body.
+        let (open, done, out) = boxes("| a [x] | [ ] |\n| - | - |\n|[X]| it's \"q\" [ ] |\n");
+        assert_eq!((open, done), (2, 2), "{out}");
+        // Not a checkbox: escaped, code, a link, glued to a word, other marks.
+        for md in [
+            "- a \\[x] b\n",
+            "- `[x]` and `[ ]`\n",
+            "- [x](https://example.com) link\n",
+            "- a[x] b [x]c [y] [xx] []\n",
+            "| `[ ]` | \\[ ] |\n| - | - |\n",
+        ] {
+            let (open, done, out) = boxes(md);
+            assert_eq!((open, done), (0, 0), "{md:?}: {out}");
+        }
+        // And nowhere outside a list item or a table cell.
+        let (open, done, out) = boxes("para [x] and [ ]\n\n# head [x]\n\n> quote [ ]\n");
+        assert_eq!((open, done), (0, 0), "{out}");
+        assert!(out.contains("para [x] and [ ]"), "{out}");
     }
 
     #[test]

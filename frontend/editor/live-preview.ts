@@ -69,6 +69,30 @@ export function buildLivePreview(state: EditorState, visible: readonly { from: n
     state.selection.ranges.some((r) => r.from <= to && r.to >= from);
   const lineTouched = (pos: number) => { const l = doc.lineAt(pos); return touched(l.from, l.to); };
 
+  // A checkbox written in running text: `[ ]` / `[x]` standing alone in a
+  // list item or a table cell. OxideMD's own extension (the renderer has the
+  // same rule in markdown.rs): standard Markdown has one only at the start
+  // of a list item. In a table it is the same three characters wide as its
+  // source, so the columns stay aligned.
+  const tree = syntaxTree(state);
+  const inlineBoxes = (from: number, to: number) => {
+    const text = doc.sliceString(from, to);
+    for (const m of text.matchAll(/\[[ xX]\]/g)) {
+      const at = from + m.index;
+      const alone = /\s/.test(text[m.index - 1] ?? ' ') && /\s/.test(text[m.index + 3] ?? ' ');
+      if (!alone) continue;
+      // Not inside code, an escape (`\[x]`) or a link's target.
+      let plain = true;
+      for (let x = tree.resolveInner(at, 1); x && plain; x = x.parent) {
+        plain = !/^(InlineCode|Escape|URL|Image|HTMLTag|Comment)$/.test(x.name);
+      }
+      if (!plain) continue;
+      const box = BOX[+(m[0][1] !== ' ')].range(at, at + 3);
+      deco.push(box);
+      atomic.push(box);
+    }
+  };
+
   for (const { from, to } of visible) {
     // Only the lines in view: a long code block is not decorated end to end.
     const lines = (nFrom: number, nTo: number, d: Decoration) => {
@@ -78,12 +102,23 @@ export function buildLivePreview(state: EditorState, visible: readonly { from: n
         pos = l.to + 1;
       }
     };
-    syntaxTree(state).iterate({
+    tree.iterate({
       from, to,
       enter(n) {
         const name = n.name;
         // Columns are padded source; hiding marks inside would break them.
-        if (name === 'Table') { lines(n.from, n.to, TABLE); return false; }
+        if (name === 'Table') {
+          lines(n.from, n.to, TABLE);
+          for (let row = n.node.firstChild; row; row = row.nextSibling) {
+            for (let cell = row.firstChild; cell; cell = cell.nextSibling) {
+              if (cell.name === 'TableCell') inlineBoxes(cell.from, cell.to);
+            }
+          }
+          return false;
+        }
+        // The text of a list item: a paragraph, or what follows a task marker.
+        if (name === 'Paragraph' && n.node.parent?.name === 'ListItem') inlineBoxes(n.from, n.to);
+        if (name === 'Task') inlineBoxes(n.from + 3, n.to);
         // Drawn as source (see the note at the top of the file).
         if (name === 'Image') return false;
         if (name === 'FencedCode' || name === 'CodeBlock') {
