@@ -1,6 +1,6 @@
 # Edit and save
 
-Edit mode shows the Markdown source beside a live preview. Typing marks the tab as unsaved, saving writes the file and marks it saved, and closing a tab with unsaved changes asks first.
+Edit mode shows the document for editing: rendered by default, or as Markdown source beside a live preview (see [Rendered editing](./rendered-editing.md)). Typing marks the tab as unsaved, saving writes the file and marks it saved, and closing a tab with unsaved changes asks first. This recipe holds in either editing mode.
 
 ## Sub-features
 

@@ -41,6 +41,7 @@ Keep implementation details out of the map. Name only user paths, stable handles
 
 - [Open and render](./open-and-render.md) covers opening files from the command line and into a running instance, tabs, and the rendered view.
 - [Edit and save](./edit-and-save.md) covers edit mode, typing, saving, the saved/unsaved indicators, and closing with unsaved changes.
+- [Rendered editing](./rendered-editing.md) covers the rendered editor, the Source toggle, and task checkboxes.
 - [External changes](./external-changes.md) covers live reload when another program changes the file, and the warning before overwriting such a change.
 - [Draft recovery](./draft-recovery.md) covers the crash-safe draft and the recovery prompt on the next launch.
 - [Search in document](./search.md) covers the search bar, match counting and closing it.

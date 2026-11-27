@@ -64,7 +64,8 @@ Name options for `press`, `text`, `show`, `wait`: `--role "toggle button"` narro
 Stable handles in this app:
 
 - Toolbar: `Create new file`, `Open file`, `Open folder`, `Reload current file`, `Toggle edit mode`, `Search in document`, `Show preview pane` / `Hide preview pane`, `Show document outline`, `Print to PDF`, `Open settings`.
-- Edit toolbar: `Bold`, `Italic`, `Heading 1`, `Bullet list`, `Save file`, `Discard unsaved changes`, and the rest as `tree` lists them.
+- Edit toolbar: `Bold`, `Italic`, `Heading 1`, `Bullet list`, `Source mode`, `Save file`, `Discard unsaved changes`, and the rest as `tree` lists them.
+- Edit mode starts in rendered editing. `text "Edit <file name>"` still returns the Markdown source there (markup is hidden from view, not from the tree), and `Show preview pane` is disabled. Press `Source mode` first when a step needs the preview pane.
 - Tabs: `page tab "<file name>"` inside `page tab list "Open files"`. The selected one has the `selected` state.
 - Status bar: an unnamed panel whose text is `Saved`, `Unsaved changes` or `Not saved yet`. Match it with `wait "Saved" --text`.
 - Dialogs: `dialog "<title>"` with buttons by label, such as `Overwrite`, `Cancel`, `Restore`, `Discard draft`, `Save`, `Discard`.

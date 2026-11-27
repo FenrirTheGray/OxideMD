@@ -61,8 +61,8 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
 
 ### Editing
 
-- A full text editor with Markdown-aware highlighting, toggled per tab
-- Split view with a draggable divider and synchronized scrolling; the preview can sit on either side
+- Rendered editing by default: you type into the document as it reads, with the Markdown markup hidden until the caret reaches it, and task checkboxes that toggle on click
+- A Source toggle for the plain Markdown editor with highlighting, beside a live preview in a split view with a draggable divider and synchronized scrolling; the preview can sit on either side
 - A formatting toolbar and rebindable shortcuts for bold, italic, strikethrough, inline code, headings, lists, links, images, and indentation, plus dialogs for inserting tables (size and header names), links, images (alt text, then a dropped or picked file or a link) and code blocks (language)
 - Smart Enter that continues lists and blockquotes, and exits the block on a second press
 - Themed find-and-replace inside the editor
@@ -136,6 +136,7 @@ One-time setup commands required for this app to be added to them can be found o
 | `Ctrl+S`                      | Save                             |
 | `Ctrl+W`                      | Close tab                        |
 | `Ctrl+E`                      | Toggle edit mode                 |
+| `Ctrl+Shift+R`                | Rendered / source editing        |
 | `Ctrl+F`                      | Search / find                    |
 | `Ctrl+P`                      | Print to PDF                     |
 | `Ctrl+R`                      | Reload file                      |

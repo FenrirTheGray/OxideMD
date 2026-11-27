@@ -204,7 +204,10 @@ dialog is up, rather than switching tabs behind it.
 - **`keybindings.ts`** — the keybinding layer: the `ACTIONS` registry,
   `registerHandler` / `runAction` / `dispatchKey`, the platform-dependent
   accelerator matchers, and `effectiveBindings` (config overrides merged over
-  defaults). The pure parse/serialize half lives in `lib/accel.ts`.
+  defaults). The pure parse/serialize half lives in `lib/accel.ts`. A global
+  action's default must not be a key CodeMirror's own keymap binds: the
+  editor would run its command first and the action second (`Ctrl+/`
+  commented out the selection *and* switched modes).
 - **`draft-store.ts`** — per-file `localStorage` draft autosave and recovery,
   keyed by absolute path, each draft stamped with the SHA-256 disk hash at
   write time for conflict detection.
@@ -249,7 +252,60 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   points that create an editor: enter-edit-mode, new file, draft recovery).
 - **`editor.ts`** — the CodeMirror 6 editor, the edit/save lifecycle, split-view
   layout, scroll sync, dirty tracking, the live-preview render (debounced,
-  block-level DOM patching), and the editor-side context-menu items.
+  block-level DOM patching), and the editor-side context-menu items. It also
+  owns the switch between the two editing modes (`toggleSourceMode`): a
+  `Compartment` holds the rendered-editing extension, so flipping it
+  reconfigures the live view and keeps the buffer, undo history and
+  selection. The mode is one app-wide config flag (`editor_rendered`, on by
+  default), written by the toggle the way the outline's visibility is.
+  In rendered mode the preview island is hidden (`applySplitMode` forces the
+  editor-only layout without touching the tab's own split), the line-number
+  gutter is off, and `isPreviewVisible()` is false. The editor's CSS hook
+  class (`md-editor`) is an `editorAttributes` entry, not a `classList.add`:
+  CodeMirror rewrites the root's `class` on every focus or selection change
+  and drops a class it was not told about.
+- **`live-preview.ts`** — rendered editing. The document is still the
+  Markdown source; a `ViewPlugin` decorates the visible ranges of the syntax
+  tree so it reads like the rendered page. Every decoration is a mark or a
+  line class, styled in `editor.css` under `.cm-live`: markup is hidden
+  until the selection touches the node it belongs to (the line, for `#` and
+  `>`), headings / quotes / code blocks / tables get line classes, a
+  bullet's dash is painted over with a `•`, and a task marker's `[ ]` sits
+  invisible under a painted box with `role="checkbox"`.
+  Nothing is replaced and there are no widgets, on purpose: a replaced range
+  (and equally a `display: inline-block` span) is an atomic box in the
+  editable text, and WebKitGTK aborts its web process when an assistive
+  technology is attached, the document holds a character outside Latin-1 (an
+  em dash is enough) and the caret reaches the end of the document. The
+  stack would not symbolize, so the mechanism is unknown; the trigger was
+  found by bisection, and the Node test asserts that no decoration carries a
+  widget. Hidden markup is therefore still inline text, drawn in no width
+  (monospace, each character's advance taken back with `letter-spacing`,
+  transparent). `font-size: 0` and `display: none` were tried first: they
+  leave boxes with no height, and CodeMirror places a click by the boxes it
+  finds, so clicks and End landed in the wrong place.
+  The task box is the only thing here that writes: a click flips its one
+  character through an ordinary transaction (so undo, dirty tracking and
+  drafts apply). `mousedown` on it is swallowed so the press does not move
+  the caret, and its position is read from the DOM at click time. Its
+  three characters are never visible, so their ranges are also
+  `atomicRanges` and the caret steps over them.
+  Two pointer cases are handled here rather than left to the browser. A
+  click past the end of a line lands where the drawn text ends; when only
+  hidden markup follows, `snapPastHidden` (a transaction filter on pointer
+  selections) moves the caret to the line's end, so the next words typed are
+  not swallowed into a trailing `**bold**`. And the reading column is
+  narrower than the scroller, so a press beside it lands outside the
+  editable content: a `mousedown` listener on the scroller puts the caret on
+  the nearest line instead of letting the editor lose focus.
+  The module imports nothing from the app, so its range builder and the
+  filter are unit-tested in Node. Images and tables are left as source (see
+  the note at the top of the file).
+  Two layout constraints live in `editor.css`: horizontal padding belongs
+  on `.cm-line`, never `.cm-content`, because CodeMirror measures selections
+  from the line padding; and panel backgrounds are pseudo-elements with a
+  negative `z-index`, since a background on the line itself paints over the
+  selection layer.
 - **`editor-format.ts`** — the Markdown formatting commands (bold, italic,
   lists, headings, link, …), each a single CM6 transaction, shared by the
   toolbar and the shortcuts.
@@ -498,7 +554,11 @@ pure function of path + mtime: a reload after the image changed on disk gets
 past the webview's cache, while the edit-mode preview can still match an
 unchanged `<img>` across re-renders and keep its decoded bitmap. In read mode the HTML comes from `open_file` / `save_file`; in edit mode
 the live preview pane re-renders on a debounce by calling `render_preview` with
-the current editor buffer.
+the current editor buffer. Rendered editing does not use this pipeline for
+what it shows: it styles the source in place (`editor/live-preview.ts`), so
+it follows the editor's parser (lezer-markdown with the GFM extension), not
+pulldown-cmark. The preview pane is still re-rendered while hidden, because
+leaving edit mode and the outline's context menu read it.
 
 Tables get two extra affordances, both decided in Rust because CSS can't
 select an element by how much text it holds:
