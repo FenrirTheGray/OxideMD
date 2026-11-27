@@ -4,6 +4,20 @@ All notable changes to OxideMD will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [4.16.0] - 2026-11-27
+
+### Added
+
+- Rendered editing. Edit mode now shows the document the way it reads, in the reading font and column, and you type straight into it. Headings, bold, italic, strikethrough, inline code, links, quotes, lists, code blocks and rules are drawn rendered; their Markdown markup appears while the caret is on it. The file is still plain Markdown, and switching modes changes nothing in it
+- A **Source** button in the edit toolbar, and `Ctrl+Shift+R`, switch between rendered editing and the Markdown source with its live preview. The choice is remembered
+- Clicking a task checkbox in rendered editing ticks or unticks it. It changes the one character in the file, and `Ctrl+Z` undoes it
+
+### Changed
+
+- Edit mode opens in rendered editing. The source editor and its split preview are one press of **Source** away, with each tab's split layout kept
+- The source editor recognises tables, task markers and strikethrough: table pipes are dimmed and struck text is drawn struck
+- Images and tables are not drawn in rendered editing yet: an image shows as its Markdown, a table as its aligned source
+
 ## [4.15.0] - 2026-11-10
 
 ### Added
