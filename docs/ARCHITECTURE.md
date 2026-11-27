@@ -153,9 +153,12 @@ All live in `src-tauri/src/commands.rs` unless noted. They group as:
   `APP_NAME` identifier triple and the `project_dirs()` helper, and
   recent-files maintenance.
 - **`markdown.rs`** — pulldown-cmark source → HTML string: heading slugs/ids,
-  footnotes, local-image resolution, raw-HTML escaping, the soft-break
-  atomic, and the table-cell width heuristic (`is_short_cell`) described
-  under [Rendering](#rendering).
+  footnotes, local-image resolution, the soft-break atomic, and the
+  table-cell width heuristic (`is_short_cell`) described under
+  [Rendering](#rendering).
+- **`raw_html.rs`** — what happens to HTML written inside a Markdown
+  document: a fixed subset is rewritten, the rest is shown as text. It is a
+  security boundary; see [HTML in documents](#html-in-documents).
 - **`highlight.rs`** — syntect-based syntax highlighting for fenced code
   blocks. It emits scope classes (`hl-keyword`, `hl-string`, …) rather than
   inline colors, so the stylesheet decides the palette (see
@@ -544,8 +547,8 @@ side using pulldown-cmark, with fenced code blocks highlighted by `highlight.rs`
 (syntect). The highlighter writes scope classes, not colors: `markdown.css`
 colors them from `--hl-*` variables with a set for dark and a set for light
 themes, and the `export_html` template carries its own light set, since an
-exported file has no app stylesheet. Raw HTML in the source is escaped, not
-executed. Local image paths
+exported file has no app stylesheet. HTML in the source goes through `raw_html.rs` (see
+[HTML in documents](#html-in-documents)). Local image paths
 are emitted as `data-oxide-src` attributes alongside the file's mtime in
 `data-oxide-v`; the frontend rewrites them to `asset://` URLs via
 `convertFileSrc` when it mounts the HTML into the content area, with the mtime
@@ -559,6 +562,51 @@ what it shows: it styles the source in place (`editor/live-preview.ts`), so
 it follows the editor's parser (lezer-markdown with the GFM extension), not
 pulldown-cmark. The preview pane is still re-rendered while hidden, because
 leaving edit mode and the outline's context menu read it.
+
+#### HTML in documents
+
+A document is untrusted, and the webview it renders into can call every Tauri
+command, so HTML in a document is filtered, not passed through.
+`raw_html::filter` keeps one rule: no byte of the document reaches the output
+unescaped. Every tag in the output is written by the filter, its name from a
+fixed list, its attributes from a fixed list, each value decoded and escaped
+again. Anything else (`<script>`, `<style>`, `<svg>`, `<iframe>`, forms, an
+unfinished tag) comes out as visible text, as all HTML did before 4.16.
+
+- **Tag by tag, not a tree.** pulldown-cmark hands over a document's HTML in
+  pieces with Markdown between them: `<details>`, a blank line, a Markdown
+  list, `</details>` is three events. A tree sanitizer run on each piece
+  would close the `<details>` at once; run on the whole output it could not
+  tell the document's markup from the renderer's own (`data-oxide-src`,
+  `data-code`, the copy button). So tags need not balance. The one case that
+  matters is bounded: an inline element left open (`<a href>`, `<b>`) is
+  closed at the end of its block, because the HTML parser would otherwise
+  re-open it in every block after it.
+- **A block is filtered whole.** A block of HTML arrives one line per event,
+  and a tag may span lines, so `markdown.rs` collects the block first.
+- **No `id`, `name`, `class`, `style` or `data-*`.** They could shadow the
+  app's own elements, restyle the page, or (`data-oxide-src`) load any local
+  file. Because a heading written as HTML gets no `id`, the frontend counts
+  only headings that have one (`MD_HEADINGS` in `core/state.ts`); the
+  outline's "Nth heading" lookups would shift otherwise. Such a heading is
+  not listed in the outline.
+- **Addresses.** Only `href` on `<a>` and `src` on `<img>` may carry one. The
+  value is decoded and tab / newline stripped first, so the check sees what
+  the browser will follow (`&#106;avascript&#58;…` has no literal colon),
+  then it must be relative or `http`, `https` or `mailto`. An image address
+  goes through `resolve_image` like a Markdown image's, so a remote image
+  written as `<img>` is just as inert until remote images are enabled. The
+  CSP allows `img-src https:`, so that markup is the only gate, and
+  `resolve_image` has to read an address the way the webview will:
+  `https:example.com`, backslashes for slashes, and a tab inside the scheme
+  all still load.
+- **Bounded work.** `parse_tag` gives up after 64 attributes and never reads
+  past the next `<` (a quoted value aside), so a long run of unfinished tags
+  costs linear time.
+
+`export_html` writes this same output to a file that has no CSP and no click
+handler: the filter is that file's only defence. Rendered editing does not
+draw HTML; it shows as source there, like images and tables.
 
 Tables get two extra affordances, both decided in Rust because CSS can't
 select an element by how much text it holds:

@@ -54,6 +54,7 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
   - Task lists
   - Blockquotes
   - Footnotes
+  - HTML written in the document: centred blocks and images, `<details>`, `<kbd>`, `<sub>` / `<sup>`, tables and the like. Scripts, styles and event handlers are never run; they are shown as text
 - In-document search with highlighting, match navigation, and a case-sensitivity toggle
 - Print to PDF through the OS print dialog — light-on-white for legibility, or matched to your theme
 - Adjustable reading width (480–2400 px) and line height
