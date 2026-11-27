@@ -292,6 +292,11 @@ import CodeMirror; the whole directory ships as a lazily-loaded chunk.
   transparent). `font-size: 0` and `display: none` were tried first: they
   leave boxes with no height, and CodeMirror places a click by the boxes it
   finds, so clicks and End landed in the wrong place.
+  A checkbox is also drawn for `[ ]` / `[x]` standing alone in the text of
+  a list item or in a table cell (`inlineBoxes`; see
+  [Inline checkboxes](#inline-checkboxes) for the rule both sides share). In
+  a table it is the same three characters wide as its source, so the columns
+  stay aligned.
   The task box is the only thing here that writes: a click flips its one
   character through an ordinary transaction (so undo, dirty tracking and
   drafts apply). `mousedown` on it is swallowed so the press does not move
@@ -567,6 +572,26 @@ what it shows: it styles the source in place (`editor/live-preview.ts`), so
 it follows the editor's parser (lezer-markdown with the GFM extension), not
 pulldown-cmark. The preview pane is still re-rendered while hidden, because
 leaving edit mode and the outline's context menu read it.
+
+#### Inline checkboxes
+
+Standard Markdown (GFM) has a checkbox only at the start of a list item.
+OxideMD also draws one for `[ ]`, `[x]` or `[X]` standing alone in the text
+of a list item or in a table cell: whitespace, a table's `|`, or the edge of
+the text on both sides. `\[x]`, code, a link (`[x](…)`) and brackets glued to
+a word are left as written, and so is running text outside lists and tables.
+Other programs show these as plain brackets, which is what the file holds.
+
+The rule lives twice and the two must agree: `inline_checkbox` in
+`markdown.rs` for the reading view, preview, print and export, and
+`inlineBoxes` in `editor/live-preview.ts` for rendered editing. They cannot
+share code or even an approach. pulldown-cmark reports an unescaped bracket
+as a text event of its own, so the renderer matches three events in a row;
+lezer-markdown turns `[x]` into a link node and leaves `[ ]` as text, so the
+editor scans the text and asks the tree what to skip. Each side has a test
+with the same cases. In HTML the inline ones carry `task-inline` next to
+`task-list-checkbox`, so the stylesheet can tell them from an item's leading
+marker, which removes that item's bullet.
 
 #### HTML in documents
 

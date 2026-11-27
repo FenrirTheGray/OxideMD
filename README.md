@@ -51,7 +51,7 @@ Drop a `.md` file on the window, press `Ctrl+E` to edit, `Ctrl+S` to save.
   - Fenced code
   - Tables
   - Headings
-  - Task lists
+  - Task lists, plus checkboxes inside a bullet's text and inside table cells (`[ ]` / `[x]` standing alone; an OxideMD extension)
   - Blockquotes
   - Footnotes
   - HTML written in the document: centred blocks and images, `<details>`, `<kbd>`, `<sub>` / `<sup>`, tables and the like. Scripts, styles and event handlers are never run; they are shown as text
